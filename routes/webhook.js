@@ -81,6 +81,8 @@ router.post('/channeltalk', async function(req, res) {
     var entity = body.entity;
 
     console.log('[Webhook] event=' + event + ', type=' + type);
+    console.log('[DEBUG] entity:', JSON.stringify(entity).substring(0, 500));
+
 
     // New chat - welcome + menu
     if (type === 'userchat' && event === 'push') {
