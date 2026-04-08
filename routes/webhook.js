@@ -300,9 +300,9 @@ router.post('/channeltalk', async function(req, res) {
         var escMsgs;
         if (bizOpen) {
           escMsgs = {
-            'zh-TW': '👨‍💼 正在為您轉接真人客服，請稍候！\n\n💡 客服人員通常會在 5 分鐘內回覆',
-            'ko': '👨‍💼 상담사를 연결해 드리겠습니다. 잠시만 기다려주세요!\n\n💡 보통 5분 이내 답변드립니다',
-            'en': '👨‍💼 Connecting you to a live agent, please wait!\n\n💡 Typical response time: within 5 minutes',
+            'zh-TW': '👨‍💼 正在為您轉接真人客服，請稍候！\n\n💡 目前客服人員正依序處理中，請稍候，我們會盡快回覆您！',
+            'ko': '👨‍💼 상담사를 연결해 드리겠습니다. 잠시만 기다려주세요!\n\n💡 순차적으로 상담을 진행하고 있습니다. 잠시만 기다려주세요!',
+            'en': '👨‍💼 Connecting you to a live agent, please wait!\n\n💡 Our agents are assisting customers in order. Please wait, we'll get to you soon!',
             'ja': '👨‍💼 オペレーターにお繋ぎします。少々お待ちください！'
           };
         } else {
