@@ -2,6 +2,8 @@ var express = require('express');
 var router = express.Router();
 var channeltalk = require('../lib/channeltalk');
 var matcher = require('../lib/matcher');
+var aiEngine = require('../lib/ai-engine');
+var veaslyApi = require("../lib/veasly-api");
 var lang = require('../lib/language');
 
 var processedMessages = {};
@@ -33,10 +35,10 @@ function extractText(message) {
 
 function getMenuText(language) {
   var menus = {
-    'zh-TW': '請輸入數字查詢：\n1️⃣ 第一次使用（新會員指南）\n2️⃣ 已下單（訂單相關）\n3️⃣ 配送/物流\n4️⃣ 費用/運費\n5️⃣ 付款方式\n6️⃣ 取消/退款\n7️⃣ 訂單查詢\n8️⃣ 怎麼下單\n9️⃣ 點數/折扣碼\n\n💡 以上都無法解決？輸入「客服」轉接真人',
-    'ko': '번호를 입력해주세요：\n1️⃣ 처음 이용\n2️⃣ 주문 완료\n3️⃣ 배송/물류\n4️⃣ 비용/운임\n5️⃣ 결제 방법\n6️⃣ 취소/환불\n7️⃣ 주문 조회\n8️⃣ 주문 방법\n9️⃣ 포인트/할인\n\n💡 해결이 안 되시면 「상담사」를 입력해주세요',
-    'en': 'Enter a number:\n1️⃣ First time\n2️⃣ Already ordered\n3️⃣ Shipping\n4️⃣ Fees\n5️⃣ Payment\n6️⃣ Cancel/Refund\n7️⃣ Order tracking\n8️⃣ How to order\n9️⃣ Points/Coupons\n\n💡 Still need help? Type "agent"',
-    'ja': '番号を入力してください：\n1️⃣ 初めての方\n2️⃣ 注文済み\n3️⃣ 配送\n4️⃣ 費用\n5️⃣ お支払い\n6️⃣ キャンセル/返金\n7️⃣ 注文確認\n8️⃣ 注文方法\n9️⃣ ポイント/割引\n\n💡 解決しない場合は「オペレーター」と入力'
+    'zh-TW': '請輸入數字查詢：\n1️⃣ 第一次使用（新會員指南）\n2️⃣ 已下單（訂單相關）\n3️⃣ 配送/物流\n4️⃣ 費用/運費\n5️⃣ 付款方式\n6️⃣ 取消/退款\n7️⃣ 訂單查詢\n8️⃣ 怎麼下單\n9️⃣ 點數/折扣碼\n\n💡 也可以直接用文字描述問題，AI會為您解答喔！',
+    'ko': '번호를 입력해주세요：\n1️⃣ 처음 이용\n2️⃣ 주문 완료\n3️⃣ 배송/물류\n4️⃣ 비용/운임\n5️⃣ 결제 방법\n6️⃣ 취소/환불\n7️⃣ 주문 조회\n8️⃣ 주문 방법\n9️⃣ 포인트/할인\n\n💡 번호 외에 직접 질문을 입력하셔도 AI가 답변해드려요!',
+    'en': 'Enter a number:\n1️⃣ First time\n2️⃣ Already ordered\n3️⃣ Shipping\n4️⃣ Fees\n5️⃣ Payment\n6️⃣ Cancel/Refund\n7️⃣ Order tracking\n8️⃣ How to order\n9️⃣ Points/Coupons\n\n💡 You can also type your question directly!',
+    'ja': '番号を入力してください：\n1️⃣ 初めての方\n2️⃣ 注文済み\n3️⃣ 配送\n4️⃣ 費用\n5️⃣ お支払い\n6️⃣ キャンセル/返金\n7️⃣ 注文確認\n8️⃣ 注文方法\n9️⃣ ポイント/割引\n\n💡 そのままご質問を入力いただければAIがお答えします！'
   };
   return menus[language] || menus['zh-TW'];
 }
@@ -190,11 +192,20 @@ router.post('/channeltalk', async function(req, res) {
     var chatType = (message.chatType || '').toLowerCase();
     var chatId = message.chatId || message.userChatId || '';
 
-    if (personType === 'manager') {
+    if (personType === "manager") {
       if (chatId) {
         managerActive[chatId] = Date.now();
+        var mgrText = extractText(message);
+        if (mgrText && mgrText.length > 10 && aiEngine.isReady()) {
+          aiEngine.addToKnowledgeBase(
+            "mgr_" + chatId + "_" + Date.now(),
+            mgrText,
+            { namespace: "manager", source: "manager_reply", chatId: chatId, timestamp: new Date().toISOString() }
+          ).catch(function(e){ console.error("[Learn] manager save error:", e.message); });
+          console.log("[Learn] Manager reply saved:", mgrText.substring(0, 50));
+        }
       }
-      return res.status(200).send('OK');
+      return res.status(200).send("OK");
     }
     if (personType === 'bot') return res.status(200).send('OK');
     if (chatType !== 'userchat') return res.status(200).send('OK');
@@ -207,6 +218,23 @@ router.post('/channeltalk', async function(req, res) {
       return res.status(200).send('OK');
     }
 
+    // VEASLY member lookup
+    var veaslyUser = null;
+    var personId = message.personId || "";
+    if (personId) {
+      try {
+        var chUser = await channeltalk.getUser(personId);
+        var userProfile = (chUser && chUser.user) || chUser || {};
+        var memberEmail = userProfile.email || (userProfile.profile && userProfile.profile.email) || "";
+        var memberId = userProfile.memberId || "";
+        if (memberEmail) {
+          veaslyUser = await veaslyApi.findUserByEmail(memberEmail);
+        }
+        if (veaslyUser) {
+          console.log("[Member] Matched:", veaslyUser.name, "| ID:", veaslyUser.id, "| Orders:", veaslyUser.requestCount, "| Credit:", veaslyUser.credit);
+        }
+      } catch(mErr) { console.error("[Member] Lookup error:", mErr.message); }
+    }
     var detectedLang = lang.detectLanguage(userText);
     chatLanguage[chatId] = detectedLang;
 
@@ -332,20 +360,60 @@ router.post('/channeltalk', async function(req, res) {
     // Reset escalation step if user asks something else
     setEscalationStep(chatId, 0);
 
-    // FAQ matching
+    // AI-first, then FAQ fallback
+    var aiAnswer = null;
+    if (aiEngine.isReady()) {
+      try {
+      var memberContext = veaslyUser ? "[회원: " + veaslyUser.name + ", 주문 " + (veaslyUser.requestCount || 0) + "건, 포인트 " + (veaslyUser.credit || 0) + "]" : "";
+        aiAnswer = await aiEngine.generateAnswer(memberContext ? memberContext + " " + userText : userText, detectedLang, chatId);
+      } catch(aiErr) {
+        console.error("[AI] Error:", aiErr.message);
+      }
+    }
+    if (aiAnswer) {
+      var footers = {
+        "zh-TW": "\n\n💡 還有其他問題嗎？直接輸入問題，AI會為您解答喔！",
+        "ko": "\n\n💡 다른 질문이 있으신가요? 직접 질문을 입력하시면 AI가 답변해드려요!",
+        "en": "\n\n💡 Need more help? Just type your question!",
+        "ja": "\n\n💡 他にご質問がございましたら、そのままご入力ください！"
+      };
+      aiAnswer += footers[detectedLang] || footers["zh-TW"];
+      await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: aiAnswer }] });
+      var escalateKeywords = ["轉接客服", "轉接", "客服確認", "客服人員", "為您確認", "幫您確認", "담당자를 연결", "담당자에게", "상담사", "connect you with", "support team", "担当者におつなぎ", "担当者に"];
+      var needEscalate = false;
+      for (var ek = 0; ek < escalateKeywords.length; ek++) {
+        if (aiAnswer.indexOf(escalateKeywords[ek]) !== -1) { needEscalate = true; break; }
+      }
+      if (needEscalate) {
+        try {
+          var mgrList = await channeltalk.listManagers();
+          var mgrArr = (mgrList && mgrList.managers) || [];
+          for (var mi = 0; mi < mgrArr.length; mi++) {
+            if (mgrArr[mi].operator) {
+              await channeltalk.inviteManager(chatId, mgrArr[mi].id);
+              managerActive[chatId] = Date.now();
+              console.log("[Escalate] AI auto-escalated chat:", chatId);
+              break;
+            }
+          }
+          var allMgrIds = mgrArr.map(function(m){ return m.id; });
+          await channeltalk.addFollowers(chatId, allMgrIds).catch(function(fe){ console.error("[Follower] Error:", fe.message); });
+          console.log("[Follower] All managers added as followers:", allMgrIds.length);
+        } catch(escErr) { console.error("[Escalate] Error:", escErr.message); }
+      }
+      return res.status(200).send("OK");
+    }
     var matched = matcher.findBestMatch(userText);
     if (matched) {
       var answerText = matched.answer;
-      // Add "still need help?" footer
-      var footers = {
-        'zh-TW': '\n\n💡 還有其他問題嗎？輸入數字繼續查詢，或輸入「客服」轉接真人',
-        'ko': '\n\n💡 다른 질문이 있으신가요? 번호를 입력하거나 「상담사」를 입력해주세요',
-        'en': '\n\n💡 Need more help? Enter a number or type "agent"',
-        'ja': '\n\n💡 他にご質問は？番号を入力するか「オペレーター」と入力'
+      var footers2 = {
+        "zh-TW": "\n\n💡 還有其他問題嗎？直接輸入問題，AI會為您解答喔！",
+        "ko": "\n\n💡 다른 질문이 있으신가요? 직접 질문을 입력하시면 AI가 답변해드려요!",
+        "en": "\n\n💡 Need more help? Just type your question!",
+        "ja": "\n\n💡 他にご質問がございましたら、そのままご入力ください！"
       };
-      answerText += footers[detectedLang] || footers['zh-TW'];
-      await channeltalk.sendMessage(chatId, { blocks: [{ type: 'text', value: answerText }] });
-
+      answerText += footers2[detectedLang] || footers2["zh-TW"];
+      await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: answerText }] });
       if (matched.escalate) {
         try {
           var mgrs3 = await channeltalk.listManagers();
@@ -359,10 +427,18 @@ router.post('/channeltalk', async function(req, res) {
           }
         } catch(e) {}
       }
-      return res.status(200).send('OK');
+      return res.status(200).send("OK");
     }
-
     // Fallback
+    // Save unanswered question for learning
+    if (userText && userText.length > 2 && aiEngine.isReady()) {
+      aiEngine.addToKnowledgeBase(
+        "unanswered_" + chatId + "_" + Date.now(),
+        userText,
+        { namespace: "unanswered", source: "user_fallback", chatId: chatId, language: detectedLang, timestamp: new Date().toISOString() }
+      ).catch(function(e){ console.error("[Learn] unanswered save error:", e.message); });
+      console.log("[Learn] Unanswered question saved:", userText.substring(0, 50));
+    }
     var fallbackMsgs = {
       'zh-TW': '抱歉，我還在學習中 📚\n\n您可以試試以下方式：\n1️⃣ 用不同的關鍵字描述問題\n2️⃣ 輸入數字選擇分類查詢\n3️⃣ 輸入「客服」轉接真人\n\n',
       'ko': '죄송합니다, 아직 학습 중입니다 📚\n\n다음 방법을 시도해보세요:\n1️⃣ 다른 키워드로 질문\n2️⃣ 번호를 입력해서 조회\n3️⃣ 「상담사」를 입력해서 연결\n\n',
