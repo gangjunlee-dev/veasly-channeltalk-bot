@@ -3,6 +3,7 @@ var express = require('express');
 
 var app = express();
 app.use(express.json());
+app.use("/dashboard", express.static("public"));
 
 var webhookRouter = require('./routes/webhook');
 var botRouter = require('./routes/bot');
