@@ -233,6 +233,18 @@ router.post('/channeltalk', async function(req, res) {
         }
         if (veaslyUser) {
           console.log("[Member] Matched:", veaslyUser.name, "| ID:", veaslyUser.id, "| Orders:", veaslyUser.requestCount, "| Credit:", veaslyUser.credit);
+          // Sync VEASLY info to ChannelTalk profile
+          try {
+            await channeltalk.updateUser(personId, {
+              "veasly_id": String(veaslyUser.id),
+              "veasly_orders": veaslyUser.requestCount || 0,
+              "veasly_points": veaslyUser.credit || 0,
+              "veasly_provider": veaslyUser.provider || "",
+              "veasly_role": veaslyUser.role || "",
+              "veasly_joined": (veaslyUser.createdAt || "").substring(0, 10)
+            });
+            console.log("[Sync] Profile updated for", personId);
+          } catch(syncErr) { console.error("[Sync] Error:", syncErr.message); }
         }
       } catch(mErr) { console.error("[Member] Lookup error:", mErr.message); }
     }
