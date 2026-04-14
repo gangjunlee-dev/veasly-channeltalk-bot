@@ -188,7 +188,7 @@ router.post('/channeltalk', async function(req, res) {
     if (processedMessages[msgId]) return res.status(200).send('OK');
     processedMessages[msgId] = Date.now();
 
-    var personType = (message.personType || '').toLowerCase();
+        var personType = (message.personType || '').toLowerCase();
     var chatType = (message.chatType || '').toLowerCase();
     var chatId = message.chatId || message.userChatId || '';
 
@@ -226,6 +226,7 @@ router.post('/channeltalk', async function(req, res) {
         var chUser = await channeltalk.getUser(personId);
         var userProfile = (chUser && chUser.user) || chUser || {};
         var memberEmail = userProfile.email || (userProfile.profile && userProfile.profile.email) || "";
+        var userLang = userProfile.language || (userProfile.profile && userProfile.profile.language) || "";
         var memberId = userProfile.memberId || "";
         if (memberEmail) {
           veaslyUser = await veaslyApi.findUserByEmail(memberEmail);
@@ -236,6 +237,11 @@ router.post('/channeltalk', async function(req, res) {
       } catch(mErr) { console.error("[Member] Lookup error:", mErr.message); }
     }
     var detectedLang = lang.detectLanguage(userText);
+    // Override with ChannelTalk user language if text is ambiguous (numbers, order numbers, etc.)
+    if (userLang && /^[a-zA-Z0-9\s\-\.\,\/\@\#]+$/.test(userText)) {
+      var langMap = {"ko": "ko", "ja": "ja", "en": "en", "zh": "zh-TW", "zh-TW": "zh-TW", "zh-CN": "zh-TW"};
+      if (langMap[userLang]) detectedLang = langMap[userLang];
+    }
     chatLanguage[chatId] = detectedLang;
 
     // Satisfaction response
@@ -272,31 +278,6 @@ router.post('/channeltalk', async function(req, res) {
         'ja': 'こんにちは！VEASLYへようこそ 🇰🇷\nどうぞお気軽にご質問ください。\n\n' + getMenuText('ja')
       };
       await channeltalk.sendMessage(chatId, { blocks: [{ type: 'text', value: greetReply[detectedLang] || greetReply['zh-TW'] }] });
-      return res.status(200).send('OK');
-    }
-
-    // Order number detection (multiple orders supported)
-    if (looksLikeOrderNumber(userText)) {
-      var orderNums = extractOrderNumbers(userText);
-      var orderList = orderNums.join(', ');
-      var orderMsg = {
-        'zh-TW': '📋 已收到您的訂單編號：' + orderList + '\n\n我們的客服人員確認後會盡快回覆您！\n💡 客服時間：平日 10:00~19:00（韓國時間）\n⏰ 非上班時間的訊息會在上班後優先處理',
-        'ko': '📋 주문번호 확인: ' + orderList + '\n\n담당자 확인 후 빠르게 답변드리겠습니다!\n💡 상담시간: 평일 10:00~19:00 (한국시간)',
-        'en': '📋 Order received: ' + orderList + '\n\nOur team will check and respond ASAP!\n💡 Hours: Weekdays 10:00~19:00 (KST)',
-        'ja': '📋 注文番号確認：' + orderList + '\n\n確認後すぐにご返信いたします！\n💡 対応時間：平日 10:00~19:00（韓国時間）'
-      };
-      await channeltalk.sendMessage(chatId, { blocks: [{ type: 'text', value: orderMsg[detectedLang] || orderMsg['zh-TW'] }] });
-      try {
-        var mgrs = await channeltalk.listManagers();
-        var managers = (mgrs && mgrs.managers) || [];
-        for (var i = 0; i < managers.length; i++) {
-          if (managers[i].operator) {
-            await channeltalk.inviteManager(chatId, managers[i].id);
-            managerActive[chatId] = Date.now();
-            break;
-          }
-        }
-      } catch(e) {}
       return res.status(200).send('OK');
     }
 
@@ -359,6 +340,67 @@ router.post('/channeltalk', async function(req, res) {
 
     // Reset escalation step if user asks something else
     setEscalationStep(chatId, 0);
+
+    // Order number detection - real-time API lookup
+    var orderMatch = userText.match(/\d{8}TW\d{9}/);
+    if (orderMatch) {
+      var orderNum = orderMatch[0];
+      console.log("[Order] Detected order number:", orderNum);
+      try {
+        var orderItems = await veaslyApi.getOrderDetail(orderNum);
+        if (orderItems && orderItems.length > 0) {
+          var orderInfo = veaslyApi.formatOrderInfo(orderItems, detectedLang);
+          var orderHeaders = {
+            "zh-TW": "訂單 " + orderNum + " 的狀態：",
+            "ko": "주문 " + orderNum + " 상태:",
+            "en": "Order " + orderNum + " status:",
+            "ja": "注文 " + orderNum + " の状況："
+          };
+          var header = orderHeaders[detectedLang] || orderHeaders["zh-TW"];
+          var orderReply = header + "\n" + orderInfo;
+          orderReply += "\n\n💡 " + (detectedLang === "ko" ? "다른 질문이 있으시면 입력해주세요!" : detectedLang === "en" ? "Any other questions? Just type!" : detectedLang === "ja" ? "他にご質問があればどうぞ！" : "還有其他問題嗎？直接輸入問題！");
+          await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: orderReply }] });
+          console.log("[Order] Replied with", orderItems.length, "items for", orderNum);
+          return res.status(200).send("OK");
+        } else {
+          var notFoundMsgs = {
+            "zh-TW": "找不到訂單 " + orderNum + " 的資料，請確認訂單編號是否正確喔！",
+            "ko": "주문 " + orderNum + " 정보를 찾을 수 없습니다. 주문번호를 확인해주세요!",
+            "en": "Order " + orderNum + " not found. Please check the order number!",
+            "ja": "注文 " + orderNum + " が見つかりません。注文番号をご確認ください！"
+          };
+          await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: notFoundMsgs[detectedLang] || notFoundMsgs["zh-TW"] }] });
+          return res.status(200).send("OK");
+        }
+      } catch(orderErr) { console.error("[Order] Lookup error:", orderErr.message); }
+    }
+
+    // Order status keyword - show user's recent orders
+    var orderKeywords = ["訂單", "주문", "order", "注文", "배송", "配送", "出貨"];
+    var isOrderQuery = orderKeywords.some(function(kw) { return userText.toLowerCase().indexOf(kw) !== -1; });
+    if (isOrderQuery && veaslyUser && veaslyUser.email) {
+      try {
+        var userOrders = await veaslyApi.getUserOrders(veaslyUser.email, 500);
+        if (userOrders.length > 0) {
+          var recentOrders = userOrders.slice(0, 5);
+          var listHeaders = {
+            "zh-TW": "您最近的訂單：",
+            "ko": "최근 주문 내역:",
+            "en": "Your recent orders:",
+            "ja": "最近のご注文："
+          };
+          var listHeader = listHeaders[detectedLang] || listHeaders["zh-TW"];
+          var orderLines = recentOrders.map(function(o, i) {
+            return (i + 1) + ". " + o.orderNumber + " (" + veaslyApi.getStatusText(o.status, detectedLang) + ")";
+          });
+          var listReply = listHeader + "\n" + orderLines.join("\n");
+          listReply += "\n\n" + (detectedLang === "ko" ? "주문번호를 입력하시면 상세 상태를 확인할 수 있어요!" : detectedLang === "en" ? "Enter an order number for details!" : detectedLang === "ja" ? "注文番号を入力すると詳細が確認できます！" : "輸入完整訂單編號可查看詳細狀態喔！");
+          await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: listReply }] });
+          console.log("[Order] Listed", recentOrders.length, "orders for", veaslyUser.email);
+          return res.status(200).send("OK");
+        }
+      } catch(olErr) { console.error("[Order] List error:", olErr.message); }
+    }
 
     // AI-first, then FAQ fallback
     var aiAnswer = null;
