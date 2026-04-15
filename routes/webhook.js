@@ -355,7 +355,26 @@ router.post('/channeltalk', async function(req, res) {
     // Reset escalation step if user asks something else
     setEscalationStep(chatId, 0);
 
-    // Order number detection - real-time API lookup
+    // Skip greeting/sticker messages - no bot response needed
+    var skipPatterns = ['스티커를 전송했습니다', '스티커를 보냈습니다', '사진을 전송했습니다', '파일을 전송했습니다'];
+    var isSticker = skipPatterns.some(function(p) { return userText.indexOf(p) > -1; });
+    var greetWords = ['謝謝', '感謝', '好的', '收到', '了解', '沒關係', '不用了', '掰掰', '再見', 'ok收到', '감사합니다', '알겠습니다', '고마워'];
+    var isGreeting = greetWords.some(function(g) { return userText.indexOf(g) > -1; }) && userText.length < 15;
+    if (isSticker) {
+      return res.status(200).send('OK');
+    }
+    if (isGreeting) {
+      var greetReplies = {
+        "zh-TW": "不客氣！有需要隨時找我喔～ 😊",
+        "ko": "천만에요! 필요하시면 언제든 말씀해주세요~ 😊",
+        "en": "You're welcome! Let me know if you need anything~ 😊",
+        "ja": "どういたしまして！何かあればいつでもどうぞ～ 😊"
+      };
+      await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: greetReplies[detectedLang] || greetReplies["zh-TW"] }] });
+      return res.status(200).send('OK');
+    }
+
+        // Order number detection - real-time API lookup
     var orderMatch = userText.match(/\d{8}TW\d{9}/);
     if (orderMatch) {
       var orderNum = orderMatch[0];
