@@ -370,7 +370,20 @@ router.post('/channeltalk', async function(req, res) {
           };
           var header = orderHeaders[detectedLang] || orderHeaders["zh-TW"];
           var orderReply = header + "\n" + orderInfo;
-          orderReply += "\n\n💡 " + (detectedLang === "ko" ? "다른 질문이 있으시면 입력해주세요!" : detectedLang === "en" ? "Any other questions? Just type!" : detectedLang === "ja" ? "他にご質問があればどうぞ！" : "還有其他問題嗎？直接輸入問題！");
+          // Add status-specific tips
+          var mainStatus = (orderItems[0] && orderItems[0].status) || "";
+          var tipMap = {
+            "PAYMENT_WAITING": { "zh-TW": "請盡快完成付款，以免訂單被取消喔！", "ko": "빠른 결제 부탁드립니다!", "en": "Please complete payment soon!", "ja": "お早めにお支払いをお願いします！" },
+            "PAYMENT_COMPLETED": { "zh-TW": "已收到付款，我們會盡快處理您的訂單！", "ko": "결제 확인! 빠르게 처리하겠습니다!", "en": "Payment received! We will process your order soon!", "ja": "お支払い確認済み！早速処理いたします！" },
+            "ORDER_PROCESSING": { "zh-TW": "正在向韓國賣家購買中，通常需要1-3個工作天喔！", "ko": "한국 판매자에게 구매 중입니다. 보통 1-3 영업일 소요됩니다!", "en": "Purchasing from Korean seller, usually takes 1-3 business days!", "ja": "韓国セラーから購入中です。通常1-3営業日かかります！" },
+            "SHIPPING_TO_BDJ": { "zh-TW": "商品正在韓國國內運送到VEASLY倉庫，到倉後會盡快為您寄出國際包裹！", "ko": "한국 내 VEASLY 창고로 배송 중입니다!", "en": "Shipping to VEASLY warehouse in Korea!", "ja": "韓国内のVEASLY倉庫へ配送中です！" },
+            "SHIPPING_TO_HOME": { "zh-TW": "包裹已從韓國寄出！國際配送通常需要5-10個工作天，收到 EZ WAY 通知時，請記得按「申報相符」才能順利通關喔！", "ko": "한국에서 출발! 국제 배송은 보통 5-10 영업일 소요됩니다!", "en": "Shipped from Korea! International delivery takes 5-10 business days!", "ja": "韓国から発送済み！国際配送は通常5-10営業日かかります！" },
+            "COMPLETED": { "zh-TW": "訂單已完成！感謝您的購買～", "ko": "주문 완료! 감사합니다~", "en": "Order completed! Thank you!", "ja": "注文完了！ありがとうございます！" },
+            "CANCEL_COMPLETED": { "zh-TW": "此訂單已取消，退款會在3-5個工作天內處理喔！", "ko": "주문이 취소되었습니다. 환불은 3-5 영업일 내 처리됩니다!", "en": "Order cancelled. Refund will be processed in 3-5 business days!", "ja": "注文キャンセル済み。返金は3-5営業日以内に処理されます！" }
+          };
+          var tip = (tipMap[mainStatus] && tipMap[mainStatus][detectedLang]) || (tipMap[mainStatus] && tipMap[mainStatus]["zh-TW"]) || "";
+          if (tip) orderReply += "\n\n📋 " + tip;
+          orderReply += "\n\n💡 " + (detectedLang === "ko" ? "더 궁금한 점이 있으면 입력해주세요! 「상담사」 입력 시 담당자를 연결해드려요." : detectedLang === "en" ? "Any questions? Type or enter 'agent' for live support!" : detectedLang === "ja" ? "ご質問があればどうぞ！「agent」と入力で担当者に接続します！" : "還有問題嗎？直接輸入問題，或輸入「客服」轉接真人客服喔！");
           await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: orderReply }] });
           console.log("[Order] Replied with", orderItems.length, "items for", orderNum);
           return res.status(200).send("OK");
