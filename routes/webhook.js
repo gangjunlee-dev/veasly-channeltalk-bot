@@ -407,7 +407,7 @@ router.post('/channeltalk', async function(req, res) {
     var isOrderQuery = orderKeywords.some(function(kw) { return userText.toLowerCase().indexOf(kw) !== -1; });
     if (isOrderQuery && veaslyUser && veaslyUser.email) {
       try {
-        var userOrders = await veaslyApi.getUserOrders(veaslyUser.email, 500);
+        var userOrders = await veaslyApi.getUserOrders(veaslyUser.email, 500, memberId);
         if (userOrders.length > 0) {
           var recentOrders = userOrders.slice(0, 5);
           var listHeaders = {
