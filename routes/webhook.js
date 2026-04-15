@@ -418,10 +418,10 @@ router.post('/channeltalk', async function(req, res) {
           };
           var listHeader = listHeaders[detectedLang] || listHeaders["zh-TW"];
           var orderLines = recentOrders.map(function(o, i) {
-            return (i + 1) + ". " + o.orderNumber + " (" + veaslyApi.getStatusText(o.status, detectedLang) + ")";
+            var providerTag = o._provider ? " [" + o._provider + "]" : ""; var currentTag = o._isCurrentAccount === false ? " ⚠" : ""; return (i + 1) + ". " + o.orderNumber + " (" + veaslyApi.getStatusText(o.status, detectedLang) + ")" + providerTag + currentTag;
           });
           var listReply = listHeader + "\n" + orderLines.join("\n");
-          listReply += "\n\n" + (detectedLang === "ko" ? "주문번호를 입력하시면 상세 상태를 확인할 수 있어요!" : detectedLang === "en" ? "Enter an order number for details!" : detectedLang === "ja" ? "注文番号を入力すると詳細が確認できます！" : "輸入完整訂單編號可查看詳細狀態喔！");
+          var hasMultiAccount = recentOrders.some(function(o) { return o._isCurrentAccount === false; }); if (hasMultiAccount) { listReply += "\n\n" + (detectedLang === "ko" ? "⚠ = 다른 로그인 방식으로 주문한 건입니다" : detectedLang === "en" ? "⚠ = ordered from a different login method" : detectedLang === "ja" ? "⚠ = 別のログイン方法での注文です" : "⚠ = 透過其他登入方式下的訂單"); } listReply += "\n\n" + (detectedLang === "ko" ? "주문번호를 입력하시면 상세 상태를 확인할 수 있어요!" : detectedLang === "en" ? "Enter an order number for details!" : detectedLang === "ja" ? "注文番号を入力すると詳細が確認できます！" : "輸入完整訂單編號可查看詳細狀態喔！");
           await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: listReply }] });
           console.log("[Order] Listed", recentOrders.length, "orders for", veaslyUser.email);
           return res.status(200).send("OK");
