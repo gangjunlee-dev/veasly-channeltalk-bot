@@ -110,6 +110,83 @@ function render(r) {
   html += '</div>';
 
   html += '<div class="insights">' + insightsCard(r) + '</div>';
+
+  // Load additional dashboard data
+  Promise.all([
+    fetch('/api/analytics/csat?days=' + days).then(function(r) { return r.json(); }).catch(function() { return null; }),
+    fetch('/api/analytics/shipping?days=' + days).then(function(r) { return r.json(); }).catch(function() { return null; }),
+    fetch('/api/analytics/faq-log').then(function(r) { return r.json(); }).catch(function() { return null; }),
+    fetch('/api/analytics/auto-close').then(function(r) { return r.json(); }).catch(function() { return null; })
+  ]).then(function(results) {
+    var csat = results[0];
+    var shipping = results[1];
+    var faqLog = results[2];
+    var autoClose = results[3];
+
+    var extra = '<div class="grid" style="margin-top:8px;padding:0 32px 16px;">';
+
+    // CSAT card
+    if (csat && csat.success) {
+      var starColor = csat.averageScore >= 4 ? 'green' : csat.averageScore >= 3 ? 'yellow' : 'red';
+      extra += card('CSAT 평균점수', csat.averageScore || '-', '/ 5', starColor, csat.totalResponses + '건 응답');
+    }
+
+    // Shipping tracker card
+    if (shipping && shipping.success) {
+      extra += card('배송 추적', shipping.trackedItems, '개 아이템', 'blue', shipping.notifications.sent + '건 알림 발송');
+    }
+
+    // FAQ update card
+    if (faqLog && faqLog.success && faqLog.lastUpdate) {
+      var lu = faqLog.lastUpdate;
+      var faqDate = lu.timestamp ? lu.timestamp.substring(0, 10) : '-';
+      extra += card('FAQ 자동생성', lu.faqsGenerated || 0, '개', 'purple', '최근: ' + faqDate);
+    }
+
+    // Auto-close card
+    if (autoClose && autoClose.success) {
+      extra += card('CSAT 대기중', autoClose.csatPending, '건', autoClose.csatPending > 10 ? 'yellow' : 'green', '24h 후 자동종료');
+    }
+
+    extra += '</div>';
+
+    // CSAT distribution chart
+    if (csat && csat.success && csat.totalResponses > 0) {
+      extra += '<div class="charts" style="padding:0 32px 16px;">';
+      extra += '<div class="chart-card"><h3>CSAT 만족도 분포</h3><div class="bar-chart">';
+      var csatLabels = { 5: '⭐⭐⭐⭐⭐ 매우만족', 4: '⭐⭐⭐⭐ 만족', 3: '⭐⭐⭐ 보통', 2: '⭐⭐ 불만족', 1: '⭐ 매우불만족' };
+      var csatColors = { 5: '#22c55e', 4: '#84cc16', 3: '#eab308', 2: '#f97316', 1: '#ef4444' };
+      var csatMax = Math.max(csat.distribution[1]||0, csat.distribution[2]||0, csat.distribution[3]||0, csat.distribution[4]||0, csat.distribution[5]||0, 1);
+      for (var s = 5; s >= 1; s--) {
+        var cnt = csat.distribution[s] || 0;
+        var pct = Math.round((cnt / csatMax) * 100);
+        extra += '<div class="bar-row"><div class="bar-label" style="width:160px;">' + csatLabels[s] + '</div><div class="bar-track"><div class="bar-fill" style="width:' + pct + '%;background:' + csatColors[s] + ';"></div><span class="bar-count">' + cnt + '</span></div></div>';
+      }
+      extra += '</div></div>';
+
+      // Shipping status distribution
+      if (shipping && shipping.success) {
+        var statusNames = { PAYMENT_COMPLETED: '결제완료', PAYMENT_WAITING: '결제대기', ORDER_PROCESSING: '주문처리중', SHIPPING_TO_BDJ: '물류센터이동', SHIPPING_TO_HOME: '국제배송중', COMPLETED: '배송완료', CANCEL_COMPLETED: '취소완료' };
+        var statusColors = { PAYMENT_COMPLETED: '#3b82f6', PAYMENT_WAITING: '#94a3b8', ORDER_PROCESSING: '#eab308', SHIPPING_TO_BDJ: '#f97316', SHIPPING_TO_HOME: '#a855f7', COMPLETED: '#22c55e', CANCEL_COMPLETED: '#ef4444' };
+        var sKeys = Object.keys(shipping.statusDistribution);
+        if (sKeys.length > 0) {
+          var sMax = 1;
+          sKeys.forEach(function(k) { if (shipping.statusDistribution[k] > sMax) sMax = shipping.statusDistribution[k]; });
+          extra += '<div class="chart-card"><h3>배송 상태 분포 (추적중)</h3><div class="bar-chart">';
+          sKeys.sort(function(a, b) { return shipping.statusDistribution[b] - shipping.statusDistribution[a]; });
+          sKeys.forEach(function(k) {
+            var cnt2 = shipping.statusDistribution[k];
+            var pct2 = Math.round((cnt2 / sMax) * 100);
+            extra += '<div class="bar-row"><div class="bar-label" style="width:140px;">' + (statusNames[k] || k) + '</div><div class="bar-track"><div class="bar-fill" style="width:' + pct2 + '%;background:' + (statusColors[k] || '#64748b') + ';"></div><span class="bar-count">' + cnt2 + '</span></div></div>';
+          });
+          extra += '</div></div>';
+        }
+      }
+      extra += '</div>';
+    }
+
+    document.getElementById('content').innerHTML += extra;
+  });
   document.getElementById('content').innerHTML = html;
 }
 function card(label, value, unit, color, sub) {
