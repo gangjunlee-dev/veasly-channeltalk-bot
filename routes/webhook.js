@@ -228,7 +228,9 @@ router.post('/channeltalk', async function(req, res) {
         var memberEmail = userProfile.email || (userProfile.profile && userProfile.profile.email) || "";
         var userLang = userProfile.language || (userProfile.profile && userProfile.profile.language) || "";
         var memberId = userProfile.memberId || "";
-        if (memberEmail) {
+        if (memberId) {
+          veaslyUser = await veaslyApi.findUserById(memberId, memberEmail);
+        } else if (memberEmail) {
           veaslyUser = await veaslyApi.findUserByEmail(memberEmail);
         }
         if (veaslyUser) {
