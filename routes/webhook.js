@@ -17,6 +17,10 @@ var satisfactionPending = {};
 var chatLanguage = {};
 var managerActive = {};
 var chatContext = {};
+var _chatHistoryCache = {};
+var _managerCache = { data: null, ts: 0 };
+async function getCachedManagers() { var now = Date.now(); if (_managerCache.data && (now - _managerCache.ts) < 600000) return _managerCache.data; var r = await getCachedManagers(); _managerCache.data = r; _managerCache.ts = now; return r; }
+
 
 setInterval(function() {
   var now = Date.now();
@@ -407,7 +411,7 @@ router.post('/channeltalk', async function(req, res) {
         }
         await channeltalk.sendMessage(chatId, { blocks: [{ type: 'text', value: escMsgs[detectedLang] || escMsgs['zh-TW'] }] });
         try {
-          var mgrs2 = await channeltalk.listManagers();
+          var mgrs2 = await getCachedManagers();
           var managers2 = (mgrs2 && mgrs2.managers) || [];
           for (var j = 0; j < managers2.length; j++) {
             if (managers2[j].operator) {
@@ -710,7 +714,7 @@ router.post('/channeltalk', async function(req, res) {
 
       if (needEscalate) {
         try {
-          var mgrList = await channeltalk.listManagers();
+          var mgrList = await getCachedManagers();
           var mgrArr = (mgrList && mgrList.managers) || [];
           for (var mi = 0; mi < mgrArr.length; mi++) {
             if (mgrArr[mi].operator) {
@@ -725,6 +729,11 @@ router.post('/channeltalk', async function(req, res) {
           console.log("[Follower] All managers added as followers:", allMgrIds.length);
         } catch(escErr) { console.error("[Escalate] Error:", escErr.message); }
       }
+      // Cache this exchange
+      if (!_chatHistoryCache[chatId]) _chatHistoryCache[chatId] = [];
+      _chatHistoryCache[chatId].push({ role: "user", text: userText.substring(0, 200) });
+      _chatHistoryCache[chatId].push({ role: "bot", text: aiAnswer.substring(0, 200) });
+      if (_chatHistoryCache[chatId].length > 20) _chatHistoryCache[chatId] = _chatHistoryCache[chatId].slice(-20);
       return res.status(200).send("OK");
     }
     var matched = matcher.findBestMatch(userText);
@@ -740,7 +749,7 @@ router.post('/channeltalk', async function(req, res) {
       await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: answerText }] });
       if (matched.escalate) {
         try {
-          var mgrs3 = await channeltalk.listManagers();
+          var mgrs3 = await getCachedManagers();
           var managers3 = (mgrs3 && mgrs3.managers) || [];
           for (var k = 0; k < managers3.length; k++) {
             if (managers3[k].operator) {
