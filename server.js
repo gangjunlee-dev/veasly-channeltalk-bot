@@ -2,9 +2,37 @@ require('dotenv').config();
 var express = require('express');
 
 var auth = require("./lib/auth");
+
+// Global error handlers
+var errorAlert = require('./lib/error-alert');
+process.on('uncaughtException', function(err) {
+  console.error('[FATAL] Uncaught:', err.message);
+  errorAlert.sendAlert('Uncaught Exception', err.message);
+});
+process.on('unhandledRejection', function(reason) {
+  console.error('[FATAL] Unhandled rejection:', reason);
+  errorAlert.sendAlert('Unhandled Rejection', String(reason).substring(0, 200));
+});
+
 var app = express();
 app.use(express.json());
-app.use("/dashboard", express.static("public"));
+// Dashboard password protection
+app.use("/dashboard", function(req, res, next) {
+  var auth = req.headers.authorization;
+  if (!auth || auth.indexOf("Basic ") !== 0) {
+    res.setHeader("WWW-Authenticate", 'Basic realm="VEASLY Dashboard"');
+    return res.status(401).send("Authentication required");
+  }
+  var credentials = Buffer.from(auth.split(" ")[1], "base64").toString();
+  var parts = credentials.split(":");
+  var user = parts[0];
+  var pass = parts.slice(1).join(":");
+  if (user === (process.env.DASHBOARD_USER || "admin") && pass === (process.env.DASHBOARD_PASS || "veasly2026!")) {
+    return next();
+  }
+  res.setHeader("WWW-Authenticate", 'Basic realm="VEASLY Dashboard"');
+  return res.status(401).send("Invalid credentials");
+}, express.static("public"));
 
 var webhookRouter = require('./routes/webhook');
 var botRouter = require('./routes/bot');

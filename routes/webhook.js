@@ -8,9 +8,17 @@ var lang = require('../lib/language');
 var scheduler = require('../lib/scheduler');
 var mgrStats = require('../lib/manager-stats');
 var aiLog = require('../lib/ai-log');
+var errorAlert = require('../lib/error-alert');
 var analytics = require('../lib/analytics');
 
 var processedMessages = {};
+var DEDUP_TTL = 30000; // 30 seconds
+setInterval(function() {
+  var now = Date.now();
+  for (var key in processedMessages) {
+    if (now - processedMessages[key] > DEDUP_TTL) delete processedMessages[key];
+  }
+}, 60000);
 var satisfactionPending = {};
 var chatLanguage = {};
 var managerActive = {};
@@ -477,7 +485,21 @@ router.post('/channeltalk', async function(req, res) {
     }
 
         // Skip greeting/sticker messages - no bot response needed
-    var skipPatterns = ['스티커를 전송했습니다', '스티커를 보냈습니다', '사진을 전송했습니다', '파일을 전송했습니다'];
+    var skipPatterns = ['스티커를 전송했습니다', '스티커를 보냈습니다'];
+    // Handle image/file messages with a helpful response
+    var filePatterns = ['사진을 전송했습니다', '파일을 전송했습니다', '이미지를 전송했습니다', '동영상을 전송했습니다'];
+    var isFileMsg = filePatterns.some(function(p) { return userText.indexOf(p) > -1; });
+    if (isFileMsg) {
+      var fileMsgs = {
+        "zh-TW": "📷 收到您傳送的檔案了！\n\n不好意思，AI助手目前還無法讀取圖片或檔案。請用文字描述您的問題，我會盡力幫您處理喔！\n\n例如：\n・「我的包裹外觀有損壞」\n・「商品跟網站圖片不一樣」\n・「付款畫面出現錯誤」",
+        "ko": "📷 파일을 확인했습니다!\n\nAI 도우미가 아직 이미지/파일을 읽지 못합니다. 텍스트로 문제를 설명해 주시면 도와드릴게요!\n\n예시:\n・「택배 외관이 손상됐어요」\n・「상품이 사진과 달라요」\n・「결제 화면 오류가 났어요」",
+        "en": "📷 Got your file!\n\nSorry, the AI assistant can't read images/files yet. Please describe your issue in text and I'll do my best to help!",
+        "ja": "📷 ファイルを確認しました！\n\nAIアシスタントはまだ画像/ファイルを読み取れません。テキストで問題をご説明いただければ対応いたします！"
+      };
+      await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: fileMsgs[detectedLang] || fileMsgs["zh-TW"] }] });
+      aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", lang: detectedLang, type: "file_message", userMessage: userText, aiResponse: "파일/이미지 수신 안내", escalated: false });
+      return res.status(200).send("OK");
+    }
     var isSticker = skipPatterns.some(function(p) { return userText.indexOf(p) > -1; });
     var greetWords = ['謝謝', '感謝', '好的', '收到', '了解', '沒關係', '不用了', '掰掰', '再見', 'ok收到', '감사합니다', '알겠습니다', '고마워'];
     var isThankMsg = greetWords.some(function(g) { return userText.indexOf(g) > -1; }) && userText.length < 15;
@@ -623,7 +645,38 @@ router.post('/channeltalk', async function(req, res) {
     if (aiEngine.isReady()) {
       try {
       var memberContext = veaslyUser ? "[회원: " + veaslyUser.name + ", 주문 " + (veaslyUser.requestCount || 0) + "건, 포인트 " + (veaslyUser.credit || 0) + "]" : "";
-        aiAnswer = await aiEngine.generateAnswer(memberContext ? memberContext + " " + userText : userText, detectedLang, chatId);
+        // Fetch recent chat history for context
+        var chatHistory = [];
+        try {
+          var recentMsgs = await channeltalk.getChatMessages(chatId, 10);
+          var msgs = (recentMsgs.messages || []).reverse();
+          for (var hi = 0; hi < msgs.length; hi++) {
+            var hMsg = msgs[hi];
+            if (!hMsg.plainText || hMsg.plainText.trim().length === 0) continue;
+            var hRole = (hMsg.personType || "").toLowerCase() === "user" ? "user" : "bot";
+            var hText = hMsg.plainText.trim();
+            if (hText.length > 200) hText = hText.substring(0, 200) + "...";
+            chatHistory.push({ role: hRole, text: hText });
+          }
+          // Remove the current message (last user message) to avoid duplication
+          if (chatHistory.length > 0 && chatHistory[chatHistory.length - 1].role === "user") {
+            chatHistory.pop();
+          }
+          // Keep last 5 exchanges
+          if (chatHistory.length > 10) chatHistory = chatHistory.slice(-10);
+        } catch(histErr) { console.error("[Context] History fetch error:", histErr.message); }
+        var aiResult = await aiEngine.generateAnswer(memberContext ? memberContext + " " + userText : userText, detectedLang, chatId, chatHistory);
+        if (aiResult && typeof aiResult === "object") {
+          aiAnswer = aiResult.answer;
+          var confidence = aiResult.confidence || 0;
+          console.log("[AI] Confidence:", confidence.toFixed(3));
+          if (confidence < 0.3) {
+            console.log("[AI] Low confidence - skipping AI answer");
+            aiAnswer = null;
+          }
+        } else {
+          aiAnswer = aiResult;
+        }
       } catch(aiErr) {
         console.error("[AI] Error:", aiErr.message);
       }
@@ -739,6 +792,7 @@ router.post('/channeltalk', async function(req, res) {
     res.status(200).send('OK');
   } catch (error) {
     console.error('[Webhook Error]', error.message, error.stack);
+    errorAlert.sendAlert('Webhook Error', error.message);
     res.status(200).send('OK');
   }
 });
