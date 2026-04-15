@@ -319,4 +319,47 @@ router.get('/ai-conversations', async function(req, res) {
   }
 });
 
+
+// AI answer review/rating by admin
+router.post('/ai-review', async function(req, res) {
+  try {
+    var review = req.body;
+    if (!review.chatId || !review.timestamp || !review.rating) {
+      return res.status(400).json({ success: false, error: 'chatId, timestamp, rating required' });
+    }
+    var reviewFile = require('path').join(__dirname, '..', 'data', 'ai-reviews.json');
+    var reviews = [];
+    try { reviews = JSON.parse(fs.readFileSync(reviewFile, 'utf8')); } catch(e) {}
+    reviews.push({
+      chatId: review.chatId,
+      originalTimestamp: review.timestamp,
+      rating: review.rating,
+      comment: review.comment || '',
+      reviewedAt: new Date().toISOString(),
+      userMessage: review.userMessage || '',
+      aiResponse: review.aiResponse || ''
+    });
+    if (reviews.length > 1000) reviews = reviews.slice(-1000);
+    fs.writeFileSync(reviewFile, JSON.stringify(reviews, null, 2));
+    res.json({ success: true, totalReviews: reviews.length });
+  } catch(e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+router.get('/ai-reviews', async function(req, res) {
+  try {
+    var reviewFile = require('path').join(__dirname, '..', 'data', 'ai-reviews.json');
+    var reviews = [];
+    try { reviews = JSON.parse(fs.readFileSync(reviewFile, 'utf8')); } catch(e) {}
+    var total = reviews.length;
+    var good = reviews.filter(function(r) { return r.rating === 'good'; }).length;
+    var bad = reviews.filter(function(r) { return r.rating === 'bad'; }).length;
+    var fix = reviews.filter(function(r) { return r.rating === 'fix'; }).length;
+    res.json({ success: true, total: total, good: good, bad: bad, fix: fix, recent: reviews.slice(-20).reverse() });
+  } catch(e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 module.exports = router;
