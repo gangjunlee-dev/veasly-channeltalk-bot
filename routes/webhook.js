@@ -7,6 +7,7 @@ var veaslyApi = require("../lib/veasly-api");
 var lang = require('../lib/language');
 var scheduler = require('../lib/scheduler');
 var mgrStats = require('../lib/manager-stats');
+var aiLog = require('../lib/ai-log');
 var analytics = require('../lib/analytics');
 
 var processedMessages = {};
@@ -524,6 +525,18 @@ router.post('/channeltalk', async function(req, res) {
           orderReply += "\n\n💡 " + (detectedLang === "ko" ? "더 궁금한 점이 있으면 입력해주세요! 「상담사」 입력 시 담당자를 연결해드려요." : detectedLang === "en" ? "Any questions? Type or enter 'agent' for live support!" : detectedLang === "ja" ? "ご質問があればどうぞ！「agent」と入力で担当者に接続します！" : "還有問題嗎？直接輸入問題，或輸入「客服」轉接真人客服喔！");
           await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: orderReply }] });
           console.log("[Order] Replied with", orderItems.length, "items for", orderNum);
+          aiLog.saveConversation({
+            timestamp: new Date().toISOString(),
+            chatId: chatId,
+            userId: memberId || "",
+            userName: veaslyUser ? veaslyUser.name : "",
+            lang: detectedLang,
+            type: "order_lookup",
+            userMessage: userText.substring(0, 200),
+            aiResponse: "주문조회: " + orderNum + " (" + orderItems.length + "개 아이템)",
+            escalated: false,
+            category: "order"
+          });
           return res.status(200).send("OK");
         } else {
           var notFoundMsgs = {
@@ -584,11 +597,28 @@ router.post('/channeltalk', async function(req, res) {
       };
       aiAnswer += footers[detectedLang] || footers["zh-TW"];
       await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: aiAnswer }] });
+
+      // Log AI conversation
+      var aiEscalated = false;
       var escalateKeywords = ["轉接客服", "轉接", "客服確認", "客服人員", "為您確認", "幫您確認", "담당자를 연결", "담당자에게", "상담사", "connect you with", "support team", "担当者におつなぎ", "担当者に"];
       var needEscalate = false;
       for (var ek = 0; ek < escalateKeywords.length; ek++) {
         if (aiAnswer.indexOf(escalateKeywords[ek]) !== -1) { needEscalate = true; break; }
       }
+      aiEscalated = needEscalate;
+      aiLog.saveConversation({
+        timestamp: new Date().toISOString(),
+        chatId: chatId,
+        userId: memberId || personId || "",
+        userName: veaslyUser ? veaslyUser.name : "",
+        lang: detectedLang,
+        type: "ai_answer",
+        userMessage: userText.substring(0, 200),
+        aiResponse: aiAnswer.substring(0, 500),
+        escalated: needEscalate,
+        category: analytics.classifyMessage(userText)
+      });
+
       if (needEscalate) {
         try {
           var mgrList = await channeltalk.listManagers();
@@ -650,6 +680,17 @@ router.post('/channeltalk', async function(req, res) {
       'en': "Sorry, I'm still learning 📚\n\nTry:\n1️⃣ Rephrase your question\n2️⃣ Enter a number\n3️⃣ Type \"agent\" for live help\n\n",
       'ja': '申し訳ございません、まだ学習中です 📚\n\n以下をお試しください：\n1️⃣ 別のキーワードで質問\n2️⃣ 番号を入力\n3️⃣ 「オペレーター」と入力\n\n'
     };
+    aiLog.saveConversation({
+      timestamp: new Date().toISOString(),
+      chatId: chatId,
+      userId: memberId || '',
+      lang: detectedLang,
+      type: 'unanswered',
+      userMessage: userText.substring(0, 200),
+      aiResponse: 'AI 답변 실패 - fallback 메시지',
+      escalated: false,
+      category: analytics.classifyMessage(userText)
+    });
     var fbMenu = getMenuText(detectedLang);
     await channeltalk.sendMessage(chatId, { blocks: [{ type: 'text', value: (fallbackMsgs[detectedLang] || fallbackMsgs['zh-TW']) + fbMenu }] });
 

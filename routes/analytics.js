@@ -1,6 +1,7 @@
 var express = require('express');
 var fs = require('fs');
 var mgrStats = require('../lib/manager-stats');
+var aiLog = require('../lib/ai-log');
 var router = express.Router();
 var analytics = require('../lib/analytics');
 var channeltalk = require('../lib/channeltalk');
@@ -289,6 +290,29 @@ router.get('/manager-performance', async function(req, res) {
         totalReplies: enriched.reduce(function(s, m) { return s + m.totalReplies; }, 0),
         totalChats: enriched.reduce(function(s, m) { return s + m.uniqueChats; }, 0)
       }
+    });
+  } catch(e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+
+// AI 대화 로그 조회
+router.get('/ai-conversations', async function(req, res) {
+  try {
+    var limit = parseInt(req.query.limit) || 50;
+    var type = req.query.type || null;
+    var filter = {};
+    if (type) filter.type = type;
+    if (req.query.escalated === 'true') filter.escalated = true;
+
+    var conversations = aiLog.getConversations(limit, Object.keys(filter).length > 0 ? filter : null);
+    var stats = aiLog.getStats();
+
+    res.json({
+      success: true,
+      stats: stats,
+      conversations: conversations
     });
   } catch(e) {
     res.status(500).json({ success: false, error: e.message });

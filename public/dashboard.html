@@ -117,13 +117,15 @@ function render(r) {
     fetch('/api/analytics/shipping?days=' + days).then(function(r) { return r.json(); }).catch(function() { return null; }),
     fetch('/api/analytics/faq-log').then(function(r) { return r.json(); }).catch(function() { return null; }),
     fetch('/api/analytics/auto-close').then(function(r) { return r.json(); }).catch(function() { return null; }),
-    fetch('/api/analytics/manager-performance?days=' + days).then(function(r) { return r.json(); }).catch(function() { return null; })
+    fetch('/api/analytics/manager-performance?days=' + days).then(function(r) { return r.json(); }).catch(function() { return null; }),
+    fetch('/api/analytics/ai-conversations?limit=30').then(function(r) { return r.json(); }).catch(function() { return null; })
   ]).then(function(results) {
     var csat = results[0];
     var shipping = results[1];
     var faqLog = results[2];
     var autoClose = results[3];
     var mgrPerf = results[4];
+    var aiConv = results[5];
 
     var extra = '<div class="grid" style="margin-top:8px;padding:0 32px 16px;">';
 
@@ -203,6 +205,49 @@ function render(r) {
       extra += '</table>';
       extra += '<div style="margin-top:12px;font-size:12px;color:#64748b;">총 ' + mgrPerf.summary.totalManagers + '명 매니저 | ' + mgrPerf.summary.totalReplies + '건 답변 | ' + mgrPerf.summary.totalChats + '건 채팅</div>';
       extra += '</div></div>';
+    }
+
+    
+    // AI Conversation Log
+    if (aiConv && aiConv.success && aiConv.conversations.length > 0) {
+      extra += '<div style="padding:0 32px 16px;">';
+      extra += '<div class="chart-card"><h3>AI 대화 모니터링 (최근 30건)</h3>';
+      
+      // Stats summary
+      if (aiConv.stats) {
+        var st = aiConv.stats;
+        extra += '<div style="display:flex;gap:16px;margin-bottom:16px;flex-wrap:wrap;">';
+        extra += '<div style="background:#0f172a;padding:8px 16px;border-radius:8px;"><span style="color:#94a3b8;font-size:12px;">오늘</span> <strong style="color:#3b82f6;">' + (st.today || 0) + '</strong></div>';
+        extra += '<div style="background:#0f172a;padding:8px 16px;border-radius:8px;"><span style="color:#94a3b8;font-size:12px;">전체</span> <strong style="color:#22c55e;">' + (st.total || 0) + '</strong></div>';
+        extra += '<div style="background:#0f172a;padding:8px 16px;border-radius:8px;"><span style="color:#94a3b8;font-size:12px;">에스컬레이션</span> <strong style="color:#ef4444;">' + (st.escalatedRate || 0) + '%</strong></div>';
+        extra += '</div>';
+      }
+
+      extra += '<div style="max-height:600px;overflow-y:auto;">';
+      extra += '<table style="width:100%;border-collapse:collapse;font-size:13px;">';
+      extra += '<tr style="border-bottom:1px solid #334155;color:#94a3b8;position:sticky;top:0;background:#1e293b;"><th style="text-align:left;padding:8px;">시간</th><th style="text-align:left;">유형</th><th style="text-align:left;">고객 질문</th><th style="text-align:left;">AI 답변</th><th>상태</th></tr>';
+      
+      aiConv.conversations.forEach(function(c) {
+        var time = c.timestamp ? c.timestamp.substring(11, 16) : '-';
+        var date = c.timestamp ? c.timestamp.substring(5, 10) : '';
+        var typeColors = { ai_answer: '#22c55e', order_lookup: '#3b82f6', greeting: '#94a3b8', unanswered: '#ef4444', escalation: '#eab308' };
+        var typeNames = { ai_answer: 'AI답변', order_lookup: '주문조회', greeting: '인사', unanswered: '미답변', escalation: '에스컬레이션' };
+        var typeColor = typeColors[c.type] || '#94a3b8';
+        var typeName = typeNames[c.type] || c.type;
+        var statusIcon = c.escalated ? '🔴' : '🟢';
+        var userMsg = (c.userMessage || '').substring(0, 60) + ((c.userMessage || '').length > 60 ? '...' : '');
+        var aiResp = (c.aiResponse || '').substring(0, 80) + ((c.aiResponse || '').length > 80 ? '...' : '');
+        
+        extra += '<tr style="border-bottom:1px solid #0f172a;">';
+        extra += '<td style="padding:8px;color:#64748b;white-space:nowrap;">' + date + ' ' + time + '</td>';
+        extra += '<td style="padding:8px;"><span style="color:' + typeColor + ';font-weight:600;">' + typeName + '</span></td>';
+        extra += '<td style="padding:8px;color:#e2e8f0;">' + userMsg + '</td>';
+        extra += '<td style="padding:8px;color:#94a3b8;">' + aiResp + '</td>';
+        extra += '<td style="text-align:center;">' + statusIcon + '</td>';
+        extra += '</tr>';
+      });
+      
+      extra += '</table></div></div></div>';
     }
 
     document.getElementById('content').innerHTML += extra;
