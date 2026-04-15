@@ -245,7 +245,8 @@ router.get('/manager-performance', async function(req, res) {
       return {
         managerId: r.managerId,
         qualityScore: qScore,
-        name: found ? (found.name || found.email || r.managerId) : r.managerId.substring(0, 8) + "...",
+        name: found ? (found.email ? found.email.split('@')[0] : found.name || r.managerId) : r.managerId.substring(0, 8) + "...",
+        email: found ? (found.email || '') : '',
         totalReplies: r.totalReplies,
         uniqueChats: r.uniqueChats,
         avgReplyLength: r.avgReplyLength,
