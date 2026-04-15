@@ -12,13 +12,7 @@ var errorAlert = require('../lib/error-alert');
 var analytics = require('../lib/analytics');
 
 var processedMessages = {};
-var DEDUP_TTL = 30000; // 30 seconds
-setInterval(function() {
-  var now = Date.now();
-  for (var key in processedMessages) {
-    if (now - processedMessages[key] > DEDUP_TTL) delete processedMessages[key];
-  }
-}, 60000);
+// Dedup cleanup handled below (120s TTL)
 var satisfactionPending = {};
 var chatLanguage = {};
 var managerActive = {};
@@ -423,6 +417,7 @@ router.post('/channeltalk', async function(req, res) {
             }
           }
         } catch(e) {}
+        aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || '', userName: veaslyUser ? veaslyUser.name : '', lang: detectedLang, type: 'escalation', userMessage: userText, aiResponse: '에스컬레이션 - 매니저 연결', escalated: true });
         return res.status(200).send('OK');
       }
     }
@@ -453,7 +448,8 @@ router.post('/channeltalk', async function(req, res) {
         mgrStats.linkCSATToManager(chatId, csatScore);
 
         // Clear CSAT pending
-        // CSAT cleared by file-based tracker
+        // Clear CSAT pending from file
+        try { var csatFile = require("path").join(__dirname, "..", "data", "csat-sent.json"); var csatData = JSON.parse(require("fs").readFileSync(csatFile, "utf8")); delete csatData[chatId]; require("fs").writeFileSync(csatFile, JSON.stringify(csatData), "utf8"); } catch(ce) {}
         return res.status(200).send("OK");
       }
     }
@@ -552,7 +548,7 @@ router.post('/channeltalk', async function(req, res) {
         await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: multiReply }] });
         aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "order_lookup", userMessage: userText.substring(0, 200), aiResponse: "복수 주문조회: " + orderMatches.length + "건 (" + successCount + "건 성공)", escalated: false });
         return res.status(200).send("OK");
-      } catch(multiErr) { console.error("[Order] Multi-order error:", multiErr.message); }
+      } catch(multiErr) { console.error("[Order] Multi-order error:", multiErr.message); return res.status(200).send("OK"); }
     }
     if (orderMatches.length === 1) {
       var orderNum = orderMatches[0];
