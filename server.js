@@ -1,6 +1,7 @@
 require('dotenv').config();
 var express = require('express');
 
+var auth = require("./lib/auth");
 var app = express();
 app.use(express.json());
 app.use("/dashboard", express.static("public"));
@@ -26,6 +27,8 @@ app.get('/', function(req, res) {
 });
 
 var PORT = process.env.PORT || 3000;
+
+auth.startAutoRefresh();
 
 app.listen(PORT, '0.0.0.0', function() {
   console.log('Veasly ChannelTalk Bot v2.0 running on port ' + PORT);
