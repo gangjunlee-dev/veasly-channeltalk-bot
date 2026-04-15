@@ -363,6 +363,36 @@ router.post('/channeltalk', async function(req, res) {
       }
     }
 
+
+    // CSAT response handler
+    if (scheduler.isCSATPending(chatId)) {
+      var csatScore = scheduler.parseCSATResponse(userText);
+      if (csatScore !== null) {
+        // Record CSAT score
+        scheduler.saveCSATResult ? scheduler.saveCSATResult({
+          chatId: chatId,
+          score: csatScore,
+          timestamp: Date.now(),
+          userId: memberId || ""
+        }) : null;
+
+        var csatThanks = {
+          "zh-TW": "感謝您的回饋！您的評分：" + csatScore + "/5 ⭐\n我們會持續改善服務品質！",
+          "ko": "피드백 감사합니다! 평점: " + csatScore + "/5 ⭐\n더 나은 서비스를 위해 노력하겠습니다!",
+          "en": "Thank you for your feedback! Rating: " + csatScore + "/5 ⭐\nWe'll keep improving!",
+          "ja": "フィードバックありがとうございます！評価：" + csatScore + "/5 ⭐\nサービス改善に努めます！"
+        };
+
+        var thankMsg = csatThanks[detectedLang] || csatThanks["zh-TW"];
+        await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: thankMsg }] });
+        console.log("[CSAT] Score recorded:", csatScore, "for chat:", chatId);
+
+        // Clear CSAT pending
+        // CSAT cleared by file-based tracker
+        return res.status(200).send("OK");
+      }
+    }
+
     // Reset escalation step if user asks something else
     setEscalationStep(chatId, 0);
 
