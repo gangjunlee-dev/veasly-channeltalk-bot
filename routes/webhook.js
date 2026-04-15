@@ -69,6 +69,7 @@ function isBusinessHours() {
 
 function isEscalationRequest(text) {
   var keywords = ['客服', '真人', '真人客服', '人工客服', '人工', '找客服', '聯繫我們', '聯繫', '상담사', '상담원', '사람', 'agent', 'human', 'operator', 'help me', 'オペレーター', '담당자', '轉接', '轉人工'];
+  text = text.replace(/[\\\s]+$/g, '').trim(); // clean trailing backslash/spaces
   var lower = text.toLowerCase().trim();
   for (var i = 0; i < keywords.length; i++) {
     if (lower === keywords[i].toLowerCase()) return true;
@@ -333,6 +334,7 @@ router.post('/channeltalk', async function(req, res) {
         'ja': 'どういたしまして！他にご質問があればお気軽にどうぞ 😊\n\n' + getMenuText('ja')
       };
       await channeltalk.sendMessage(chatId, { blocks: [{ type: 'text', value: thankReply[detectedLang] || thankReply['zh-TW'] }] });
+      aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "thank_you", userMessage: userText, aiResponse: "감사 응답", escalated: false });
       return res.status(200).send('OK');
     }
 
@@ -356,6 +358,7 @@ router.post('/channeltalk', async function(req, res) {
         greetText += pointHints[detectedLang] || pointHints["zh-TW"];
       }
       await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: greetText }] });
+      aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "greeting", userMessage: userText, aiResponse: "인사 응답 + 메뉴 제공" + (veaslyUser && veaslyUser.credit >= 500 ? " (포인트:" + veaslyUser.credit + ")" : ""), escalated: false });
       return res.status(200).send('OK');
     }
 
@@ -447,8 +450,8 @@ router.post('/channeltalk', async function(req, res) {
       }
     }
 
-    // Reset escalation step if user asks something else
-    setEscalationStep(chatId, 0);
+    // Reset escalation step only if NOT an escalation keyword
+    if (!isEscalation(userText)) { setEscalationStep(chatId, 0); }
 
     // Point promotion - notify users with available points
     if (veaslyUser && veaslyUser.credit >= 500) {
@@ -573,7 +576,9 @@ router.post('/channeltalk', async function(req, res) {
           var hasMultiAccount = recentOrders.some(function(o) { return o._isCurrentAccount === false; }); if (hasMultiAccount) { listReply += "\n\n" + (detectedLang === "ko" ? "⚠ = 다른 로그인 방식으로 주문한 건입니다" : detectedLang === "en" ? "⚠ = ordered from a different login method" : detectedLang === "ja" ? "⚠ = 別のログイン方法での注文です" : "⚠ = 透過其他登入方式下的訂單"); } listReply += "\n\n" + (detectedLang === "ko" ? "주문번호를 입력하시면 상세 상태를 확인할 수 있어요!" : detectedLang === "en" ? "Enter an order number for details!" : detectedLang === "ja" ? "注文番号を入力すると詳細が確認できます！" : "輸入完整訂單編號可查看詳細狀態喔！");
           await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: listReply }] });
           console.log("[Order] Listed", recentOrders.length, "orders for", veaslyUser.email);
-          return res.status(200).send("OK");
+          
+      aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "order_list", userMessage: userText, aiResponse: "주문 목록 " + recentOrders.length + "건 조회", escalated: false });
+      return res.status(200).send("OK");
         }
       } catch(olErr) { console.error("[Order] List error:", olErr.message); }
     }
@@ -662,7 +667,9 @@ router.post('/channeltalk', async function(req, res) {
           }
         } catch(e) {}
       }
-      return res.status(200).send("OK");
+      
+          aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "escalation", userMessage: userText, aiResponse: "매니저 에스컬레이션 (수동)", escalated: true });
+          return res.status(200).send("OK");
     }
     // Fallback
     // Save unanswered question for learning
