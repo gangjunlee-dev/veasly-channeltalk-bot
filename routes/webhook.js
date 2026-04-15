@@ -451,7 +451,7 @@ router.post('/channeltalk', async function(req, res) {
     }
 
     // Reset escalation step only if NOT an escalation keyword
-    if (!isEscalation(userText)) { setEscalationStep(chatId, 0); }
+    if (!isEscalationRequest(userText)) { setEscalationStep(chatId, 0); }
 
     // Point promotion - notify users with available points
     if (veaslyUser && veaslyUser.credit >= 500) {
@@ -496,9 +496,44 @@ router.post('/channeltalk', async function(req, res) {
     }
 
         // Order number detection - real-time API lookup
-    var orderMatch = userText.match(/\d{8}TW\d{9}/);
-    if (orderMatch) {
-      var orderNum = orderMatch[0];
+    var orderMatches = userText.match(/\d{8}TW\d{9}/g) || [];
+    if (orderMatches.length > 1) {
+      // Multi-order lookup
+      console.log("[Order] Detected", orderMatches.length, "order numbers");
+      try {
+        var multiReply = "";
+        var successCount = 0;
+        for (var oi = 0; oi < Math.min(orderMatches.length, 5); oi++) {
+          var oNum = orderMatches[oi];
+          try {
+            var oItems = await veaslyApi.getOrderDetail(oNum);
+            if (oItems && oItems.length > 0) {
+              var oInfo = veaslyApi.formatOrderInfo(oItems, detectedLang);
+              var mainSt = (oItems[0] && oItems[0].status) || "";
+              multiReply += "📦 " + oNum + "\n" + oInfo + "\n\n";
+              successCount++;
+            } else {
+              multiReply += "❌ " + oNum + " - " + (detectedLang === "ko" ? "주문 정보 없음" : detectedLang === "en" ? "Not found" : detectedLang === "ja" ? "注文情報なし" : "找不到此訂單") + "\n\n";
+            }
+          } catch(oErr) {
+            multiReply += "❌ " + oNum + " - " + (detectedLang === "ko" ? "조회 실패" : "查詢失敗") + "\n\n";
+          }
+        }
+        var multiHeaders = {
+          "zh-TW": "為您查詢了 " + orderMatches.length + " 筆訂單：\n\n",
+          "ko": orderMatches.length + "건의 주문을 조회했습니다:\n\n",
+          "en": "Found " + orderMatches.length + " orders:\n\n",
+          "ja": orderMatches.length + "件の注文を確認しました：\n\n"
+        };
+        multiReply = (multiHeaders[detectedLang] || multiHeaders["zh-TW"]) + multiReply;
+        multiReply += "💡 " + (detectedLang === "ko" ? "더 궁금한 점이 있으면 입력해주세요!" : detectedLang === "en" ? "Any questions?" : detectedLang === "ja" ? "ご質問があればどうぞ！" : "還有問題嗎？直接輸入問題，或輸入「客服」轉接真人客服喔！");
+        await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: multiReply }] });
+        aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "order_lookup", userMessage: userText.substring(0, 200), aiResponse: "복수 주문조회: " + orderMatches.length + "건 (" + successCount + "건 성공)", escalated: false });
+        return res.status(200).send("OK");
+      } catch(multiErr) { console.error("[Order] Multi-order error:", multiErr.message); }
+    }
+    if (orderMatches.length === 1) {
+      var orderNum = orderMatches[0];
       console.log("[Order] Detected order number:", orderNum);
       try {
         var orderItems = await veaslyApi.getOrderDetail(orderNum);
@@ -517,8 +552,8 @@ router.post('/channeltalk', async function(req, res) {
           var tipMap = {
             "PAYMENT_WAITING": { "zh-TW": "請盡快完成付款，以免訂單被取消喔！", "ko": "빠른 결제 부탁드립니다!", "en": "Please complete payment soon!", "ja": "お早めにお支払いをお願いします！" },
             "PAYMENT_COMPLETED": { "zh-TW": "已收到付款，我們會盡快處理您的訂單！", "ko": "결제 확인! 빠르게 처리하겠습니다!", "en": "Payment received! We will process your order soon!", "ja": "お支払い確認済み！早速処理いたします！" },
-            "ORDER_PROCESSING": { "zh-TW": "正在向韓國賣家購買中，通常需要1-3個工作天喔！", "ko": "한국 판매자에게 구매 중입니다. 보통 1-3 영업일 소요됩니다!", "en": "Purchasing from Korean seller, usually takes 1-3 business days!", "ja": "韓国セラーから購入中です。通常1-3営業日かかります！" },
-            "SHIPPING_TO_BDJ": { "zh-TW": "商品正在韓國國內運送到VEASLY倉庫，到倉後會盡快為您寄出國際包裹！", "ko": "한국 내 VEASLY 창고로 배송 중입니다!", "en": "Shipping to VEASLY warehouse in Korea!", "ja": "韓国内のVEASLY倉庫へ配送中です！" },
+            "ORDER_PROCESSING": { "zh-TW": "商品正在韓國國內配送中，寄往VEASLY倉庫，通常需要1-3個工作天喔！", "ko": "한국 내 배송 중입니다. VEASLY 창고로 이동 중이며 보통 1-3 영업일 소요됩니다!", "en": "Shipping within Korea to VEASLY warehouse, usually takes 1-3 business days!", "ja": "韓国国内配送中です。VEASLY倉庫へ通常1-3営業日かかります！" },
+            "SHIPPING_TO_BDJ": { "zh-TW": "商品已到達VEASLY倉庫！正在準備國際包裹，即將為您寄出！", "ko": "VEASLY 창고에 도착했습니다! 국제 배송 준비 중입니다!", "en": "Arrived at VEASLY warehouse! Preparing international shipment!", "ja": "VEASLY倉庫に到着しました！国際発送の準備中です！" },
             "SHIPPING_TO_HOME": { "zh-TW": "包裹已從韓國寄出！國際配送通常需要5-10個工作天，收到 EZ WAY 通知時，請記得按「申報相符」才能順利通關喔！", "ko": "한국에서 출발! 국제 배송은 보통 5-10 영업일 소요됩니다!", "en": "Shipped from Korea! International delivery takes 5-10 business days!", "ja": "韓国から発送済み！国際配送は通常5-10営業日かかります！" },
             "COMPLETED": { "zh-TW": "訂單已完成！感謝您的購買～", "ko": "주문 완료! 감사합니다~", "en": "Order completed! Thank you!", "ja": "注文完了！ありがとうございます！" },
             "CANCEL_COMPLETED": { "zh-TW": "此訂單已取消，退款會在3-5個工作天內處理喔！", "ko": "주문이 취소되었습니다. 환불은 3-5 영업일 내 처리됩니다!", "en": "Order cancelled. Refund will be processed in 3-5 business days!", "ja": "注文キャンセル済み。返金は3-5営業日以内に処理されます！" }
