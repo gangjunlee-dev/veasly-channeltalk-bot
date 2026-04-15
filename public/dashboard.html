@@ -191,7 +191,7 @@ function render(r) {
     // Manager performance table
     if (mgrPerf && mgrPerf.success && mgrPerf.managers.length > 0) {
       extra += '<div class="charts" style="padding:0 32px 16px;">';
-      extra += '<div class="chart-card" style="grid-column: span 2;"><h3>매니저 성과 분석 (' + days + '일)</h3>';
+      extra += '<div class="chart-card" style="grid-column: span 2;"><h3>매니저 성과 분석 (' + (typeof days === 'number' ? days : 7) + '일)</h3>';
       extra += '<table style="width:100%;border-collapse:collapse;margin-top:12px;font-size:14px;">';
       extra += '<tr style="border-bottom:1px solid #334155;color:#94a3b8;"><th style="text-align:left;padding:8px;">매니저 (이메일)</th><th>답변 수</th><th>담당 채팅</th><th>평균 답변길이</th><th>평균 응답시간</th><th>CS 점수</th></tr>';
       mgrPerf.managers.forEach(function(m) {

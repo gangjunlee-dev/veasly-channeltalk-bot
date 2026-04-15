@@ -262,7 +262,8 @@ router.get('/manager-performance', async function(req, res) {
     }).map(function(m) {
       return {
         managerId: m.id,
-        name: m.name || m.email || m.id.substring(0, 8) + "...",
+        name: m.email ? m.email.split('@')[0] : (m.name || m.id.substring(0, 8) + "..."),
+        email: m.email || '',
         totalReplies: 0,
         uniqueChats: 0,
         avgReplyLength: 0,
