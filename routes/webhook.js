@@ -438,6 +438,7 @@ router.post('/channeltalk', async function(req, res) {
         var thankMsg = csatThanks[detectedLang] || csatThanks["zh-TW"];
         await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: thankMsg }] });
         console.log("[CSAT] Score recorded:", csatScore, "for chat:", chatId);
+        mgrStats.linkCSATToManager(chatId, csatScore);
 
         // Clear CSAT pending
         // CSAT cleared by file-based tracker

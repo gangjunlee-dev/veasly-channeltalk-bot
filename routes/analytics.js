@@ -241,8 +241,10 @@ router.get('/manager-performance', async function(req, res) {
 
     var enriched = report.map(function(r) {
       var found = managers.find(function(m) { return m.id === r.managerId; });
+      var qScore = mgrStats.calculateQualityScore(r.managerId, days);
       return {
         managerId: r.managerId,
+        qualityScore: qScore,
         name: found ? (found.name || found.email || r.managerId) : r.managerId.substring(0, 8) + "...",
         totalReplies: r.totalReplies,
         uniqueChats: r.uniqueChats,
@@ -252,12 +254,36 @@ router.get('/manager-performance', async function(req, res) {
       };
     });
 
+    // Find managers who are followers but didn't reply
+    var activeIds = enriched.map(function(e) { return e.managerId; });
+    var inactiveManagers = managers.filter(function(m) {
+      return activeIds.indexOf(m.id) === -1 && !m.bot;
+    }).map(function(m) {
+      return {
+        managerId: m.id,
+        name: m.name || m.email || m.id.substring(0, 8) + "...",
+        totalReplies: 0,
+        uniqueChats: 0,
+        avgReplyLength: 0,
+        avgResponseTimeMin: 0,
+        responseSamples: 0,
+        status: "inactive"
+      };
+    });
+
+    var allManagers = enriched.map(function(e) {
+      e.status = "active";
+      return e;
+    }).concat(inactiveManagers);
+
     res.json({
       success: true,
       period: days + " days",
-      managers: enriched,
+      managers: allManagers,
       summary: {
-        totalManagers: enriched.length,
+        totalManagers: allManagers.length,
+        activeManagers: enriched.length,
+        inactiveManagers: inactiveManagers.length,
         totalReplies: enriched.reduce(function(s, m) { return s + m.totalReplies; }, 0),
         totalChats: enriched.reduce(function(s, m) { return s + m.uniqueChats; }, 0)
       }
