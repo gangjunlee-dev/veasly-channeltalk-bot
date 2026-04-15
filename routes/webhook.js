@@ -291,7 +291,18 @@ router.post('/channeltalk', async function(req, res) {
         'en': 'Hello! Welcome to VEASLY 🇰🇷\nHow can I help you?\n\n' + getMenuText('en'),
         'ja': 'こんにちは！VEASLYへようこそ 🇰🇷\nどうぞお気軽にご質問ください。\n\n' + getMenuText('ja')
       };
-      await channeltalk.sendMessage(chatId, { blocks: [{ type: 'text', value: greetReply[detectedLang] || greetReply['zh-TW'] }] });
+      var greetText = greetReply[detectedLang] || greetReply['zh-TW'];
+      // Add point reminder to greeting
+      if (veaslyUser && veaslyUser.credit >= 500) {
+        var pointHints = {
+          "zh-TW": "\n\n🎁 您目前有 " + veaslyUser.credit + " 點數可以使用喔！下單時可折抵消費～",
+          "ko": "\n\n🎁 현재 " + veaslyUser.credit + " 포인트 보유 중! 주문 시 할인에 사용하세요~",
+          "en": "\n\n🎁 You have " + veaslyUser.credit + " points! Use them on your next order~",
+          "ja": "\n\n🎁 現在 " + veaslyUser.credit + " ポイントをお持ちです！ご注文時にご利用ください～"
+        };
+        greetText += pointHints[detectedLang] || pointHints["zh-TW"];
+      }
+      await channeltalk.sendMessage(chatId, { blocks: [{ type: 'text', value: greetText }] });
       return res.status(200).send('OK');
     }
 
@@ -355,15 +366,38 @@ router.post('/channeltalk', async function(req, res) {
     // Reset escalation step if user asks something else
     setEscalationStep(chatId, 0);
 
-    // Skip greeting/sticker messages - no bot response needed
+    // Point promotion - notify users with available points
+    if (veaslyUser && veaslyUser.credit >= 500) {
+      var chatPointKey = "pointNotified_" + chatId;
+      if (!global._pointNotified) global._pointNotified = {};
+      if (!global._pointNotified[chatPointKey]) {
+        global._pointNotified[chatPointKey] = true;
+        var pts = veaslyUser.credit;
+        var pointMsgs = {
+          "zh-TW": "🎁 " + veaslyUser.name + " 您好！您目前有 " + pts + " 點數可以使用喔！下單時可折抵消費，別忘了使用～",
+          "ko": "🎁 " + veaslyUser.name + "님! 현재 " + pts + " 포인트 보유 중이에요! 주문 시 할인에 사용할 수 있어요~",
+          "en": "🎁 Hi " + veaslyUser.name + "! You have " + pts + " points available! Use them for discounts on your next order~",
+          "ja": "🎁 " + veaslyUser.name + "さん！現在 " + pts + " ポイントをお持ちです！注文時にご利用いただけます～"
+        };
+        // Send as a separate message after a short delay
+        setTimeout(async function() {
+          try {
+            await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: pointMsgs[detectedLang] || pointMsgs["zh-TW"] }] });
+            console.log("[Promo] Point reminder sent:", pts, "points for", veaslyUser.name);
+          } catch(e) { console.error("[Promo] Error:", e.message); }
+        }, 2000);
+      }
+    }
+
+        // Skip greeting/sticker messages - no bot response needed
     var skipPatterns = ['스티커를 전송했습니다', '스티커를 보냈습니다', '사진을 전송했습니다', '파일을 전송했습니다'];
     var isSticker = skipPatterns.some(function(p) { return userText.indexOf(p) > -1; });
     var greetWords = ['謝謝', '感謝', '好的', '收到', '了解', '沒關係', '不用了', '掰掰', '再見', 'ok收到', '감사합니다', '알겠습니다', '고마워'];
-    var isGreeting = greetWords.some(function(g) { return userText.indexOf(g) > -1; }) && userText.length < 15;
+    var isThankMsg = greetWords.some(function(g) { return userText.indexOf(g) > -1; }) && userText.length < 15;
     if (isSticker) {
       return res.status(200).send('OK');
     }
-    if (isGreeting) {
+    if (isThankMsg) {
       var greetReplies = {
         "zh-TW": "不客氣！有需要隨時找我喔～ 😊",
         "ko": "천만에요! 필요하시면 언제든 말씀해주세요~ 😊",
