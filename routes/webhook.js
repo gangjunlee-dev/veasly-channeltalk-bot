@@ -304,7 +304,7 @@ router.post('/channeltalk', async function(req, res) {
         };
         greetText += pointHints[detectedLang] || pointHints["zh-TW"];
       }
-      await channeltalk.sendMessage(chatId, { blocks: [{ type: 'text', value: greetText }] });
+      await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: greetText }] });
       return res.status(200).send('OK');
     }
 
@@ -604,7 +604,7 @@ router.post('/channeltalk', async function(req, res) {
 
     res.status(200).send('OK');
   } catch (error) {
-    console.error('[Webhook Error]', error.message);
+    console.error('[Webhook Error]', error.message, error.stack);
     res.status(200).send('OK');
   }
 });
