@@ -5,6 +5,8 @@ var matcher = require('../lib/matcher');
 var aiEngine = require('../lib/ai-engine');
 var veaslyApi = require("../lib/veasly-api");
 var lang = require('../lib/language');
+var scheduler = require('../lib/scheduler');
+var analytics = require('../lib/analytics');
 
 var processedMessages = {};
 var satisfactionPending = {};
