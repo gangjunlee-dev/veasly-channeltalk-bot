@@ -116,12 +116,14 @@ function render(r) {
     fetch('/api/analytics/csat?days=' + days).then(function(r) { return r.json(); }).catch(function() { return null; }),
     fetch('/api/analytics/shipping?days=' + days).then(function(r) { return r.json(); }).catch(function() { return null; }),
     fetch('/api/analytics/faq-log').then(function(r) { return r.json(); }).catch(function() { return null; }),
-    fetch('/api/analytics/auto-close').then(function(r) { return r.json(); }).catch(function() { return null; })
+    fetch('/api/analytics/auto-close').then(function(r) { return r.json(); }).catch(function() { return null; }),
+    fetch('/api/analytics/manager-performance?days=' + days).then(function(r) { return r.json(); }).catch(function() { return null; })
   ]).then(function(results) {
     var csat = results[0];
     var shipping = results[1];
     var faqLog = results[2];
     var autoClose = results[3];
+    var mgrPerf = results[4];
 
     var extra = '<div class="grid" style="margin-top:8px;padding:0 32px 16px;">';
 
@@ -183,6 +185,23 @@ function render(r) {
         }
       }
       extra += '</div>';
+    }
+
+    
+    // Manager performance table
+    if (mgrPerf && mgrPerf.success && mgrPerf.managers.length > 0) {
+      extra += '<div class="charts" style="padding:0 32px 16px;">';
+      extra += '<div class="chart-card" style="grid-column: span 2;"><h3>매니저 성과 분석 (' + days + '일)</h3>';
+      extra += '<table style="width:100%;border-collapse:collapse;margin-top:12px;font-size:14px;">';
+      extra += '<tr style="border-bottom:1px solid #334155;color:#94a3b8;"><th style="text-align:left;padding:8px;">매니저</th><th>답변 수</th><th>담당 채팅</th><th>평균 답변길이</th><th>평균 응답시간</th></tr>';
+      mgrPerf.managers.forEach(function(m) {
+        var rtText = m.avgResponseTimeMin > 0 ? m.avgResponseTimeMin + '분' : '-';
+        var rtColor = m.avgResponseTimeMin > 30 ? '#ef4444' : m.avgResponseTimeMin > 10 ? '#eab308' : '#22c55e';
+        extra += '<tr style="border-bottom:1px solid #1e293b;"><td style="padding:8px;color:#e2e8f0;">' + m.name + '</td><td style="text-align:center;color:#3b82f6;font-weight:600;">' + m.totalReplies + '</td><td style="text-align:center;color:#a855f7;">' + m.uniqueChats + '</td><td style="text-align:center;color:#94a3b8;">' + m.avgReplyLength + '자</td><td style="text-align:center;color:' + rtColor + ';font-weight:600;">' + rtText + '</td></tr>';
+      });
+      extra += '</table>';
+      extra += '<div style="margin-top:12px;font-size:12px;color:#64748b;">총 ' + mgrPerf.summary.totalManagers + '명 매니저 | ' + mgrPerf.summary.totalReplies + '건 답변 | ' + mgrPerf.summary.totalChats + '건 채팅</div>';
+      extra += '</div></div>';
     }
 
     document.getElementById('content').innerHTML += extra;

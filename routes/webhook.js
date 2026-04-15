@@ -6,6 +6,7 @@ var aiEngine = require('../lib/ai-engine');
 var veaslyApi = require("../lib/veasly-api");
 var lang = require('../lib/language');
 var scheduler = require('../lib/scheduler');
+var mgrStats = require('../lib/manager-stats');
 var analytics = require('../lib/analytics');
 
 var processedMessages = {};
@@ -197,7 +198,12 @@ router.post('/channeltalk', async function(req, res) {
     if (personType === "manager") {
       if (chatId) {
         managerActive[chatId] = Date.now();
+        var mgrPersonId = message.personId || "unknown";
         var mgrText = extractText(message);
+        // Record manager performance stats
+        if (mgrText) {
+          mgrStats.recordReply(mgrPersonId, chatId, mgrText.length);
+        }
         if (mgrText && mgrText.length > 10 && aiEngine.isReady()) {
           aiEngine.addToKnowledgeBase(
             "mgr_" + chatId + "_" + Date.now(),
@@ -214,6 +220,7 @@ router.post('/channeltalk', async function(req, res) {
 
     var userText = extractText(message);
     if (!userText || !chatId) return res.status(200).send('OK');
+    mgrStats.recordUserMessage(chatId);
     if (isSystemEvent(userText)) return res.status(200).send('OK');
 
     if (managerActive[chatId]) {
@@ -237,17 +244,60 @@ router.post('/channeltalk', async function(req, res) {
         }
         if (veaslyUser) {
           console.log("[Member] Matched:", veaslyUser.name, "| ID:", veaslyUser.id, "| Orders:", veaslyUser.requestCount, "| Credit:", veaslyUser.credit);
-          // Sync VEASLY info to ChannelTalk profile
+          // Sync VEASLY info + auto-tags to ChannelTalk profile
           try {
-            await channeltalk.updateUser(personId, {
+            var orderCount = veaslyUser.requestCount || 0;
+            var credit = veaslyUser.credit || 0;
+
+            // Calculate customer tier tag
+            var tierTag = "새회원";
+            if (orderCount >= 20) tierTag = "VIP";
+            else if (orderCount >= 10) tierTag = "우수회원";
+            else if (orderCount >= 5) tierTag = "단골회원";
+            else if (orderCount >= 2) tierTag = "재구매";
+            else if (orderCount >= 1) tierTag = "첫구매완료";
+
+            // Calculate shipping status from recent orders
+            var shippingTag = "";
+            try {
+              var recentOrders = await veaslyApi.getUserOrders(veaslyUser.email, 5, memberId);
+              if (recentOrders && recentOrders.length > 0) {
+                var activeItems = [];
+                for (var oi = 0; oi < recentOrders.length; oi++) {
+                  var orderItems = recentOrders[oi].items || [];
+                  for (var oj = 0; oj < orderItems.length; oj++) {
+                    if (orderItems[oj].status && orderItems[oj].status !== "COMPLETED" && orderItems[oj].status !== "CANCEL_COMPLETED") {
+                      activeItems.push(orderItems[oj].status);
+                    }
+                  }
+                }
+                if (activeItems.indexOf("SHIPPING_TO_HOME") > -1) shippingTag = "국제배송중";
+                else if (activeItems.indexOf("SHIPPING_TO_BDJ") > -1) shippingTag = "물류센터이동";
+                else if (activeItems.indexOf("ORDER_PROCESSING") > -1) shippingTag = "주문처리중";
+                else if (activeItems.indexOf("PAYMENT_COMPLETED") > -1) shippingTag = "결제완료";
+              }
+            } catch(tagErr) {}
+
+            // Point status tag
+            var pointTag = "";
+            if (credit >= 10000) pointTag = "포인트VIP";
+            else if (credit >= 5000) pointTag = "포인트많음";
+            else if (credit >= 1000) pointTag = "포인트보유";
+
+            var profileData = {
               "veasly_id": String(veaslyUser.id),
-              "veasly_orders": veaslyUser.requestCount || 0,
-              "veasly_points": veaslyUser.credit || 0,
+              "veasly_orders": orderCount,
+              "veasly_points": credit,
               "veasly_provider": veaslyUser.provider || "",
               "veasly_role": veaslyUser.role || "",
-              "veasly_joined": (veaslyUser.createdAt || "").substring(0, 10)
-            });
-            console.log("[Sync] Profile updated for", personId);
+              "veasly_joined": (veaslyUser.createdAt || "").substring(0, 10),
+              "veasly_tier": tierTag,
+              "veasly_shipping": shippingTag,
+              "veasly_point_tier": pointTag
+            };
+
+            await channeltalk.updateUser(personId, profileData);
+            console.log("[Sync] Profile updated for", personId, "| Tier:", tierTag, shippingTag ? "| Ship:" + shippingTag : "");
           } catch(syncErr) { console.error("[Sync] Error:", syncErr.message); }
         }
       } catch(mErr) { console.error("[Member] Lookup error:", mErr.message); }

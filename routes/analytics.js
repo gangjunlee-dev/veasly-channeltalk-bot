@@ -1,5 +1,6 @@
 var express = require('express');
 var fs = require('fs');
+var mgrStats = require('../lib/manager-stats');
 var router = express.Router();
 var analytics = require('../lib/analytics');
 var channeltalk = require('../lib/channeltalk');
@@ -216,6 +217,49 @@ router.get('/dashboard-summary', async function(req, res) {
       },
       faq: {
         lastUpdate: faqLogs.length > 0 ? faqLogs[faqLogs.length - 1] : null
+      }
+    });
+  } catch(e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+
+// 매니저 성과 분석
+router.get('/manager-performance', async function(req, res) {
+  try {
+    var days = parseInt(req.query.days) || 7;
+    var report = mgrStats.generateReport(days);
+    var channeltalk2 = require('../lib/channeltalk');
+
+    // Resolve manager names
+    var managers = [];
+    try {
+      var mgrList = await channeltalk2.listManagers();
+      managers = (mgrList.managers || []);
+    } catch(e) {}
+
+    var enriched = report.map(function(r) {
+      var found = managers.find(function(m) { return m.id === r.managerId; });
+      return {
+        managerId: r.managerId,
+        name: found ? (found.name || found.email || r.managerId) : r.managerId.substring(0, 8) + "...",
+        totalReplies: r.totalReplies,
+        uniqueChats: r.uniqueChats,
+        avgReplyLength: r.avgReplyLength,
+        avgResponseTimeMin: r.avgResponseTimeMin,
+        responseSamples: r.responseSamples
+      };
+    });
+
+    res.json({
+      success: true,
+      period: days + " days",
+      managers: enriched,
+      summary: {
+        totalManagers: enriched.length,
+        totalReplies: enriched.reduce(function(s, m) { return s + m.totalReplies; }, 0),
+        totalChats: enriched.reduce(function(s, m) { return s + m.uniqueChats; }, 0)
       }
     });
   } catch(e) {
