@@ -89,6 +89,7 @@ td { padding: 10px 8px; border-bottom: 1px solid #0f172a; font-size: 13px; }
   <div class="tab" onclick="switchTab('managers')">매니저 성과</div>
   <div class="tab" onclick="switchTab('ai')">AI 모니터링</div>
   <div class="tab" onclick="switchTab('csat')">CSAT</div>
+  <div class="tab" onclick="switchTab('csscore')">CS Score</div>
 </div>
 
 <div class="controls">
@@ -122,6 +123,11 @@ td { padding: 10px 8px; border-bottom: 1px solid #0f172a; font-size: 13px; }
   <div id="aiContent"><div class="loading">AI 데이터 로딩 중...</div></div>
 </div>
 
+<!-- TAB: CS Score -->
+<div id="tab-csscore" class="tab-content">
+  <div id="csscoreContent"><div class="loading">CS Score 데이터 로딩 중...</div></div>
+</div>
+
 <!-- TAB: CSAT -->
 <div id="tab-csat" class="tab-content">
   <div id="csatContent"><div class="loading">CSAT 데이터 로딩 중...</div></div>
@@ -151,6 +157,7 @@ function switchTab(name) {
   if (name === 'managers' && !cachedData.mgr) loadManagerData();
   if (name === 'ai' && !cachedData.ai) loadAIData();
   if (name === 'csat' && !cachedData.csat) loadCSATData();
+  if (name === 'csscore' && !cachedData.csscore) loadCSScoreData();
 }
 
 function toggleAutoRefresh() {

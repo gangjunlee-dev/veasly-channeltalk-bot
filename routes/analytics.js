@@ -365,4 +365,157 @@ router.get('/ai-reviews', async function(req, res) {
   }
 });
 
+
+
+// CS Score Metrics - 응답속도 분포, 미응답종료율, 재문의율
+router.get('/cs-score-metrics', async function(req, res) {
+  try {
+    var days = parseInt(req.query.days) || 7;
+    var channeltalk = require('../lib/channeltalk');
+    var mgrStats = require('../lib/manager-stats');
+
+    // 1. Response time distribution from manager-stats
+    var statsFile = require('path').join(__dirname, '..', 'data', 'manager-stats.json');
+    var stats = {};
+    try { stats = JSON.parse(fs.readFileSync(statsFile, 'utf8')); } catch(e) {}
+    var responseTimes = [];
+    var cutoffMs = Date.now() - days * 86400000;
+    var chatKeys = Object.keys(stats.chats || {});
+    var totalMgrChats = 0;
+    var noReplyChats = 0;
+    var userIdChats = {};
+
+    chatKeys.forEach(function(cid) {
+      var chat = stats.chats[cid];
+      if (chat.firstUserMsg && chat.firstUserMsg >= cutoffMs) {
+        totalMgrChats++;
+        if (chat.firstMgrReply) {
+          var rt = chat.firstMgrReply - chat.firstUserMsg;
+          if (rt > 0 && rt < 86400000) responseTimes.push(rt);
+        } else {
+          noReplyChats++;
+        }
+      }
+    });
+
+    // Response time buckets
+    var buckets = { under5: 0, under15: 0, under30: 0, under60: 0, over60: 0 };
+    responseTimes.forEach(function(rt) {
+      var min = rt / 60000;
+      if (min <= 5) buckets.under5++;
+      else if (min <= 15) buckets.under15++;
+      else if (min <= 30) buckets.under30++;
+      else if (min <= 60) buckets.under60++;
+      else buckets.over60++;
+    });
+
+    var totalRT = responseTimes.length;
+    var within30 = buckets.under5 + buckets.under15 + buckets.under30;
+    var within30Rate = totalRT > 0 ? Math.round((within30 / totalRT) * 100) : 0;
+    var avgRT = 0;
+    if (totalRT > 0) { var sum = 0; responseTimes.forEach(function(t) { sum += t; }); avgRT = Math.round(sum / totalRT / 60000); }
+
+    // 2. No-reply close rate
+    var noReplyRate = totalMgrChats > 0 ? Math.round((noReplyChats / totalMgrChats) * 100) : 0;
+
+    // 3. Repeat inquiry rate - from closed chats
+    var repeatRate = 0;
+    var repeatUsers = 0;
+    var totalUsers = 0;
+    try {
+      var closedChats = await channeltalk.listUserChats('closed', 50);
+      var chatList = closedChats.userChats || [];
+      var userChatCount = {};
+      chatList.forEach(function(c) {
+        var uid = c.userId || c.memberId || '';
+        if (uid) userChatCount[uid] = (userChatCount[uid] || 0) + 1;
+      });
+      totalUsers = Object.keys(userChatCount).length;
+      repeatUsers = Object.keys(userChatCount).filter(function(u) { return userChatCount[u] >= 2; }).length;
+      repeatRate = totalUsers > 0 ? Math.round((repeatUsers / totalUsers) * 100) : 0;
+    } catch(e) {}
+
+    // 4. Business hours coverage
+    var aiConvFile = require('path').join(__dirname, '..', 'data', 'ai-conversations.json');
+    var aiLogs = [];
+    try { aiLogs = JSON.parse(fs.readFileSync(aiConvFile, 'utf8')); } catch(e) {}
+    var cutoffDate = new Date(Date.now() - days * 86400000).toISOString().substring(0, 10);
+    var recentLogs = aiLogs.filter(function(l) { return l.timestamp && l.timestamp.substring(0, 10) >= cutoffDate; });
+    var bizHourMsgs = 0;
+    var offHourMsgs = 0;
+    recentLogs.forEach(function(l) {
+      var h = parseInt((l.timestamp || '').substring(11, 13));
+      var twH = (h + 1) % 24;
+      if (twH >= 9 && twH < 18) bizHourMsgs++;
+      else offHourMsgs++;
+    });
+
+    // 5. AI full resolution rate
+    var aiResolved = recentLogs.filter(function(l) { return !l.escalated && l.type === 'ai_answer'; }).length;
+    var aiTotal = recentLogs.filter(function(l) { return l.type === 'ai_answer'; }).length;
+    var aiResolveRate = aiTotal > 0 ? Math.round((aiResolved / aiTotal) * 100) : 0;
+
+    // 6. Per-manager response time
+    var mgrRT = {};
+    chatKeys.forEach(function(cid) {
+      var chat = stats.chats[cid];
+      if (chat.firstUserMsg && chat.firstMgrReply && chat.managerId && chat.firstUserMsg >= cutoffMs) {
+        var mid = chat.managerId;
+        if (!mgrRT[mid]) mgrRT[mid] = { times: [], under30: 0 };
+        var rt = chat.firstMgrReply - chat.firstUserMsg;
+        if (rt > 0 && rt < 86400000) {
+          mgrRT[mid].times.push(rt);
+          if (rt <= 1800000) mgrRT[mid].under30++;
+        }
+      }
+    });
+
+    var mgrRTSummary = [];
+    Object.keys(mgrRT).forEach(function(mid) {
+      var m = mgrRT[mid];
+      var sum = 0; m.times.forEach(function(t) { sum += t; });
+      mgrRTSummary.push({
+        managerId: mid,
+        avgMin: Math.round(sum / m.times.length / 60000),
+        within30Rate: Math.round((m.under30 / m.times.length) * 100),
+        samples: m.times.length
+      });
+    });
+
+    res.json({
+      success: true,
+      period: days + ' days',
+      responseTime: {
+        avgMinutes: avgRT,
+        within30MinRate: within30Rate,
+        distribution: buckets,
+        totalSamples: totalRT
+      },
+      noReplyClose: {
+        rate: noReplyRate,
+        count: noReplyChats,
+        total: totalMgrChats
+      },
+      repeatInquiry: {
+        rate: repeatRate,
+        repeatUsers: repeatUsers,
+        totalUsers: totalUsers
+      },
+      businessHours: {
+        bizHour: bizHourMsgs,
+        offHour: offHourMsgs,
+        offHourRate: (bizHourMsgs + offHourMsgs) > 0 ? Math.round((offHourMsgs / (bizHourMsgs + offHourMsgs)) * 100) : 0
+      },
+      aiResolution: {
+        rate: aiResolveRate,
+        resolved: aiResolved,
+        total: aiTotal
+      },
+      managerResponseTime: mgrRTSummary
+    });
+  } catch(e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 module.exports = router;
