@@ -7,6 +7,7 @@ var veaslyApi = require("../lib/veasly-api");
 var lang = require('../lib/language');
 var scheduler = require('../lib/scheduler');
 var mgrStats = require('../lib/manager-stats');
+var aiReview = require('../lib/ai-review');
 var aiLog = require('../lib/ai-log');
 var errorAlert = require('../lib/error-alert');
 var analytics = require('../lib/analytics');
@@ -191,6 +192,8 @@ router.post('/channeltalk', async function(req, res) {
         var chatId0 = closedChat.id;
         var surveyLang = chatLanguage[chatId0] || 'zh-TW';
         var surveyMsg;
+        var stats_managerId = null;
+        try { var _ms = require("../lib/manager-stats"); var _st = JSON.parse(require("fs").readFileSync(require("path").join(__dirname, "..", "data", "manager-stats.json"), "utf8")); if (_st.chats && _st.chats[chatId0]) stats_managerId = _st.chats[chatId0].managerId; } catch(e) {}
         if (managerActive[chatId0]) {
           var csSurveys = {
             'zh-TW': '💬 感謝您的諮詢！請為這次的客服體驗評分：\n\n⭐⭐⭐⭐⭐ 非常滿意 → 輸入 5\n⭐⭐⭐⭐ 滿意 → 輸入 4\n⭐⭐⭐ 普通 → 輸入 3\n⭐⭐ 不太滿意 → 輸入 2\n⭐ 不滿意 → 輸入 1\n\n您的回饋是我們進步的動力！',
@@ -216,6 +219,24 @@ router.post('/channeltalk', async function(req, res) {
             await channeltalk.sendMessage(chatId0, { blocks: [{ type: 'text', value: surveyMsg }] });
           } catch(e) {}
         }, 3000);
+
+        // AI quality review for manager conversations
+        if (closedChat && stats_managerId) {
+          (async function(cid, mid) {
+            try {
+              var msgData = await channeltalk.getChatMessages(cid, 50);
+              var msgs = (msgData.messages || msgData || []);
+              if (msgs && msgs.length > 2) {
+                var formatted = msgs.map(function(m) {
+                  return { role: m.personType === "manager" ? "manager" : "customer", text: m.plainText || m.message || "" };
+                }).filter(function(m) { return m.text; });
+                if (formatted.length > 2) {
+                  await aiReview.evaluateConversation(cid, mid, formatted);
+                }
+              }
+            } catch(revErr) { console.error("[AIReview] Trigger error:", revErr.message); }
+          })(chatId0, stats_managerId);
+        }
         delete managerActive[chatId0];
         delete chatContext[chatId0];
       }
