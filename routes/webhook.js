@@ -94,6 +94,25 @@ function isMergeShippingRequest(text) {
   return false;
 }
 
+
+function isActionRequest(text) {
+  var patterns = [
+    { type: "cancel_reason", keywords: ["為什麼被取消", "為何被取消", "取消的原因", "取消原因", "為什麼取消", "왜 취소", "취소 이유", "why cancel"] },
+    { type: "shipping_delay", keywords: ["等很久", "等太久", "還沒到", "還沒收到", "一直沒收到", "遲遲沒有", "什麼時候出貨", "什麼時候寄", "何時出貨", "何時寄出", "배송 지연", "아직 안 왔", "when will ship"] },
+    { type: "email_change", keywords: ["信箱填錯", "email修改", "修改信箱", "修改email", "更改信箱", "更改email", "이메일 변경", "이메일 수정", "change email"] },
+    { type: "product_search", keywords: ["想找這款", "幫我找", "想找這個", "有沒有賣", "有賣嗎", "能不能幫我找", "상품 찾아", "이거 있어", "find this product"] },
+    { type: "price_inquiry", keywords: ["報價", "詢問價格", "多少錢", "가격 문의", "얼마"] },
+    { type: "order_modify", keywords: ["修改訂單", "更改訂單", "修改地址", "更改地址", "주문 수정", "주소 변경", "change address", "modify order"] }
+  ];
+  var lower = (text || "").toLowerCase();
+  for (var i = 0; i < patterns.length; i++) {
+    for (var j = 0; j < patterns[i].keywords.length; j++) {
+      if (lower.indexOf(patterns[i].keywords[j].toLowerCase()) > -1) return patterns[i].type;
+    }
+  }
+  return null;
+}
+
 function isGreeting(text) {
   var lower = text.toLowerCase().trim();
   var exactGreetings = ['你好', '您好', '哈囉', 'hi', 'hello', '안녕', '안녕하세요', 'hey', 'こんにちは', '嗨', 'halo', '早安', '午安', '晚安'];
@@ -454,6 +473,54 @@ router.post('/channeltalk', async function(req, res) {
       await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: mergeMsg[detectedLang] || mergeMsg["zh-TW"] }] });
       await connectManager(chatId, detectedLang);
       aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "escalation", userMessage: userText.substring(0, 200), aiResponse: "합배송 요청 → 즉시 에스컬레이션", escalated: true });
+      return res.status(200).send("OK");
+    }
+
+    // Action request → AI guide message + escalation
+    var actionType = isActionRequest(userText);
+    if (actionType) {
+      var actionMsgs = {
+        "cancel_reason": {
+          "zh-TW": "關於訂單取消的原因，這部分需要客服人員幫您查詢確認喔！正在為您轉接 🙋‍♀️",
+          "ko": "주문 취소 사유는 상담사가 확인해드릴게요! 연결 중입니다 🙋‍♀️",
+          "en": "Let me connect you with our team to check the cancellation reason! 🙋‍♀️",
+          "ja": "キャンセル理由の確認はスタッフが対応いたします！接続中です 🙋‍♀️"
+        },
+        "shipping_delay": {
+          "zh-TW": "很抱歉讓您久等了！關於出貨進度，讓客服人員幫您確認最新狀態喔 🙋‍♀️",
+          "ko": "오래 기다리셨죠! 출고 진행 상황을 상담사가 확인해드릴게요 🙋‍♀️",
+          "en": "Sorry for the wait! Let me connect you with our team to check the shipping status 🙋‍♀️",
+          "ja": "お待たせして申し訳ございません！配送状況をスタッフが確認いたします 🙋‍♀️"
+        },
+        "email_change": {
+          "zh-TW": "修改信箱需要客服人員為您處理喔！正在為您轉接 🙋‍♀️",
+          "ko": "이메일 변경은 상담사가 처리해드릴게요! 연결 중입니다 🙋‍♀️",
+          "en": "Email changes need to be handled by our support team! Connecting you now 🙋‍♀️",
+          "ja": "メールアドレスの変更はスタッフが対応いたします！接続中です 🙋‍♀️"
+        },
+        "product_search": {
+          "zh-TW": "幫您找商品這件事，讓客服人員來協助您喔！正在為您轉接 🙋‍♀️",
+          "ko": "상품 검색은 상담사가 도와드릴게요! 연결 중입니다 🙋‍♀️",
+          "en": "Let me connect you with our team to help find the product! 🙋‍♀️",
+          "ja": "商品探しはスタッフがお手伝いします！接続中です 🙋‍♀️"
+        },
+        "price_inquiry": {
+          "zh-TW": "商品報價需要客服人員幫您確認喔！正在為您轉接 🙋‍♀️",
+          "ko": "가격 문의는 상담사가 확인해드릴게요! 연결 중입니다 🙋‍♀️",
+          "en": "Pricing inquiries need our support team! Connecting you now 🙋‍♀️",
+          "ja": "お見積りはスタッフが対応いたします！接続中です 🙋‍♀️"
+        },
+        "order_modify": {
+          "zh-TW": "修改訂單資訊需要客服人員為您處理喔！正在為您轉接 🙋‍♀️",
+          "ko": "주문 정보 수정은 상담사가 처리해드릴게요! 연결 중입니다 🙋‍♀️",
+          "en": "Order modifications need our support team! Connecting you now 🙋‍♀️",
+          "ja": "注文内容の変更はスタッフが対応いたします！接続中です 🙋‍♀️"
+        }
+      };
+      var actionMsg = (actionMsgs[actionType] && actionMsgs[actionType][detectedLang]) || (actionMsgs[actionType] && actionMsgs[actionType]["zh-TW"]) || "正在為您轉接客服人員 🙋‍♀️";
+      await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: actionMsg }] });
+      await connectManager(chatId, detectedLang);
+      aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "escalation", userMessage: userText.substring(0, 200), aiResponse: "행동요청(" + actionType + ") → 안내 후 에스컬레이션", escalated: true });
       return res.status(200).send("OK");
     }
 
