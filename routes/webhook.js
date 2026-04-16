@@ -951,12 +951,12 @@ router.post('/channeltalk', async function(req, res) {
         lang: detectedLang,
         type: "ai_answer",
 
-      recordFCRResolved(memberId || personId || "", chatId, "ai_answer");
         userMessage: userText.substring(0, 200),
         aiResponse: aiAnswer.substring(0, 500),
         escalated: needEscalate,
         category: analytics.classifyMessage(userText)
       });
+      recordFCRResolved(memberId || personId || "", chatId, "ai_answer");
 
       if (needEscalate) {
         try {
