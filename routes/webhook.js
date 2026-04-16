@@ -96,11 +96,12 @@ function isGreeting(text) {
 
 function isThankYou(text) {
   var lower = text.toLowerCase().trim();
-  var thanks = ['謝謝', '感謝', '谢谢', '感谢', '太好了', '好的謝謝', '好的感謝', '知道了感謝', '非常感謝', '太感謝了', '好的', '了解', '知道了', '明白', '收到', 'ok', 'thanks', 'thank you', 'thx', 'ありがとう', '감사합니다', '감사', '고마워'];
+  if (lower.length > 20) return false; // Long messages are not simple thanks
+  var thanks = ['謝謝', '感謝', '谢谢', '感谢', '太好了', '好的謝謝', '好的感謝', '知道了感謝', '非常感謝', '太感謝了', 'thanks', 'thank you', 'thx', 'ありがとう', '감사합니다', '감사', '고마워'];
   for (var i = 0; i < thanks.length; i++) {
     if (lower === thanks[i] || lower === thanks[i] + '!' || lower === thanks[i] + '~' || lower === thanks[i] + '！' || lower === thanks[i] + '～') return true;
   }
-  if (/^(謝|感謝|谢|thanks|thx|감사|ありがとう)/i.test(lower)) return true;
+  // Regex removed - exact match only to prevent false positives
   return false;
 }
 
@@ -380,6 +381,25 @@ router.post('/channeltalk', async function(req, res) {
     }
 
     // Escalation request - multi-step process
+    // Negative sentiment auto-escalation
+    var negativeKeywords = ['不滿', '不好', '生氣', '太差', '太慢', '騙', '詐騙', '投訴', '消保', '客訴', '退款', '退錢', '報警', '律師', '法律', '消費者保護', '不合理', '離譜', '誇張', '差勁', '爛', '沒用', '廢物', '垃圾', '화나', '열받', '짜증', '사기', '소보원', '환불', '신고', 'scam', 'fraud', 'refund', 'lawsuit', 'complaint', 'unacceptable', 'ridiculous', 'terrible', 'worst'];
+    var isNegative = false;
+    for (var ni = 0; ni < negativeKeywords.length; ni++) {
+      if (userText.indexOf(negativeKeywords[ni]) !== -1) { isNegative = true; break; }
+    }
+    if (isNegative && !managerActive[chatId]) {
+      console.log('[Sentiment] Negative detected - auto escalating:', chatId);
+      try {
+        var negMgrs = await getCachedManagers();
+        var negArr = (negMgrs && negMgrs.managers) || [];
+        for (var nj = 0; nj < negArr.length; nj++) {
+          if (negArr[nj].operator) { await channeltalk.inviteManager(chatId, negArr[nj].id); managerActive[chatId] = Date.now(); break; }
+        }
+        var allNegIds = negArr.map(function(m) { return m.id; });
+        await channeltalk.addFollowers(chatId, allNegIds).catch(function() {});
+      } catch(ne) {}
+    }
+
     if (isEscalationRequest(userText) || trimmed === '0') {
       var step = getEscalationStep(chatId);
 
@@ -694,7 +714,10 @@ router.post('/channeltalk', async function(req, res) {
         "ja": "\n\n💡 他にご質問がございましたら、そのままご入力ください！"
       };
       aiAnswer += footers[detectedLang] || footers["zh-TW"];
-      await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: aiAnswer }] });
+      // Prevent duplicate - only send if not already responded
+      if (!res.headersSent) {
+        await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: aiAnswer }] });
+      }
 
       // Log AI conversation
       var aiEscalated = false;
