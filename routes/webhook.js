@@ -479,6 +479,7 @@ router.post('/channeltalk', async function(req, res) {
           }
         } catch(e) {}
         aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || '', userName: veaslyUser ? veaslyUser.name : '', lang: detectedLang, type: 'escalation', userMessage: userText, aiResponse: '에스컬레이션 - 매니저 연결', escalated: true });
+        try { var scheduler2 = require('../lib/scheduler'); scheduler2.savePendingEscalation(chatId, memberId || personId || '', userText); } catch(pe) {}
         return res.status(200).send('OK');
       }
     }
@@ -612,6 +613,9 @@ router.post('/channeltalk', async function(req, res) {
           if (tip) orderReply += "\n\n📋 " + tip;
           orderReply += "\n\n💡 " + (detectedLang === "ko" ? "더 궁금한 점이 있으면 입력해주세요! 「상담사」 입력 시 담당자를 연결해드려요." : detectedLang === "en" ? "Any questions? Type or enter 'agent' for live support!" : detectedLang === "ja" ? "ご質問があればどうぞ！「agent」と入力で担当者に接続します！" : "還有問題嗎？直接輸入問題，或輸入「客服」轉接真人客服喔！");
           await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: orderReply }] });
+          if (!chatContext[chatId]) chatContext[chatId] = {};
+          chatContext[chatId].lastOrder = orderReply;
+          chatContext[chatId].lastOrderTime = Date.now();
           console.log("[Order] Replied with", orderItems.length, "items for", orderNum);
           aiLog.saveConversation({
             timestamp: new Date().toISOString(),
@@ -693,6 +697,10 @@ router.post('/channeltalk', async function(req, res) {
           // Keep last 5 exchanges
           if (chatHistory.length > 20) chatHistory = chatHistory.slice(-20);
         } catch(histErr) { console.error("[Context] History fetch error:", histErr.message); }
+        // Inject recent order context if available (30min TTL)
+        if (chatContext[chatId] && chatContext[chatId].lastOrder && (Date.now() - chatContext[chatId].lastOrderTime) < 30 * 60 * 1000) {
+          chatHistory.unshift({ role: "bot", text: "[最近查詢的訂單資訊] " + chatContext[chatId].lastOrder.substring(0, 500) });
+        }
         var aiResult = await aiEngine.generateAnswer(memberContext ? memberContext + " " + userText : userText, detectedLang, chatId, chatHistory);
         if (aiResult && typeof aiResult === "object") {
           aiAnswer = aiResult.answer;
