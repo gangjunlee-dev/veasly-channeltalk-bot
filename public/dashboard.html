@@ -3,30 +3,40 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>VEASLY CS Dashboard</title>
+<title>VEASLY CS Dashboard v2</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; }
-.header { background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); padding: 24px 32px; border-bottom: 1px solid #334155; }
+.header { background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); padding: 24px 32px; border-bottom: 1px solid #334155; display: flex; justify-content: space-between; align-items: center; }
 .header h1 { font-size: 24px; color: #f8fafc; }
 .header p { color: #94a3b8; margin-top: 4px; font-size: 14px; }
+.header .version { color: #3b82f6; font-size: 12px; background: #1e3a5f; padding: 4px 10px; border-radius: 12px; }
+.tabs { display: flex; padding: 0 32px; border-bottom: 1px solid #334155; background: #1e293b; }
+.tab { padding: 12px 20px; font-size: 14px; color: #94a3b8; cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s; }
+.tab:hover { color: #e2e8f0; }
+.tab.active { color: #3b82f6; border-bottom-color: #3b82f6; font-weight: 600; }
 .controls { padding: 16px 32px; display: flex; gap: 12px; align-items: center; }
 .controls select, .controls button { background: #1e293b; color: #e2e8f0; border: 1px solid #334155; padding: 8px 16px; border-radius: 8px; cursor: pointer; font-size: 14px; }
 .controls button { background: #3b82f6; border: none; font-weight: 600; }
 .controls button:hover { background: #2563eb; }
-.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; padding: 0 32px 16px; }
-.card { background: #1e293b; border-radius: 12px; padding: 20px; border: 1px solid #334155; }
+.controls .auto-refresh { font-size: 12px; color: #64748b; margin-left: auto; display: flex; align-items: center; gap: 6px; }
+.controls .auto-refresh input { accent-color: #3b82f6; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; padding: 0 32px 16px; }
+.card { background: #1e293b; border-radius: 12px; padding: 20px; border: 1px solid #334155; transition: transform 0.2s; }
+.card:hover { transform: translateY(-2px); }
 .card .label { font-size: 12px; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; }
-.card .value { font-size: 32px; font-weight: 700; margin-top: 8px; }
+.card .value { font-size: 28px; font-weight: 700; margin-top: 8px; }
 .card .sub { font-size: 13px; color: #64748b; margin-top: 4px; }
 .blue { color: #3b82f6; }
 .green { color: #22c55e; }
 .yellow { color: #eab308; }
 .red { color: #ef4444; }
 .purple { color: #a855f7; }
+.cyan { color: #06b6d4; }
 .charts { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 0 32px 16px; }
 .chart-card { background: #1e293b; border-radius: 12px; padding: 20px; border: 1px solid #334155; }
 .chart-card h3 { font-size: 16px; margin-bottom: 16px; color: #f8fafc; }
+.chart-card.full { grid-column: span 2; }
 .bar-chart .bar-row { display: flex; align-items: center; margin-bottom: 8px; }
 .bar-chart .bar-label { width: 120px; font-size: 13px; color: #94a3b8; flex-shrink: 0; }
 .bar-chart .bar-track { flex: 1; height: 24px; background: #0f172a; border-radius: 4px; overflow: hidden; position: relative; }
@@ -40,235 +50,487 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .hour-chart .hour-label { width: 50px; font-size: 11px; color: #64748b; text-align: right; padding-right: 8px; }
 .hour-chart .hour-bar { height: 16px; background: #3b82f6; border-radius: 2px; transition: width 0.6s ease; min-width: 2px; }
 .hour-chart .hour-count { font-size: 11px; color: #94a3b8; margin-left: 6px; }
-.insights { padding: 0 32px 32px; }
+.insights { padding: 0 32px 16px; }
 .insights-card { background: #1e293b; border-radius: 12px; padding: 20px; border: 1px solid #334155; }
 .insights-card h3 { font-size: 16px; margin-bottom: 16px; color: #f8fafc; }
 .insight-item { padding: 12px 0; border-bottom: 1px solid #0f172a; font-size: 14px; line-height: 1.6; }
 .insight-item:last-child { border-bottom: none; }
-.insight-icon { margin-right: 8px; }
+table { width: 100%; border-collapse: collapse; }
+th { text-align: left; padding: 10px 8px; color: #94a3b8; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid #334155; }
+td { padding: 10px 8px; border-bottom: 1px solid #0f172a; font-size: 13px; }
+.score-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; }
+.score-high { background: rgba(34,197,94,0.15); color: #22c55e; }
+.score-mid { background: rgba(234,179,8,0.15); color: #eab308; }
+.score-low { background: rgba(239,68,68,0.15); color: #ef4444; }
+.radar-scores { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin: 12px 0; }
+.radar-item { text-align: center; padding: 8px 4px; background: #0f172a; border-radius: 8px; }
+.radar-item .radar-val { font-size: 20px; font-weight: 700; }
+.radar-item .radar-lbl { font-size: 10px; color: #94a3b8; margin-top: 2px; }
+.section-title { padding: 16px 32px 8px; font-size: 18px; font-weight: 600; color: #f8fafc; }
+.tab-content { display: none; }
+.tab-content.active { display: block; }
 .loading { text-align: center; padding: 60px; color: #64748b; font-size: 18px; }
-@media (max-width: 768px) { .charts { grid-template-columns: 1fr; } .grid { grid-template-columns: repeat(2, 1fr); } }
+.pill { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+@media (max-width: 768px) { .charts { grid-template-columns: 1fr; } .grid { grid-template-columns: repeat(2, 1fr); } .chart-card.full { grid-column: span 1; } .radar-scores { grid-template-columns: repeat(3, 1fr); } }
 </style>
 </head>
 <body>
+
 <div class="header">
-  <h1>VEASLY CS AI Dashboard</h1>
-  <p>CS 문의 분석 & AI 성과 대시보드</p>
+  <div>
+    <h1>VEASLY CS AI Dashboard</h1>
+    <p>CS 문의 분석 & AI 성과 & 매니저 품질 평가</p>
+  </div>
+  <span class="version">v2.0</span>
 </div>
+
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('overview')">Overview</div>
+  <div class="tab" onclick="switchTab('managers')">매니저 성과</div>
+  <div class="tab" onclick="switchTab('ai')">AI 모니터링</div>
+  <div class="tab" onclick="switchTab('csat')">CSAT</div>
+</div>
+
 <div class="controls">
   <select id="days">
+    <option value="1">오늘</option>
     <option value="3">최근 3일</option>
     <option value="7" selected>최근 7일</option>
     <option value="14">최근 14일</option>
     <option value="30">최근 30일</option>
   </select>
-  <button onclick="loadData()">조회</button>
-  <span id="lastUpdate" style="font-size:12px;color:#64748b;margin-left:auto;"></span>
+  <button onclick="loadAllData()">조회</button>
+  <div class="auto-refresh">
+    <input type="checkbox" id="autoRefresh" onchange="toggleAutoRefresh()">
+    <label for="autoRefresh">5분 자동 갱신</label>
+    <span id="lastUpdate" style="margin-left:8px;"></span>
+  </div>
 </div>
-<div id="content"><div class="loading">데이터 로딩 중...</div></div>
+
+<!-- TAB: Overview -->
+<div id="tab-overview" class="tab-content active">
+  <div id="overviewContent"><div class="loading">데이터 로딩 중...</div></div>
+</div>
+
+<!-- TAB: Managers -->
+<div id="tab-managers" class="tab-content">
+  <div id="managersContent"><div class="loading">매니저 데이터 로딩 중...</div></div>
+</div>
+
+<!-- TAB: AI Monitoring -->
+<div id="tab-ai" class="tab-content">
+  <div id="aiContent"><div class="loading">AI 데이터 로딩 중...</div></div>
+</div>
+
+<!-- TAB: CSAT -->
+<div id="tab-csat" class="tab-content">
+  <div id="csatContent"><div class="loading">CSAT 데이터 로딩 중...</div></div>
+</div>
+
+<!-- Review Modal -->
+<div id="reviewModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);z-index:9999;overflow-y:auto;" onclick="if(event.target===this)closeReview()">
+  <div style="max-width:700px;margin:40px auto;background:#1e293b;border-radius:16px;padding:24px;border:1px solid #334155;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+      <h3 style="color:#e2e8f0;margin:0;">AI 답변 상세 / 평가</h3>
+      <span style="cursor:pointer;color:#94a3b8;font-size:24px;" onclick="closeReview()">&times;</span>
+    </div>
+    <div id="reviewContent"></div>
+  </div>
+</div>
+
 <script>
 var API_BASE = window.location.origin;
-function loadData() {
-  var days = document.getElementById('days').value;
-  document.getElementById('content').innerHTML = '<div class="loading">분석 중... (약 10-30초 소요)</div>';
-  fetch(API_BASE + '/api/analytics/report?days=' + days)
-    .then(function(r) { return r.json(); })
-    .then(function(data) {
-      if (!data.success) throw new Error(data.error);
-      render(data.raw);
-      document.getElementById('lastUpdate').textContent = '업데이트: ' + new Date().toLocaleString('ko-KR');
-    })
-    .catch(function(e) {
-      document.getElementById('content').innerHTML = '<div class="loading" style="color:#ef4444;">오류: ' + e.message + '</div>';
-    });
+var refreshTimer = null;
+var cachedData = {};
+
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach(function(t) { t.classList.remove('active'); });
+  document.querySelectorAll('.tab-content').forEach(function(t) { t.classList.remove('active'); });
+  event.target.classList.add('active');
+  document.getElementById('tab-' + name).classList.add('active');
+  if (name === 'managers' && !cachedData.mgr) loadManagerData();
+  if (name === 'ai' && !cachedData.ai) loadAIData();
+  if (name === 'csat' && !cachedData.csat) loadCSATData();
 }
-function render(r) {
-  var totalCategorized = 0;
-  var catKeys = Object.keys(r.categories);
-  for (var i = 0; i < catKeys.length; i++) {
-    if (catKeys[i] !== 'other' && catKeys[i] !== 'escalation') totalCategorized += r.categories[catKeys[i]].count;
+
+function toggleAutoRefresh() {
+  if (document.getElementById('autoRefresh').checked) {
+    refreshTimer = setInterval(loadAllData, 300000);
+  } else {
+    clearInterval(refreshTimer);
   }
-  var botRate = r.totalMessages > 0 ? Math.round((r.botMessages / r.totalMessages) * 100) : 0;
-  var aiResolveRate = r.userMessages > 0 ? Math.round(((r.botMessages) / (r.botMessages + r.managerMessages)) * 100) : 0;
-  var escalationCount = r.categories.escalation ? r.categories.escalation.count : 0;
-  var escalationRate = r.userMessages > 0 ? Math.round((escalationCount / r.userMessages) * 100) : 0;
+}
 
-  var html = '<div class="grid">';
-  html += card('총 상담', r.totalChats, '건', 'blue', r.period);
-  html += card('고객 메시지', r.userMessages, '건', 'blue', '총 ' + r.totalMessages + '건 중');
-  html += card('AI 봇 응답', r.botMessages, '건', 'green', '응답 비율 ' + botRate + '%');
-  html += card('매니저 응답', r.managerMessages, '건', 'yellow', 'AI 해결률 ' + aiResolveRate + '%');
-  html += card('미해결 상담', r.unresolvedChats, '건', r.unresolvedChats > 10 ? 'red' : 'green', r.unresolvedChats > 10 ? '우선 처리 필요' : '양호');
-  if (r.channelStats) {
-    var cs = r.channelStats;
-    var total = cs.line + cs.web + cs.other;
-    var linePct = total > 0 ? (cs.line / total * 100).toFixed(0) : 0;
-    var webPct = total > 0 ? (cs.web / total * 100).toFixed(0) : 0;
-    html += card('LINE 유입', cs.line, '건 (' + linePct + '%)', cs.line > cs.web ? 'green' : 'blue', 'LINE 메신저');
-    html += card('웹사이트 유입', cs.web, '건 (' + webPct + '%)', 'blue', 'veasly.com');
+function loadAllData() {
+  cachedData = {};
+  loadOverview();
+  var activeTab = document.querySelector('.tab.active');
+  if (activeTab) {
+    var tabName = activeTab.textContent.trim();
+    if (tabName.indexOf('매니저') > -1) loadManagerData();
+    if (tabName.indexOf('AI') > -1) loadAIData();
+    if (tabName.indexOf('CSAT') > -1) loadCSATData();
   }
-  html += card('에스컬레이션', escalationCount, '건', escalationRate > 20 ? 'red' : 'yellow', '비율 ' + escalationRate + '%');
-  html += '</div>';
+  document.getElementById('lastUpdate').textContent = new Date().toLocaleString('ko-KR');
+}
 
-  html += '<div class="charts">';
-  html += categoryChart(r.categories);
-  html += keywordChart(r.topKeywords);
-  html += hourChart(r.hourlyDistribution);
-  html += messageBreakdown(r);
-  html += '</div>';
-
-  html += '<div class="insights">' + insightsCard(r) + '</div>';
-
-  // Load additional dashboard data
+// ===== OVERVIEW TAB =====
+function loadOverview() {
+  var days = document.getElementById('days').value;
+  document.getElementById('overviewContent').innerHTML = '<div class="loading">분석 중...</div>';
+  
   Promise.all([
-    fetch('/api/analytics/csat?days=' + days).then(function(r) { return r.json(); }).catch(function() { return null; }),
-    fetch('/api/analytics/shipping?days=' + days).then(function(r) { return r.json(); }).catch(function() { return null; }),
-    fetch('/api/analytics/faq-log').then(function(r) { return r.json(); }).catch(function() { return null; }),
-    fetch('/api/analytics/auto-close').then(function(r) { return r.json(); }).catch(function() { return null; }),
-    fetch('/api/analytics/manager-performance?days=' + days).then(function(r) { return r.json(); }).catch(function() { return null; }),
-    fetch('/api/analytics/ai-conversations?limit=30').then(function(r) { return r.json(); }).catch(function() { return null; })
+    fetch(API_BASE + '/api/analytics/report?days=' + days).then(function(r) { return r.json(); }),
+    fetch('/api/analytics/auto-close').then(function(r) { return r.json(); }).catch(function() { return null; })
   ]).then(function(results) {
-    var csat = results[0];
-    var shipping = results[1];
-    var faqLog = results[2];
-    var autoClose = results[3];
-    var mgrPerf = results[4];
-    var aiConv = results[5];
+    var data = results[0];
+    var autoClose = results[1];
+    if (!data.success) throw new Error(data.error);
+    var r = data.raw;
+    cachedData.overview = r;
 
-    var extra = '<div class="grid" style="margin-top:8px;padding:0 32px 16px;">';
+    var botRate = r.totalMessages > 0 ? Math.round((r.botMessages / r.totalMessages) * 100) : 0;
+    var aiResolveRate = (r.botMessages + r.managerMessages) > 0 ? Math.round((r.botMessages / (r.botMessages + r.managerMessages)) * 100) : 0;
+    var escalationCount = r.categories.escalation ? r.categories.escalation.count : 0;
+    var escalationRate = r.userMessages > 0 ? Math.round((escalationCount / r.userMessages) * 100) : 0;
 
-    // CSAT card
-    if (csat && csat.success) {
-      var starColor = csat.averageScore >= 4 ? 'green' : csat.averageScore >= 3 ? 'yellow' : 'red';
-      extra += card('CSAT 평균점수', csat.averageScore || '-', '/ 5', starColor, csat.totalResponses + '건 응답');
+    var html = '<div class="grid">';
+    html += card('총 상담', r.totalChats, '건', 'blue', r.period);
+    html += card('AI 봇 응답', r.botMessages, '건', 'green', '응답률 ' + botRate + '%');
+    html += card('매니저 응답', r.managerMessages, '건', 'yellow', 'AI 해결률 ' + aiResolveRate + '%');
+    html += card('에스컬레이션', escalationCount, '건', escalationRate > 20 ? 'red' : 'yellow', '비율 ' + escalationRate + '%');
+    html += card('미해결 상담', r.unresolvedChats, '건', r.unresolvedChats > 10 ? 'red' : 'green', r.unresolvedChats > 10 ? '우선 처리 필요' : '양호');
+    if (r.channelStats) {
+      var cs = r.channelStats;
+      var total = cs.line + cs.web + cs.other;
+      html += card('LINE', cs.line, '건 (' + (total > 0 ? (cs.line/total*100).toFixed(0) : 0) + '%)', 'green', 'LINE 메신저');
+      html += card('웹사이트', cs.web, '건 (' + (total > 0 ? (cs.web/total*100).toFixed(0) : 0) + '%)', 'blue', 'veasly.com');
     }
-
-    // Shipping tracker card
-    if (shipping && shipping.success) {
-      extra += card('배송 추적', shipping.trackedItems, '개 아이템', 'blue', shipping.notifications.sent + '건 알림 발송');
-    }
-
-    // FAQ update card
-    if (faqLog && faqLog.success && faqLog.lastUpdate) {
-      var lu = faqLog.lastUpdate;
-      var faqDate = lu.timestamp ? lu.timestamp.substring(0, 10) : '-';
-      extra += card('FAQ 자동생성', lu.faqsGenerated || 0, '개', 'purple', '최근: ' + faqDate);
-    }
-
-    // Auto-close card
     if (autoClose && autoClose.success) {
-      extra += card('CSAT 대기중', autoClose.csatPending, '건', autoClose.csatPending > 10 ? 'yellow' : 'green', '24h 후 자동종료');
+      html += card('CSAT 대기', autoClose.csatPending, '건', autoClose.csatPending > 10 ? 'yellow' : 'green', '24h 후 자동종료');
     }
+    html += '</div>';
 
-    extra += '</div>';
+    html += '<div class="charts">';
+    html += categoryChart(r.categories);
+    html += keywordChart(r.topKeywords);
+    html += hourChart(r.hourlyDistribution);
+    html += messageBreakdown(r);
+    html += '</div>';
 
-    // CSAT distribution chart
-    if (csat && csat.success && csat.totalResponses > 0) {
-      extra += '<div class="charts" style="padding:0 32px 16px;">';
-      extra += '<div class="chart-card"><h3>CSAT 만족도 분포</h3><div class="bar-chart">';
-      var csatLabels = { 5: '⭐⭐⭐⭐⭐ 매우만족', 4: '⭐⭐⭐⭐ 만족', 3: '⭐⭐⭐ 보통', 2: '⭐⭐ 불만족', 1: '⭐ 매우불만족' };
-      var csatColors = { 5: '#22c55e', 4: '#84cc16', 3: '#eab308', 2: '#f97316', 1: '#ef4444' };
-      var csatMax = Math.max(csat.distribution[1]||0, csat.distribution[2]||0, csat.distribution[3]||0, csat.distribution[4]||0, csat.distribution[5]||0, 1);
-      for (var s = 5; s >= 1; s--) {
-        var cnt = csat.distribution[s] || 0;
-        var pct = Math.round((cnt / csatMax) * 100);
-        extra += '<div class="bar-row"><div class="bar-label" style="width:160px;">' + csatLabels[s] + '</div><div class="bar-track"><div class="bar-fill" style="width:' + pct + '%;background:' + csatColors[s] + ';"></div><span class="bar-count">' + cnt + '</span></div></div>';
-      }
-      extra += '</div></div>';
-
-      // Shipping status distribution
-      if (shipping && shipping.success) {
-        var statusNames = { PAYMENT_COMPLETED: '결제완료', PAYMENT_WAITING: '결제대기', ORDER_PROCESSING: '주문처리중', SHIPPING_TO_BDJ: '물류센터이동', SHIPPING_TO_HOME: '국제배송중', COMPLETED: '배송완료', CANCEL_COMPLETED: '취소완료' };
-        var statusColors = { PAYMENT_COMPLETED: '#3b82f6', PAYMENT_WAITING: '#94a3b8', ORDER_PROCESSING: '#eab308', SHIPPING_TO_BDJ: '#f97316', SHIPPING_TO_HOME: '#a855f7', COMPLETED: '#22c55e', CANCEL_COMPLETED: '#ef4444' };
-        var sKeys = Object.keys(shipping.statusDistribution);
-        if (sKeys.length > 0) {
-          var sMax = 1;
-          sKeys.forEach(function(k) { if (shipping.statusDistribution[k] > sMax) sMax = shipping.statusDistribution[k]; });
-          extra += '<div class="chart-card"><h3>배송 상태 분포 (추적중)</h3><div class="bar-chart">';
-          sKeys.sort(function(a, b) { return shipping.statusDistribution[b] - shipping.statusDistribution[a]; });
-          sKeys.forEach(function(k) {
-            var cnt2 = shipping.statusDistribution[k];
-            var pct2 = Math.round((cnt2 / sMax) * 100);
-            extra += '<div class="bar-row"><div class="bar-label" style="width:140px;">' + (statusNames[k] || k) + '</div><div class="bar-track"><div class="bar-fill" style="width:' + pct2 + '%;background:' + (statusColors[k] || '#64748b') + ';"></div><span class="bar-count">' + cnt2 + '</span></div></div>';
-          });
-          extra += '</div></div>';
-        }
-      }
-      extra += '</div>';
-    }
-
-    
-    // Manager performance table
-    if (mgrPerf && mgrPerf.success && mgrPerf.managers.length > 0) {
-      extra += '<div class="charts" style="padding:0 32px 16px;">';
-      extra += '<div class="chart-card" style="grid-column: span 2;"><h3>매니저 성과 분석 (' + (typeof days === 'number' ? days : 7) + '일)</h3>';
-      extra += '<table style="width:100%;border-collapse:collapse;margin-top:12px;font-size:14px;">';
-      extra += '<tr style="border-bottom:1px solid #334155;color:#94a3b8;"><th style="text-align:left;padding:8px;">매니저 (이메일)</th><th>답변 수</th><th>담당 채팅</th><th>평균 답변길이</th><th>평균 응답시간</th><th>CS 점수</th></tr>';
-      mgrPerf.managers.forEach(function(m) {
-        var rtText = m.avgResponseTimeMin > 0 ? m.avgResponseTimeMin + '분' : '-';
-        var rtColor = m.avgResponseTimeMin > 30 ? '#ef4444' : m.avgResponseTimeMin > 10 ? '#eab308' : '#22c55e';
-        var rowBg = m.status === 'inactive' ? 'background:rgba(239,68,68,0.1);' : '';
-        extra += '<tr style="border-bottom:1px solid #1e293b;' + rowBg + '"><td style="padding:8px;color:#e2e8f0;">' + m.name + '</td><td style="text-align:center;color:#3b82f6;font-weight:600;">' + m.totalReplies + '</td><td style="text-align:center;color:#a855f7;">' + m.uniqueChats + '</td><td style="text-align:center;color:#94a3b8;">' + m.avgReplyLength + '자</td><td style="text-align:center;color:' + rtColor + ';font-weight:600;">' + rtText + '</td><td style="text-align:center;font-weight:700;color:' + (m.qualityScore && m.qualityScore.total >= 65 ? '#22c55e' : m.qualityScore && m.qualityScore.total >= 50 ? '#eab308' : '#ef4444') + ';">' + (m.qualityScore ? m.qualityScore.total + '/100 (' + m.qualityScore.grade + ')' : '-') + '</td></tr>';
-      });
-      extra += '</table>';
-      extra += '<div style="margin-top:12px;font-size:12px;color:#64748b;">총 ' + mgrPerf.summary.totalManagers + '명 매니저 | ' + mgrPerf.summary.totalReplies + '건 답변 | ' + mgrPerf.summary.totalChats + '건 채팅</div>';
-      extra += '</div></div>';
-    }
-
-    
-    // AI Conversation Log
-    if (aiConv && aiConv.success && aiConv.conversations.length > 0) {
-      extra += '<div style="padding:0 32px 16px;">';
-      extra += '<div class="chart-card"><h3>AI 대화 모니터링 (최근 30건)</h3>';
-      
-      // Stats summary
-      if (aiConv.stats) {
-        var st = aiConv.stats;
-        extra += '<div style="display:flex;gap:16px;margin-bottom:16px;flex-wrap:wrap;">';
-        extra += '<div style="background:#0f172a;padding:8px 16px;border-radius:8px;"><span style="color:#94a3b8;font-size:12px;">오늘</span> <strong style="color:#3b82f6;">' + (st.today || 0) + '</strong></div>';
-        extra += '<div style="background:#0f172a;padding:8px 16px;border-radius:8px;"><span style="color:#94a3b8;font-size:12px;">전체</span> <strong style="color:#22c55e;">' + (st.total || 0) + '</strong></div>';
-        extra += '<div style="background:#0f172a;padding:8px 16px;border-radius:8px;"><span style="color:#94a3b8;font-size:12px;">에스컬레이션</span> <strong style="color:#ef4444;">' + (st.escalatedRate || 0) + '%</strong></div>';
-        extra += '</div>';
-      }
-
-      extra += '<div style="max-height:600px;overflow-y:auto;">';
-      extra += '<table style="width:100%;border-collapse:collapse;font-size:13px;">';
-      extra += '<tr style="border-bottom:1px solid #334155;color:#94a3b8;position:sticky;top:0;background:#1e293b;"><th style="text-align:left;padding:8px;">시간</th><th style="text-align:left;">유형</th><th style="text-align:left;">고객 질문</th><th style="text-align:left;">AI 답변</th><th>상태</th></tr>';
-      
-      aiConv.conversations.forEach(function(c) {
-        var time = c.timestamp ? c.timestamp.substring(11, 16) : '-';
-        var date = c.timestamp ? c.timestamp.substring(5, 10) : '';
-        var typeColors = { ai_answer: '#22c55e', order_lookup: '#3b82f6', greeting: '#94a3b8', unanswered: '#ef4444', escalation: '#eab308' };
-        var typeNames = { ai_answer: 'AI답변', order_lookup: '주문조회', greeting: '인사', unanswered: '미답변', escalation: '에스컬레이션' };
-        var typeColor = typeColors[c.type] || '#94a3b8';
-        var typeName = typeNames[c.type] || c.type;
-        var statusIcon = c.escalated ? '🔴' : '🟢';
-        var userMsg = (c.userMessage || '').substring(0, 60) + ((c.userMessage || '').length > 60 ? '...' : '');
-        var aiResp = (c.aiResponse || '').substring(0, 80) + ((c.aiResponse || '').length > 80 ? '...' : '');
-        
-        extra += '<tr style="border-bottom:1px solid #0f172a;cursor:pointer;" onclick="showReview(\'' + encodeURIComponent(JSON.stringify(c)) + '\')" title="클릭하여 상세보기 + 평가">';
-        extra += '<td style="padding:8px;color:#64748b;white-space:nowrap;">' + date + ' ' + time + '</td>';
-        extra += '<td style="padding:8px;"><span style="color:' + typeColor + ';font-weight:600;">' + typeName + '</span></td>';
-        extra += '<td style="padding:8px;color:#e2e8f0;">' + userMsg + '</td>';
-        extra += '<td style="padding:8px;color:#94a3b8;">' + aiResp + '</td>';
-        extra += '<td style="text-align:center;">' + statusIcon + '</td>';
-        extra += '</tr>';
-      });
-      
-      extra += '</table></div></div></div>';
-    }
-
-    document.getElementById('content').innerHTML = html + extra;
+    html += '<div class="insights">' + insightsCard(r) + '</div>';
+    document.getElementById('overviewContent').innerHTML = html;
+  }).catch(function(e) {
+    document.getElementById('overviewContent').innerHTML = '<div class="loading" style="color:#ef4444;">오류: ' + e.message + '</div>';
   });
 }
+
+// ===== MANAGER TAB =====
+function loadManagerData() {
+  var days = document.getElementById('days').value;
+  document.getElementById('managersContent').innerHTML = '<div class="loading">매니저 성과 분석 중...</div>';
+  
+  Promise.all([
+    fetch('/api/analytics/manager-performance?days=' + days).then(function(r) { return r.json(); }),
+    fetch('/api/analytics/ai-reviews').then(function(r) { return r.json(); }).catch(function() { return null; })
+  ]).then(function(results) {
+    var mgrPerf = results[0];
+    var aiReviews = results[1];
+    cachedData.mgr = true;
+
+    if (!mgrPerf || !mgrPerf.success) {
+      document.getElementById('managersContent').innerHTML = '<div class="loading" style="color:#ef4444;">매니저 데이터 로드 실패</div>';
+      return;
+    }
+
+    var html = '';
+
+    // AI Quality Review Summary Cards
+    var reviewData = {};
+    if (aiReviews && aiReviews.recent) {
+      aiReviews.recent.forEach(function(rev) {
+        if (!reviewData[rev.managerId]) reviewData[rev.managerId] = { scores: [], count: 0 };
+        reviewData[rev.managerId].scores.push(rev.scores);
+        reviewData[rev.managerId].count++;
+      });
+    }
+
+    // Manager Cards
+    html += '<div class="section-title">매니저별 성과 요약</div>';
+    mgrPerf.managers.filter(function(m) { return m.status === 'active'; }).forEach(function(m) {
+      var rd = reviewData[m.managerId];
+      html += '<div style="padding:0 32px 16px;">';
+      html += '<div class="chart-card">';
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;">';
+      html += '<div><h3 style="margin:0;">' + m.name + '</h3><span style="color:#64748b;font-size:12px;">' + (m.email || '') + '</span></div>';
+      
+      // Overall score badge
+      var totalScore = m.qualityScore ? m.qualityScore.total : 0;
+      var scoreClass = totalScore >= 65 ? 'score-high' : totalScore >= 50 ? 'score-mid' : 'score-low';
+      html += '<div style="text-align:right;"><span class="score-badge ' + scoreClass + '" style="font-size:18px;padding:4px 12px;">' + totalScore + '/100 (' + (m.qualityScore ? m.qualityScore.grade : '-') + ')</span></div>';
+      html += '</div>';
+
+      // Stats row
+      html += '<div class="grid" style="padding:16px 0 0;margin:0;">';
+      html += miniCard('답변 수', m.totalReplies, 'blue');
+      html += miniCard('담당 채팅', m.uniqueChats, 'purple');
+      html += miniCard('평균 답변길이', m.avgReplyLength + '자', 'cyan');
+      var rtColor = m.avgResponseTimeMin > 60 ? 'red' : m.avgResponseTimeMin > 30 ? 'yellow' : 'green';
+      html += miniCard('평균 응답시간', m.avgResponseTimeMin > 0 ? m.avgResponseTimeMin + '분' : '-', rtColor);
+      html += '</div>';
+
+      // AI Quality Scores (if available)
+      if (rd && rd.count > 0) {
+        var avg = { resolution: 0, attitude: 0, accuracy: 0, responsiveness: 0, professionalism: 0, total: 0 };
+        rd.scores.forEach(function(s) {
+          avg.resolution += (s.resolution || 0);
+          avg.attitude += (s.attitude || 0);
+          avg.accuracy += (s.accuracy || 0);
+          avg.responsiveness += (s.responsiveness || 0);
+          avg.professionalism += (s.professionalism || 0);
+          avg.total += (s.totalScore || 0);
+        });
+        var n = rd.count;
+        html += '<div style="margin-top:16px;padding-top:16px;border-top:1px solid #334155;">';
+        html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><span style="color:#94a3b8;font-size:13px;">AI 품질 채점 (' + n + '건 분석)</span>';
+        var aiTotal = (avg.total / n);
+        var aiClass = aiTotal >= 20 ? 'score-high' : aiTotal >= 15 ? 'score-mid' : 'score-low';
+        html += '<span class="score-badge ' + aiClass + '">' + aiTotal.toFixed(1) + '/25</span></div>';
+        html += '<div class="radar-scores">';
+        html += radarItem('문제해결', (avg.resolution/n).toFixed(1));
+        html += radarItem('응대태도', (avg.attitude/n).toFixed(1));
+        html += radarItem('정보정확', (avg.accuracy/n).toFixed(1));
+        html += radarItem('응답속도', (avg.responsiveness/n).toFixed(1));
+        html += radarItem('전문성', (avg.professionalism/n).toFixed(1));
+        html += '</div></div>';
+      } else {
+        html += '<div style="margin-top:12px;padding:12px;background:#0f172a;border-radius:8px;color:#64748b;font-size:13px;text-align:center;">AI 품질 채점 데이터 수집 중...</div>';
+      }
+
+      html += '</div></div>';
+    });
+
+    // Inactive managers
+    var inactive = mgrPerf.managers.filter(function(m) { return m.status === 'inactive'; });
+    if (inactive.length > 0) {
+      html += '<div class="section-title" style="color:#64748b;">비활성 매니저</div>';
+      html += '<div style="padding:0 32px 16px;"><div class="chart-card">';
+      html += '<table><tr><th>매니저</th><th>이메일</th><th>상태</th></tr>';
+      inactive.forEach(function(m) {
+        html += '<tr><td style="color:#64748b;">' + m.name + '</td><td style="color:#475569;">' + (m.email || '') + '</td><td><span class="pill" style="background:rgba(239,68,68,0.15);color:#ef4444;">비활성</span></td></tr>';
+      });
+      html += '</table></div></div>';
+    }
+
+    // Recent AI Reviews
+    if (aiReviews && aiReviews.recent && aiReviews.recent.length > 0) {
+      html += '<div class="section-title">최근 AI 품질 리뷰</div>';
+      html += '<div style="padding:0 32px 16px;"><div class="chart-card">';
+      html += '<div style="max-height:400px;overflow-y:auto;">';
+      html += '<table><tr><th>시간</th><th>매니저</th><th>점수</th><th>평가 요약</th></tr>';
+      aiReviews.recent.slice(0, 20).forEach(function(rev) {
+        var time = rev.timestamp ? rev.timestamp.substring(5, 16).replace('T', ' ') : '-';
+        var sc = rev.scores ? rev.scores.totalScore : 0;
+        var scClass = sc >= 20 ? 'score-high' : sc >= 15 ? 'score-mid' : 'score-low';
+        var mgr = mgrPerf.managers.find(function(m) { return m.managerId === rev.managerId; });
+        var mgrName = mgr ? mgr.name : (rev.managerId || '').substring(0, 8);
+        html += '<tr><td style="color:#64748b;white-space:nowrap;">' + time + '</td><td style="color:#e2e8f0;">' + mgrName + '</td><td><span class="score-badge ' + scClass + '">' + sc + '/25</span></td><td style="color:#94a3b8;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + (rev.scores ? rev.scores.summary || '' : '') + '</td></tr>';
+      });
+      html += '</table></div></div></div>';
+    }
+
+    document.getElementById('managersContent').innerHTML = html;
+  });
+}
+
+// ===== AI MONITORING TAB =====
+function loadAIData() {
+  var days = document.getElementById('days').value;
+  document.getElementById('aiContent').innerHTML = '<div class="loading">AI 대화 데이터 로딩 중...</div>';
+  
+  Promise.all([
+    fetch('/api/analytics/ai-conversations?limit=50').then(function(r) { return r.json(); }),
+    fetch('/api/analytics/ai-reviews').then(function(r) { return r.json(); }).catch(function() { return null; })
+  ]).then(function(results) {
+    var aiConv = results[0];
+    var aiReviews = results[1];
+    cachedData.ai = true;
+
+    var html = '';
+
+    // AI accuracy stats
+    if (aiReviews && aiReviews.total > 0) {
+      var goodPct = Math.round((aiReviews.good / aiReviews.total) * 100);
+      var badPct = Math.round((aiReviews.bad / aiReviews.total) * 100);
+      var fixPct = Math.round((aiReviews.fix / aiReviews.total) * 100);
+      html += '<div class="grid">';
+      html += card('수동 평가 합계', aiReviews.total, '건', 'blue', '대시보드 수동평가');
+      html += card('정확', aiReviews.good, '건 (' + goodPct + '%)', 'green', '올바른 답변');
+      html += card('부정확', aiReviews.bad, '건 (' + badPct + '%)', 'red', '잘못된 답변');
+      html += card('수정필요', aiReviews.fix, '건 (' + fixPct + '%)', 'yellow', '개선 가능');
+      html += '</div>';
+    }
+
+    // AI Conversation stats
+    if (aiConv && aiConv.success) {
+      var st = aiConv.stats || {};
+      html += '<div class="grid">';
+      html += card('오늘 AI 대화', st.today || 0, '건', 'blue', '금일 처리량');
+      html += card('전체 AI 대화', st.total || 0, '건', 'cyan', '누적');
+      html += card('에스컬레이션률', (st.escalatedRate || 0) + '%', '', st.escalatedRate > 20 ? 'red' : 'green', '목표: 20% 이하');
+
+      // Type distribution
+      var types = {};
+      (aiConv.conversations || []).forEach(function(c) { types[c.type] = (types[c.type] || 0) + 1; });
+      var typeStr = Object.keys(types).map(function(t) { return t + ':' + types[t]; }).join(', ');
+      html += card('유형 분포', Object.keys(types).length, '가지', 'purple', typeStr);
+      html += '</div>';
+
+      // Escalation reason analysis
+      var escReasons = {};
+      (aiConv.conversations || []).filter(function(c) { return c.escalated; }).forEach(function(c) {
+        var msg = (c.userMessage || '').toLowerCase();
+        if (msg.indexOf('合併') > -1 || msg.indexOf('一起寄') > -1) escReasons['합배송'] = (escReasons['합배송'] || 0) + 1;
+        else if (msg.indexOf('取消') > -1) escReasons['취소관련'] = (escReasons['취소관련'] || 0) + 1;
+        else if (msg.indexOf('客服') > -1 || msg.indexOf('人工') > -1 || msg.indexOf('轉') > -1) escReasons['직접요청'] = (escReasons['직접요청'] || 0) + 1;
+        else if (msg.indexOf('沒收到') > -1 || msg.indexOf('還沒到') > -1 || msg.indexOf('出貨') > -1) escReasons['배송지연'] = (escReasons['배송지연'] || 0) + 1;
+        else if (msg.indexOf('不滿') > -1 || msg.indexOf('太差') > -1 || msg.indexOf('投訴') > -1) escReasons['불만'] = (escReasons['불만'] || 0) + 1;
+        else escReasons['기타'] = (escReasons['기타'] || 0) + 1;
+      });
+
+      if (Object.keys(escReasons).length > 0) {
+        html += '<div class="charts">';
+        html += '<div class="chart-card"><h3>에스컬레이션 사유 분석</h3><div class="bar-chart">';
+        var escMax = 1;
+        Object.values(escReasons).forEach(function(v) { if (v > escMax) escMax = v; });
+        var escColors = { '합배송': '#3b82f6', '취소관련': '#ef4444', '직접요청': '#eab308', '배송지연': '#f97316', '불만': '#ef4444', '기타': '#64748b' };
+        Object.keys(escReasons).sort(function(a, b) { return escReasons[b] - escReasons[a]; }).forEach(function(k) {
+          var pct = Math.round((escReasons[k] / escMax) * 100);
+          html += '<div class="bar-row"><div class="bar-label">' + k + '</div><div class="bar-track"><div class="bar-fill" style="width:' + pct + '%;background:' + (escColors[k] || '#64748b') + ';"></div><span class="bar-count">' + escReasons[k] + '</span></div></div>';
+        });
+        html += '</div></div>';
+
+        // Language distribution from conversations
+        var langs = {};
+        (aiConv.conversations || []).forEach(function(c) { var l = c.lang || 'unknown'; langs[l] = (langs[l] || 0) + 1; });
+        html += '<div class="chart-card"><h3>언어별 분포</h3><div class="bar-chart">';
+        var langNames = { 'zh-TW': '繁體中文', 'ko': '한국어', 'en': 'English', 'ja': '日本語', 'unknown': '미감지' };
+        var langMax = 1;
+        Object.values(langs).forEach(function(v) { if (v > langMax) langMax = v; });
+        Object.keys(langs).sort(function(a, b) { return langs[b] - langs[a]; }).forEach(function(k) {
+          var pct = Math.round((langs[k] / langMax) * 100);
+          html += '<div class="bar-row"><div class="bar-label">' + (langNames[k] || k) + '</div><div class="bar-track"><div class="bar-fill" style="width:' + pct + '%;background:#3b82f6;"></div><span class="bar-count">' + langs[k] + '</span></div></div>';
+        });
+        html += '</div></div></div>';
+      }
+
+      // AI Conversation table
+      html += '<div class="section-title">AI 대화 로그</div>';
+      html += '<div style="padding:0 32px 16px;"><div class="chart-card">';
+      html += '<div style="max-height:600px;overflow-y:auto;">';
+      html += '<table><tr><th>시간</th><th>유형</th><th>고객 질문</th><th>AI 답변</th><th>상태</th></tr>';
+
+      var typeColors = { ai_answer: '#22c55e', order_lookup: '#3b82f6', greeting: '#94a3b8', escalation: '#eab308', thank_you: '#a855f7', order_list: '#06b6d4', file_message: '#64748b' };
+      var typeNames = { ai_answer: 'AI답변', order_lookup: '주문조회', greeting: '인사', escalation: '에스컬레이션', thank_you: '감사', order_list: '주문목록', file_message: '파일' };
+
+      (aiConv.conversations || []).forEach(function(c) {
+        var time = c.timestamp ? c.timestamp.substring(5, 16).replace('T', ' ') : '-';
+        var tc = typeColors[c.type] || '#94a3b8';
+        var tn = typeNames[c.type] || c.type;
+        var userMsg = (c.userMessage || '').substring(0, 60) + ((c.userMessage || '').length > 60 ? '...' : '');
+        var aiResp = (c.aiResponse || '').substring(0, 80) + ((c.aiResponse || '').length > 80 ? '...' : '');
+        var statusIcon = c.escalated ? '<span class="pill" style="background:rgba(239,68,68,0.15);color:#ef4444;">에스컬</span>' : '<span class="pill" style="background:rgba(34,197,94,0.15);color:#22c55e;">완료</span>';
+
+        html += '<tr style="cursor:pointer;" onclick="showReview(\'' + encodeURIComponent(JSON.stringify(c)) + '\')">';
+        html += '<td style="color:#64748b;white-space:nowrap;">' + time + '</td>';
+        html += '<td><span style="color:' + tc + ';font-weight:600;">' + tn + '</span></td>';
+        html += '<td style="color:#e2e8f0;">' + userMsg + '</td>';
+        html += '<td style="color:#94a3b8;">' + aiResp + '</td>';
+        html += '<td>' + statusIcon + '</td>';
+        html += '</tr>';
+      });
+      html += '</table></div></div></div>';
+    }
+
+    document.getElementById('aiContent').innerHTML = html;
+  });
+}
+
+// ===== CSAT TAB =====
+function loadCSATData() {
+  var days = document.getElementById('days').value;
+  document.getElementById('csatContent').innerHTML = '<div class="loading">CSAT 데이터 로딩 중...</div>';
+  
+  Promise.all([
+    fetch('/api/analytics/csat?days=' + days).then(function(r) { return r.json(); }),
+    fetch('/api/analytics/manager-performance?days=' + days).then(function(r) { return r.json(); }).catch(function() { return null; })
+  ]).then(function(results) {
+    var csat = results[0];
+    var mgrPerf = results[1];
+    cachedData.csat = true;
+
+    var html = '';
+
+    if (csat && csat.success) {
+      var starColor = csat.averageScore >= 4 ? 'green' : csat.averageScore >= 3 ? 'yellow' : 'red';
+      html += '<div class="grid">';
+      html += card('CSAT 평균', csat.averageScore || '-', '/ 5', starColor, '목표: 4.0 이상');
+      html += card('총 응답', csat.totalResponses, '건', 'blue', '고객 피드백');
+      var highSat = (csat.distribution ? (csat.distribution[1] || 0) + (csat.distribution[2] || 0) : 0);
+      var lowSat = (csat.distribution ? (csat.distribution[4] || 0) + (csat.distribution[5] || 0) : 0);
+      html += card('만족 (1-2점)', highSat, '건', 'green', '긍정 평가');
+      html += card('불만 (4-5점)', lowSat, '건', lowSat > 0 ? 'red' : 'green', '개선 필요');
+      html += '</div>';
+
+      if (csat.totalResponses > 0) {
+        html += '<div class="charts">';
+        // CSAT distribution
+        html += '<div class="chart-card"><h3>CSAT 점수 분포</h3><div class="bar-chart">';
+        var csatLabels = { 1: '1 - 매우만족 (Best)', 2: '2 - 만족', 3: '3 - 보통', 4: '4 - 불만족', 5: '5 - 매우불만족 (Worst)' };
+        var csatColors = { 1: '#22c55e', 2: '#84cc16', 3: '#eab308', 4: '#f97316', 5: '#ef4444' };
+        var csatMax = 1;
+        for (var s = 1; s <= 5; s++) { if ((csat.distribution[s] || 0) > csatMax) csatMax = csat.distribution[s]; }
+        for (var s = 1; s <= 5; s++) {
+          var cnt = csat.distribution[s] || 0;
+          var pct = Math.round((cnt / csatMax) * 100);
+          html += '<div class="bar-row"><div class="bar-label" style="width:200px;">' + csatLabels[s] + '</div><div class="bar-track"><div class="bar-fill" style="width:' + pct + '%;background:' + csatColors[s] + ';"></div><span class="bar-count">' + cnt + '</span></div></div>';
+        }
+        html += '</div></div>';
+
+        // Manager CSAT (if available)
+        html += '<div class="chart-card"><h3>매니저별 CSAT (향후 데이터 수집)</h3>';
+        html += '<div style="color:#64748b;font-size:13px;padding:20px;text-align:center;">CSAT 수집 시작 후 매니저별 만족도 데이터가 표시됩니다.</div>';
+        html += '</div></div>';
+      }
+    } else {
+      html += '<div style="padding:32px;text-align:center;">';
+      html += '<div style="font-size:48px;margin-bottom:16px;">📊</div>';
+      html += '<div style="color:#94a3b8;font-size:16px;">CSAT 데이터가 아직 없습니다</div>';
+      html += '<div style="color:#64748b;font-size:13px;margin-top:8px;">고객이 만족도 설문에 응답하면 여기에 표시됩니다</div>';
+      html += '</div>';
+    }
+
+    document.getElementById('csatContent').innerHTML = html;
+  });
+}
+
+// ===== HELPERS =====
 function card(label, value, unit, color, sub) {
-  return '<div class="card"><div class="label">' + label + '</div><div class="value ' + color + '">' + value + '<span style="font-size:16px;color:#64748b;"> ' + unit + '</span></div><div class="sub">' + sub + '</div></div>';
+  return '<div class="card"><div class="label">' + label + '</div><div class="value ' + color + '">' + value + '<span style="font-size:14px;color:#64748b;"> ' + unit + '</span></div><div class="sub">' + sub + '</div></div>';
+}
+function miniCard(label, value, color) {
+  return '<div style="background:#0f172a;padding:10px 14px;border-radius:8px;text-align:center;"><div style="font-size:11px;color:#64748b;">' + label + '</div><div style="font-size:18px;font-weight:700;margin-top:4px;" class="' + color + '">' + value + '</div></div>';
+}
+function radarItem(label, value) {
+  var v = parseFloat(value);
+  var color = v >= 4 ? '#22c55e' : v >= 3 ? '#eab308' : '#ef4444';
+  return '<div class="radar-item"><div class="radar-val" style="color:' + color + ';">' + value + '</div><div class="radar-lbl">' + label + '</div></div>';
 }
 function categoryChart(cats) {
   var items = [];
   var catKeys = Object.keys(cats);
   for (var i = 0; i < catKeys.length; i++) {
-    if (cats[catKeys[i]].count > 0) items.push({ key: catKeys[i], name: cats[catKeys[i]].name + ' ' + cats[catKeys[i]].nameKo, count: cats[catKeys[i]].count });
+    if (cats[catKeys[i]].count > 0) items.push({ key: catKeys[i], name: cats[catKeys[i]].nameKo || cats[catKeys[i]].name, count: cats[catKeys[i]].count });
   }
   items.sort(function(a, b) { return b.count - a.count; });
   var max = items.length > 0 ? items[0].count : 1;
@@ -276,14 +538,14 @@ function categoryChart(cats) {
   var h = '<div class="chart-card"><h3>문의 카테고리 분포</h3><div class="bar-chart">';
   for (var j = 0; j < items.length; j++) {
     var pct = Math.round((items[j].count / max) * 100);
-    h += '<div class="bar-row"><div class="bar-label">' + items[j].name.split(' ')[1] + '</div><div class="bar-track"><div class="bar-fill" style="width:' + pct + '%;background:' + colors[j % colors.length] + ';"></div><span class="bar-count">' + items[j].count + '</span></div></div>';
+    h += '<div class="bar-row"><div class="bar-label">' + items[j].name + '</div><div class="bar-track"><div class="bar-fill" style="width:' + pct + '%;background:' + colors[j % colors.length] + ';"></div><span class="bar-count">' + items[j].count + '</span></div></div>';
   }
   h += '</div></div>';
   return h;
 }
 function keywordChart(keywords) {
   var h = '<div class="chart-card"><h3>자주 언급된 키워드 TOP 10</h3><ul class="keyword-list">';
-  var kws = keywords.slice(0, 10);
+  var kws = (keywords || []).slice(0, 10);
   for (var i = 0; i < kws.length; i++) {
     var word = kws[i].word.length > 20 ? kws[i].word.substring(0, 20) + '...' : kws[i].word;
     h += '<li><span class="kw">' + (i + 1) + '. ' + word + '</span><span class="kc">' + kws[i].count + '</span></li>';
@@ -316,10 +578,7 @@ function messageBreakdown(r) {
   h += '<span style="color:#22c55e;">AI 봇 ' + botPct + '% (' + r.botMessages + '건)</span>';
   h += '<span style="color:#eab308;">매니저 ' + mgrPct + '% (' + r.managerMessages + '건)</span>';
   h += '</div>';
-  h += '<div style="margin-top:20px;padding-top:16px;border-top:1px solid #334155;font-size:13px;color:#94a3b8;">';
-  h += '<p>AI 자동 응답률이 높을수록 CS 효율이 좋습니다.</p>';
-  h += '<p style="margin-top:8px;">목표: AI 응답률 70% 이상</p>';
-  h += '</div></div>';
+  h += '<div style="margin-top:16px;padding-top:12px;border-top:1px solid #334155;font-size:13px;color:#94a3b8;">목표: AI 응답률 70% 이상</div></div>';
   return h;
 }
 function insightsCard(r) {
@@ -331,36 +590,21 @@ function insightsCard(r) {
       topCat = { key: catKeys[i], count: r.categories[catKeys[i]].count, name: r.categories[catKeys[i]].nameKo };
     }
   }
-  if (topCat.count > 0) insights.push('📊 가장 많은 문의 카테고리: <strong>' + topCat.name + '</strong> (' + topCat.count + '건) — 해당 FAQ를 강화하면 AI 해결률을 높일 수 있습니다.');
-  if (r.unresolvedChats > 10) insights.push('⚠️ 미해결 상담 <strong>' + r.unresolvedChats + '건</strong> — 오래된 상담부터 우선 처리하거나 자동 종료 규칙 설정을 권장합니다.');
+  if (topCat.count > 0) insights.push('<span style="color:#3b82f6;">📊</span> 가장 많은 문의: <strong>' + topCat.name + '</strong> (' + topCat.count + '건) — FAQ 강화로 AI 해결률 향상 가능');
+  if (r.unresolvedChats > 10) insights.push('<span style="color:#ef4444;">⚠️</span> 미해결 <strong>' + r.unresolvedChats + '건</strong> — 우선 처리 필요');
   var escCount = r.categories.escalation ? r.categories.escalation.count : 0;
-  if (escCount > 20) insights.push('🔄 에스컬레이션 <strong>' + escCount + '건</strong> — "客服" 키워드가 가장 많습니다. AI 프롬프트에서 직접 해결을 유도하도록 개선하면 줄일 수 있습니다.');
   var aiRate = Math.round((r.botMessages / (r.botMessages + r.managerMessages)) * 100);
-  if (aiRate >= 70) insights.push('✅ AI 응답률 <strong>' + aiRate + '%</strong> — 목표(70%) 달성! 우수한 자동화 수준입니다.');
-  else insights.push('📈 AI 응답률 <strong>' + aiRate + '%</strong> — 목표 70%까지 ' + (70 - aiRate) + '%p 개선이 필요합니다. FAQ 보강과 프롬프트 최적화를 권장합니다.');
-  var otherCount = r.categories.other ? r.categories.other.count : 0;
-  if (otherCount > 50) insights.push('❓ 미분류 문의 <strong>' + otherCount + '건</strong> — 새로운 카테고리 추가 또는 키워드 확장이 필요합니다.');
+  if (aiRate >= 70) insights.push('<span style="color:#22c55e;">✅</span> AI 응답률 <strong>' + aiRate + '%</strong> — 목표(70%) 달성');
+  else insights.push('<span style="color:#eab308;">📈</span> AI 응답률 <strong>' + aiRate + '%</strong> — 목표 70%까지 ' + (70 - aiRate) + '%p 필요');
 
-  var h = '<div class="insights-card"><h3>AI 인사이트 & 개선 제안</h3>';
+  var h = '<div class="insights-card"><h3>AI 인사이트</h3>';
   for (var j = 0; j < insights.length; j++) {
     h += '<div class="insight-item">' + insights[j] + '</div>';
   }
   h += '</div>';
   return h;
 }
-loadData();
-</script>
 
-<div id="reviewModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);z-index:9999;overflow-y:auto;" onclick="if(event.target===this)closeReview()">
-  <div style="max-width:700px;margin:40px auto;background:#1e293b;border-radius:16px;padding:24px;border:1px solid #334155;">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-      <h3 style="color:#e2e8f0;margin:0;">AI 답변 상세 / 평가</h3>
-      <span style="cursor:pointer;color:#94a3b8;font-size:24px;" onclick="closeReview()">&times;</span>
-    </div>
-    <div id="reviewContent"></div>
-  </div>
-</div>
-<script>
 function showReview(encoded) {
   var c = JSON.parse(decodeURIComponent(encoded));
   var html = '';
@@ -370,7 +614,7 @@ function showReview(encoded) {
   if (c.userName) html += '<div style="color:#64748b;font-size:11px;margin-top:4px;">고객: ' + c.userName + '</div>';
   html += '</div>';
   html += '<div style="margin-bottom:16px;padding:12px;background:#0f172a;border-radius:8px;border-left:3px solid ' + (c.escalated ? '#ef4444' : '#22c55e') + ';">';
-  html += '<div style="color:#64748b;font-size:12px;margin-bottom:4px;">AI 답변 (' + (c.type || '-') + ')' + (c.escalated ? ' <span style=\"color:#ef4444\">에스컬레이션</span>' : '') + '</div>';
+  html += '<div style="color:#64748b;font-size:12px;margin-bottom:4px;">AI 답변 (' + (c.type || '-') + ')' + (c.escalated ? ' <span style="color:#ef4444">에스컬레이션</span>' : '') + '</div>';
   html += '<div style="color:#e2e8f0;font-size:14px;white-space:pre-wrap;line-height:1.6;">' + (c.aiResponse || '-') + '</div>';
   html += '</div>';
   html += '<div style="margin-bottom:12px;color:#94a3b8;font-size:13px;">이 AI 답변의 품질을 평가해주세요:</div>';
@@ -379,7 +623,7 @@ function showReview(encoded) {
   html += '<button onclick="submitReview(\'' + encodeURIComponent(JSON.stringify(c)) + '\', \'bad\')" style="flex:1;padding:12px;background:#991b1b;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:14px;">❌ 부정확</button>';
   html += '<button onclick="submitReview(\'' + encodeURIComponent(JSON.stringify(c)) + '\', \'fix\')" style="flex:1;padding:12px;background:#92400e;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:14px;">🔧 수정필요</button>';
   html += '</div>';
-  html += '<textarea id="reviewComment" placeholder="(선택) 코멘트 - 어떤 부분이 잘못됐는지 메모" style="width:100%;height:60px;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:8px;padding:8px;font-size:13px;resize:none;box-sizing:border-box;"></textarea>';
+  html += '<textarea id="reviewComment" placeholder="(선택) 코멘트" style="width:100%;height:60px;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:8px;padding:8px;font-size:13px;resize:none;box-sizing:border-box;"></textarea>';
   document.getElementById('reviewContent').innerHTML = html;
   document.getElementById('reviewModal').style.display = 'block';
 }
@@ -394,11 +638,14 @@ function submitReview(encoded, rating) {
   }).then(function(r) { return r.json(); }).then(function(d) {
     if (d.success) {
       var msgs = { good: '✅ 정확함으로 평가됨', bad: '❌ 부정확으로 평가됨', fix: '🔧 수정필요로 평가됨' };
-      document.getElementById('reviewContent').innerHTML = '<div style="text-align:center;padding:40px;"><div style="font-size:48px;margin-bottom:16px;">' + (rating === 'good' ? '✅' : rating === 'bad' ? '❌' : '🔧') + '</div><div style="color:#e2e8f0;font-size:18px;">' + msgs[rating] + '</div><div style="color:#64748b;margin-top:8px;">총 ' + d.totalReviews + '건 평가됨</div></div>';
+      document.getElementById('reviewContent').innerHTML = '<div style="text-align:center;padding:40px;"><div style="font-size:48px;margin-bottom:16px;">' + (rating === 'good' ? '✅' : rating === 'bad' ? '❌' : '🔧') + '</div><div style="color:#e2e8f0;font-size:18px;">' + msgs[rating] + '</div></div>';
       setTimeout(closeReview, 1500);
     }
   }).catch(function(e) { alert('Error: ' + e.message); });
 }
+
+// Initial load
+loadAllData();
 </script>
 </body>
 </html>

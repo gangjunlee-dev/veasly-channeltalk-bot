@@ -353,11 +353,13 @@ router.get('/ai-reviews', async function(req, res) {
     var reviewFile = require('path').join(__dirname, '..', 'data', 'ai-reviews.json');
     var reviews = [];
     try { reviews = JSON.parse(fs.readFileSync(reviewFile, 'utf8')); } catch(e) {}
-    var total = reviews.length;
-    var good = reviews.filter(function(r) { return r.rating === 'good'; }).length;
-    var bad = reviews.filter(function(r) { return r.rating === 'bad'; }).length;
-    var fix = reviews.filter(function(r) { return r.rating === 'fix'; }).length;
-    res.json({ success: true, total: total, good: good, bad: bad, fix: fix, recent: reviews.slice(-20).reverse() });
+    var manual = reviews.filter(function(r) { return r.rating; });
+    var auto = reviews.filter(function(r) { return r.scores; });
+    var total = manual.length;
+    var good = manual.filter(function(r) { return r.rating === 'good'; }).length;
+    var bad = manual.filter(function(r) { return r.rating === 'bad'; }).length;
+    var fix = manual.filter(function(r) { return r.rating === 'fix'; }).length;
+    res.json({ success: true, total: total, good: good, bad: bad, fix: fix, autoReviewCount: auto.length, recent: reviews.slice(-30).reverse() });
   } catch(e) {
     res.status(500).json({ success: false, error: e.message });
   }
