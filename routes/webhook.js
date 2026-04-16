@@ -1,4 +1,48 @@
 var express = require('express');
+
+// === FCR (First Contact Resolution) Tracker ===
+var fcrDataPath = path.join(__dirname, '..', 'data', 'fcr-tracker.json');
+function loadFCRData() {
+  try { return JSON.parse(fs.readFileSync(fcrDataPath, 'utf8')); } catch(e) { return { resolved: [], reopened: [] }; }
+}
+function saveFCRData(data) {
+  if (data.resolved.length > 2000) data.resolved = data.resolved.slice(-2000);
+  if (data.reopened.length > 1000) data.reopened = data.reopened.slice(-1000);
+  fs.writeFileSync(fcrDataPath, JSON.stringify(data, null, 2));
+}
+function trackFCR(userId, chatId, issueType) {
+  if (!userId) return;
+  var fcr = loadFCRData();
+  var now = Date.now();
+  var cutoff72h = now - (72 * 60 * 60 * 1000);
+  // Check if same user had a resolved conversation in last 72h
+  var recentResolved = fcr.resolved.filter(function(r) {
+    return r.userId === userId && r.timestamp > cutoff72h;
+  });
+  if (recentResolved.length > 0) {
+    // This is a repeat inquiry within 72h → FCR failure
+    fcr.reopened.push({
+      timestamp: now,
+      userId: userId,
+      chatId: chatId,
+      issueType: issueType || 'unknown',
+      previousChatId: recentResolved[recentResolved.length - 1].chatId
+    });
+    console.log('[FCR] Repeat inquiry detected - userId:', userId, 'within 72h of chatId:', recentResolved[recentResolved.length - 1].chatId);
+  }
+  saveFCRData(fcr);
+}
+function recordFCRResolved(userId, chatId, issueType) {
+  if (!userId) return;
+  var fcr = loadFCRData();
+  fcr.resolved.push({
+    timestamp: Date.now(),
+    userId: userId,
+    chatId: chatId,
+    issueType: issueType || 'unknown'
+  });
+  saveFCRData(fcr);
+}
 var router = express.Router();
 var channeltalk = require('../lib/channeltalk');
 var matcher = require('../lib/matcher');
@@ -22,6 +66,31 @@ var chatContext = {};
 var _chatHistoryCache = {};
 var _managerCache = { data: null, ts: 0 };
 async function getCachedManagers() { var now = Date.now(); if (_managerCache.data && (now - _managerCache.ts) < 600000) return _managerCache.data; var r = await getCachedManagers(); _managerCache.data = r; _managerCache.ts = now; return r; }
+
+
+
+// === WAITING MESSAGE: 30min no-reply notification to customer ===
+var waitingMessageSent = {};
+async function sendWaitingMessage(chatId, lang) {
+  if (waitingMessageSent[chatId]) return;
+  waitingMessageSent[chatId] = true;
+  var msgs = {
+    "zh-TW": "感謝您的耐心等待！客服人員正在確認您的問題，請稍候 🙏",
+    "ko": "기다려 주셔서 감사합니다! 담당자가 확인 중이에요, 조금만 기다려 주세요 🙏",
+    "en": "Thank you for your patience! Our team is reviewing your case, please hold on 🙏",
+    "ja": "お待ちいただきありがとうございます！担当者が確認中です、もう少々お待ちください 🙏"
+  };
+  try {
+    await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: msgs[lang] || msgs["zh-TW"] }] });
+    console.log('[WAITING-MSG] Sent to', chatId);
+  } catch(e) {
+    console.log('[WAITING-MSG] Error:', e.message);
+  }
+}
+// Clean up waitingMessageSent when manager replies (max 500 entries)
+function cleanWaitingMsg(chatId) {
+  delete waitingMessageSent[chatId];
+}
 
 
 setInterval(function() {
@@ -281,7 +350,8 @@ router.post('/channeltalk', async function(req, res) {
         // Record manager performance stats
         if (mgrText) {
           mgrStats.recordReply(mgrPersonId, chatId, mgrText.length);
-          if (pendingEscalations[chatId]) { delete pendingEscalations[chatId]; }
+          if (pendingEscalations[chatId]) { cleanWaitingMsg(chatId);
+      delete pendingEscalations[chatId]; }
         }
         if (mgrText && mgrText.length > 10 && aiEngine.isReady()) {
           aiEngine.addToKnowledgeBase(
@@ -298,6 +368,9 @@ router.post('/channeltalk', async function(req, res) {
     if (chatType !== 'userchat') return res.status(200).send('OK');
 
     var userText = extractText(message);
+
+    // Track FCR for returning users
+    trackFCR(memberId || personId || "", chatId, "");
     if (!userText || !chatId) return res.status(200).send('OK');
     mgrStats.recordUserMessage(chatId);
     if (isSystemEvent(userText)) return res.status(200).send('OK');
@@ -877,6 +950,8 @@ router.post('/channeltalk', async function(req, res) {
         userName: veaslyUser ? veaslyUser.name : "",
         lang: detectedLang,
         type: "ai_answer",
+
+      recordFCRResolved(memberId || personId || "", chatId, "ai_answer");
         userMessage: userText.substring(0, 200),
         aiResponse: aiAnswer.substring(0, 500),
         escalated: needEscalate,
@@ -977,7 +1052,28 @@ router.post('/channeltalk', async function(req, res) {
 // === 15-min auto-reassign checker ===
 setInterval(async function() {
   var now = Date.now();
-  var REASSIGN_TIMEOUT = 15 * 60 * 1000;
+  var REASSIGN_TIMEOUT = 15 * 60 * 1000
+
+        // === STAGED ALERTS ===
+        var elapsed = now - esc.timestamp;
+        var elapsedMin = Math.round(elapsed / 60000);
+        // 5min warning (log only)
+        if (elapsedMin >= 5 && !esc.warned5) {
+          console.log('[ESCALATION-WARN] 5min no reply - chatId:', cid);
+          esc.warned5 = true;
+        }
+        // 10min warning (log only)
+        if (elapsedMin >= 10 && !esc.warned10) {
+          console.log('[ESCALATION-WARN] 10min no reply - chatId:', cid);
+          esc.warned10 = true;
+        }
+        // 30min: send waiting message to customer
+        if (elapsedMin >= 30 && !esc.waitingSent) {
+          sendWaitingMessage(cid, esc.lang || 'zh-TW');
+          esc.waitingSent = true;
+        }
+
+        // original 15min check: ;
   var chatIds = Object.keys(pendingEscalations);
   for (var i = 0; i < chatIds.length; i++) {
     var cid = chatIds[i];

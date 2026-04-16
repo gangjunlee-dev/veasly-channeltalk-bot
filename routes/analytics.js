@@ -482,6 +482,60 @@ router.get('/cs-score-metrics', async function(req, res) {
       });
     });
 
+  // === CES Data ===
+  var cesData = [];
+  try { cesData = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'data', 'ces-results.json'), 'utf8')); } catch(e) {}
+  var recentCES = cesData.filter(function(c) { return new Date(c.timestamp) >= cutoff; });
+  var cesAvg = 0;
+  if (recentCES.length > 0) {
+    cesAvg = recentCES.reduce(function(sum, c) { return sum + c.score; }, 0) / recentCES.length;
+    cesAvg = Math.round(cesAvg * 100) / 100;
+  }
+
+  // === FCR Data ===
+  var fcrData = { resolved: [], reopened: [] };
+  try { fcrData = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'data', 'fcr-tracker.json'), 'utf8')); } catch(e) {}
+  var recentResolved = (fcrData.resolved || []).filter(function(r) { return r.timestamp >= cutoff.getTime(); });
+  var recentReopened = (fcrData.reopened || []).filter(function(r) { return r.timestamp >= cutoff.getTime(); });
+  var fcrRate = recentResolved.length > 0 ? Math.round((1 - recentReopened.length / recentResolved.length) * 100) : 0;
+
+  // === Integrated CS Quality Score (5-point scale) ===
+  // Weights: FRT 20%, FCR 25%, CSAT 20%, CES 15%, No-Reply 20%
+  var frtScore = 0;
+  if (typeof responseTime !== 'undefined' && responseTime.within30MinRate >= 80) frtScore = 5;
+  else if (typeof responseTime !== 'undefined' && responseTime.within30MinRate >= 60) frtScore = 3.5;
+  else if (typeof responseTime !== 'undefined' && responseTime.within30MinRate >= 40) frtScore = 2.5;
+  else frtScore = 1.5;
+
+  var fcrScore = 0;
+  if (fcrRate >= 80) fcrScore = 5;
+  else if (fcrRate >= 70) fcrScore = 4;
+  else if (fcrRate >= 55) fcrScore = 3;
+  else fcrScore = 2;
+
+  var csatAvg = 0;
+  try {
+    var csatData = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'data', 'csat-results.json'), 'utf8'));
+    var recentCSAT = csatData.filter(function(c) { return new Date(c.timestamp) >= cutoff; });
+    if (recentCSAT.length > 0) {
+      csatAvg = recentCSAT.reduce(function(sum, c) { return sum + c.score; }, 0) / recentCSAT.length;
+    }
+  } catch(e) {}
+  var csatScore = csatAvg > 0 ? csatAvg : 2.5; // default if no data
+
+  var cesScoreVal = cesAvg > 0 ? cesAvg : 2.5; // default if no data
+
+  var noReplyScore = 0;
+  if (typeof noReplyClose !== 'undefined') {
+    if (noReplyClose.rate <= 10) noReplyScore = 5;
+    else if (noReplyClose.rate <= 20) noReplyScore = 4;
+    else if (noReplyClose.rate <= 30) noReplyScore = 3;
+    else noReplyScore = 1.5;
+  }
+
+  var integratedScore = (frtScore * 0.20) + (fcrScore * 0.25) + (csatScore * 0.20) + (cesScoreVal * 0.15) + (noReplyScore * 0.20);
+  integratedScore = Math.round(integratedScore * 100) / 100;
+
     res.json({
       success: true,
       period: days + ' days',
@@ -512,7 +566,11 @@ router.get('/cs-score-metrics', async function(req, res) {
         total: aiTotal
       },
       managerResponseTime: mgrRTSummary
-    });
+    ,
+      ces: { avgScore: cesAvg, totalResponses: recentCES.length },
+      fcr: { rate: fcrRate, resolved: recentResolved.length, reopened: recentReopened.length },
+      integratedScore: { score: integratedScore, breakdown: { frt: { score: frtScore, weight: 0.20 }, fcr: { score: fcrScore, weight: 0.25 }, csat: { score: csatScore, weight: 0.20 }, ces: { score: cesScoreVal, weight: 0.15 }, noReply: { score: noReplyScore, weight: 0.20 } }, target: 3.0 }
+  });
   } catch(e) {
     res.status(500).json({ success: false, error: e.message });
   }
