@@ -17,6 +17,7 @@ var processedMessages = {};
 var satisfactionPending = {};
 var chatLanguage = {};
 var managerActive = {};
+var pendingEscalations = {};
 var chatContext = {};
 var _chatHistoryCache = {};
 var _managerCache = { data: null, ts: 0 };
@@ -85,6 +86,22 @@ function isEscalationRequest(text) {
   return false;
 }
 
+
+
+async function connectManager(chatId, lang) {
+  try {
+    var mgrs = await getCachedManagers();
+    var managers = (mgrs && mgrs.managers) || [];
+    for (var i = 0; i < managers.length; i++) {
+      if (managers[i].operator) {
+        await channeltalk.inviteManager(chatId, managers[i].id);
+        managerActive[chatId] = Date.now();
+        pendingEscalations[chatId] = { time: Date.now(), managerId: managers[i].id, lang: lang || "zh-TW" };
+        break;
+      }
+    }
+  } catch(e) { console.error("[ConnectManager] Error:", e.message); }
+}
 
 function isMergeShippingRequest(text) {
   var mergeKeywords = ["合併寄送", "合併運送", "合併出貨", "合併配送", "一起寄", "一起送", "一起出貨", "併單", "합배송", "합배", "merge ship", "combine order", "合併寄"];
@@ -264,6 +281,7 @@ router.post('/channeltalk', async function(req, res) {
         // Record manager performance stats
         if (mgrText) {
           mgrStats.recordReply(mgrPersonId, chatId, mgrText.length);
+          if (pendingEscalations[chatId]) { delete pendingEscalations[chatId]; }
         }
         if (mgrText && mgrText.length > 10 && aiEngine.isReady()) {
           aiEngine.addToKnowledgeBase(
@@ -587,6 +605,7 @@ router.post('/channeltalk', async function(req, res) {
             if (managers2[j].operator) {
               await channeltalk.inviteManager(chatId, managers2[j].id);
               managerActive[chatId] = Date.now();
+              pendingEscalations[chatId] = { time: Date.now(), managerId: managers2[j].id, lang: detectedLang };
               break;
             }
           }
@@ -953,5 +972,43 @@ router.post('/channeltalk', async function(req, res) {
     res.status(200).send('OK');
   }
 });
+
+
+// === 15-min auto-reassign checker ===
+setInterval(async function() {
+  var now = Date.now();
+  var REASSIGN_TIMEOUT = 15 * 60 * 1000;
+  var chatIds = Object.keys(pendingEscalations);
+  for (var i = 0; i < chatIds.length; i++) {
+    var cid = chatIds[i];
+    var esc = pendingEscalations[cid];
+    if (now - esc.time >= REASSIGN_TIMEOUT) {
+      try {
+        var msgData = await channeltalk.getChatMessages(cid, 5);
+        var msgs = msgData.messages || [];
+        var mgrReplied = msgs.some(function(m) {
+          return m.personType === "manager" && m.createdAt && m.createdAt > esc.time;
+        });
+        if (mgrReplied) {
+          delete pendingEscalations[cid];
+          continue;
+        }
+        var reassignMsg = { "zh-TW": "感謝您的耐心等待！客服人員目前較忙碌，我們已通知其他客服人員，請再稍候一下", "ko": "기다려주셔서 감사합니다! 다른 상담사에게 알림을 보냈습니다. 조금만 더 기다려주세요", "en": "Thanks for your patience! We have notified additional agents. Please hold on", "ja": "お待たせして申し訳ございません！他のスタッフに通知しました" };
+        var lang = esc.lang || "zh-TW";
+        await channeltalk.sendMessage(cid, { blocks: [{ type: "text", value: reassignMsg[lang] || reassignMsg["zh-TW"] }] });
+        var mgrs = await getCachedManagers();
+        var allMgrIds = ((mgrs && mgrs.managers) || []).filter(function(m) { return !m.bot; }).map(function(m) { return m.id; });
+        if (allMgrIds.length > 0) {
+          await channeltalk.addFollowers(cid, allMgrIds).catch(function() {});
+        }
+        console.log("[AutoReassign] Chat " + cid + " reassigned after 15min. Notified " + allMgrIds.length + " managers.");
+        delete pendingEscalations[cid];
+      } catch(e) {
+        console.error("[AutoReassign] Error for " + cid + ":", e.message);
+        delete pendingEscalations[cid];
+      }
+    }
+  }
+}, 3 * 60 * 1000);
 
 module.exports = router;
