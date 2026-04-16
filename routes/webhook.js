@@ -324,6 +324,37 @@ router.post('/channeltalk', async function(req, res) {
     try { var srcData = JSON.parse(req.body.entity || "{}"); if (srcData.source && srcData.source.medium && srcData.source.medium.mediumType === "app") chatSource = "LINE"; } catch(se) {}
     try { var lf = require("path").join(__dirname, "..", "data", "chat-languages.json"); var ld = {}; try { ld = JSON.parse(fs.readFileSync(lf, "utf8")); } catch(e) {} ld[chatId] = detectedLang; fs.writeFileSync(lf, JSON.stringify(ld), "utf8"); } catch(e) {}
 
+    // CSAT response handler
+    if (scheduler.isCSATPending(chatId)) {
+      var csatScore = scheduler.parseCSATResponse(userText);
+      if (csatScore !== null) {
+        // Record CSAT score
+        scheduler.saveCSATResult ? scheduler.saveCSATResult({
+          chatId: chatId,
+          score: csatScore,
+          timestamp: Date.now(),
+          userId: memberId || ""
+        }) : null;
+
+        var csatThanks = {
+          "zh-TW": "感謝您的回饋！您的評分：" + csatScore + "/5 ⭐\n我們會持續改善服務品質！",
+          "ko": "피드백 감사합니다! 평점: " + csatScore + "/5 ⭐\n더 나은 서비스를 위해 노력하겠습니다!",
+          "en": "Thank you for your feedback! Rating: " + csatScore + "/5 ⭐\nWe'll keep improving!",
+          "ja": "フィードバックありがとうございます！評価：" + csatScore + "/5 ⭐\nサービス改善に努めます！"
+        };
+
+        var thankMsg = csatThanks[detectedLang] || csatThanks["zh-TW"];
+        await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: thankMsg }] });
+        console.log("[CSAT] Score recorded:", csatScore, "for chat:", chatId);
+        mgrStats.linkCSATToManager(chatId, csatScore);
+
+        // Clear CSAT pending
+        // Clear CSAT pending from file
+        try { var csatFile = require("path").join(__dirname, "..", "data", "csat-sent.json"); var csatData = JSON.parse(require("fs").readFileSync(csatFile, "utf8")); delete csatData[chatId]; require("fs").writeFileSync(csatFile, JSON.stringify(csatData), "utf8"); } catch(ce) {}
+        return res.status(200).send("OK");
+      }
+    }
+
     // Satisfaction response
     if (satisfactionPending[chatId] && isSatisfactionResponse(userText)) {
       delete satisfactionPending[chatId];
@@ -388,6 +419,7 @@ router.post('/channeltalk', async function(req, res) {
       if (userText.indexOf(negativeKeywords[ni]) !== -1) { isNegative = true; break; }
     }
     if (isNegative && !managerActive[chatId]) {
+      setEscalationStep(chatId, 1); // skip step 0 so next escalation request goes directly to step 2
       console.log('[Sentiment] Negative detected - auto escalating:', chatId);
       try {
         var negMgrs = await getCachedManagers();
@@ -452,36 +484,7 @@ router.post('/channeltalk', async function(req, res) {
     }
 
 
-    // CSAT response handler
-    if (scheduler.isCSATPending(chatId)) {
-      var csatScore = scheduler.parseCSATResponse(userText);
-      if (csatScore !== null) {
-        // Record CSAT score
-        scheduler.saveCSATResult ? scheduler.saveCSATResult({
-          chatId: chatId,
-          score: csatScore,
-          timestamp: Date.now(),
-          userId: memberId || ""
-        }) : null;
 
-        var csatThanks = {
-          "zh-TW": "感謝您的回饋！您的評分：" + csatScore + "/5 ⭐\n我們會持續改善服務品質！",
-          "ko": "피드백 감사합니다! 평점: " + csatScore + "/5 ⭐\n더 나은 서비스를 위해 노력하겠습니다!",
-          "en": "Thank you for your feedback! Rating: " + csatScore + "/5 ⭐\nWe'll keep improving!",
-          "ja": "フィードバックありがとうございます！評価：" + csatScore + "/5 ⭐\nサービス改善に努めます！"
-        };
-
-        var thankMsg = csatThanks[detectedLang] || csatThanks["zh-TW"];
-        await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: thankMsg }] });
-        console.log("[CSAT] Score recorded:", csatScore, "for chat:", chatId);
-        mgrStats.linkCSATToManager(chatId, csatScore);
-
-        // Clear CSAT pending
-        // Clear CSAT pending from file
-        try { var csatFile = require("path").join(__dirname, "..", "data", "csat-sent.json"); var csatData = JSON.parse(require("fs").readFileSync(csatFile, "utf8")); delete csatData[chatId]; require("fs").writeFileSync(csatFile, JSON.stringify(csatData), "utf8"); } catch(ce) {}
-        return res.status(200).send("OK");
-      }
-    }
 
     // Reset escalation step only if NOT an escalation keyword
     if (!isEscalationRequest(userText)) { setEscalationStep(chatId, 0); }
@@ -688,7 +691,7 @@ router.post('/channeltalk', async function(req, res) {
             chatHistory.pop();
           }
           // Keep last 5 exchanges
-          if (chatHistory.length > 10) chatHistory = chatHistory.slice(-10);
+          if (chatHistory.length > 20) chatHistory = chatHistory.slice(-20);
         } catch(histErr) { console.error("[Context] History fetch error:", histErr.message); }
         var aiResult = await aiEngine.generateAnswer(memberContext ? memberContext + " " + userText : userText, detectedLang, chatId, chatHistory);
         if (aiResult && typeof aiResult === "object") {
