@@ -250,9 +250,8 @@ function render(r) {
       extra += '</table></div></div></div>';
     }
 
-    document.getElementById('content').innerHTML += extra;
+    document.getElementById('content').innerHTML = html + extra;
   });
-  document.getElementById('content').innerHTML = html;
 }
 function card(label, value, unit, color, sub) {
   return '<div class="card"><div class="label">' + label + '</div><div class="value ' + color + '">' + value + '<span style="font-size:16px;color:#64748b;"> ' + unit + '</span></div><div class="sub">' + sub + '</div></div>';

@@ -179,6 +179,8 @@ router.post('/channeltalk', async function(req, res) {
           surveyMsg = botSurveys[surveyLang] || botSurveys['zh-TW'];
         }
         satisfactionPending[chatId0] = Date.now();
+        // Mark in file to prevent scheduler duplicate
+        try { var csFile = require('path').join(__dirname, '..', 'data', 'csat-sent.json'); var csData = {}; try { csData = JSON.parse(require('fs').readFileSync(csFile, 'utf8')); } catch(ce) {} csData[chatId0] = Date.now(); require('fs').writeFileSync(csFile, JSON.stringify(csData), 'utf8'); } catch(ce2) {}
         setTimeout(async function() {
           try {
             await channeltalk.sendMessage(chatId0, { blocks: [{ type: 'text', value: surveyMsg }] });
@@ -317,6 +319,7 @@ router.post('/channeltalk', async function(req, res) {
       if (langMap[userLang]) detectedLang = langMap[userLang];
     }
     chatLanguage[chatId] = detectedLang;
+    try { var lf = require("path").join(__dirname, "..", "data", "chat-languages.json"); var ld = {}; try { ld = JSON.parse(fs.readFileSync(lf, "utf8")); } catch(e) {} ld[chatId] = detectedLang; fs.writeFileSync(lf, JSON.stringify(ld), "utf8"); } catch(e) {}
 
     // Satisfaction response
     if (satisfactionPending[chatId] && isSatisfactionResponse(userText)) {
