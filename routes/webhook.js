@@ -319,6 +319,8 @@ router.post('/channeltalk', async function(req, res) {
       if (langMap[userLang]) detectedLang = langMap[userLang];
     }
     chatLanguage[chatId] = detectedLang;
+    var chatSource = "web";
+    try { var srcData = JSON.parse(req.body.entity || "{}"); if (srcData.source && srcData.source.medium && srcData.source.medium.mediumType === "app") chatSource = "LINE"; } catch(se) {}
     try { var lf = require("path").join(__dirname, "..", "data", "chat-languages.json"); var ld = {}; try { ld = JSON.parse(fs.readFileSync(lf, "utf8")); } catch(e) {} ld[chatId] = detectedLang; fs.writeFileSync(lf, JSON.stringify(ld), "utf8"); } catch(e) {}
 
     // Satisfaction response

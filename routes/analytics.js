@@ -207,6 +207,7 @@ router.get('/dashboard-summary', async function(req, res) {
         totalChats: results.totalChats,
         aiResponseRate: results.aiResponseRate,
         unresolvedChats: results.unresolvedChats,
+        channelStats: results.channelStats,
         topCategories: results.categories
       },
       csat: {

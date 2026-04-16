@@ -99,6 +99,14 @@ function render(r) {
   html += card('AI 봇 응답', r.botMessages, '건', 'green', '응답 비율 ' + botRate + '%');
   html += card('매니저 응답', r.managerMessages, '건', 'yellow', 'AI 해결률 ' + aiResolveRate + '%');
   html += card('미해결 상담', r.unresolvedChats, '건', r.unresolvedChats > 10 ? 'red' : 'green', r.unresolvedChats > 10 ? '우선 처리 필요' : '양호');
+  if (r.channelStats) {
+    var cs = r.channelStats;
+    var total = cs.line + cs.web + cs.other;
+    var linePct = total > 0 ? (cs.line / total * 100).toFixed(0) : 0;
+    var webPct = total > 0 ? (cs.web / total * 100).toFixed(0) : 0;
+    html += card('LINE 유입', cs.line, '건 (' + linePct + '%)', cs.line > cs.web ? 'green' : 'blue', 'LINE 메신저');
+    html += card('웹사이트 유입', cs.web, '건 (' + webPct + '%)', 'blue', 'veasly.com');
+  }
   html += card('에스컬레이션', escalationCount, '건', escalationRate > 20 ? 'red' : 'yellow', '비율 ' + escalationRate + '%');
   html += '</div>';
 
