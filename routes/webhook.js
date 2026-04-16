@@ -74,13 +74,23 @@ function isBusinessHours() {
 }
 
 function isEscalationRequest(text) {
-  var keywords = ['客服', '真人', '真人客服', '人工客服', '人工', '找客服', '聯繫我們', '聯繫', '상담사', '상담원', '사람', 'agent', 'human', 'operator', 'help me', 'オペレーター', '담당자', '轉接', '轉人工'];
+  var keywords = ['客服', '真人', '真人客服', '人工客服', '人工', '找客服', '聯繫我們', '聯繫', '상담사', '상담원', '사람', 'agent', 'human', 'operator', 'help me', 'オペレーター', '담당자', '轉接', '轉人工', '轉客服', '轉做人工', '轉接客服', '人工回答', '找人工', '真人回答', '幫我轉', '請轉'];
   text = text.replace(/[\\\s]+$/g, '').trim(); // clean trailing backslash/spaces
   var lower = text.toLowerCase().trim();
   for (var i = 0; i < keywords.length; i++) {
     if (lower === keywords[i].toLowerCase()) return true;
   }
   if (lower === '0') return true;
+  return false;
+}
+
+
+function isMergeShippingRequest(text) {
+  var mergeKeywords = ["合併寄送", "合併運送", "合併出貨", "合併配送", "一起寄", "一起送", "一起出貨", "併單", "합배송", "합배", "merge ship", "combine order", "合併寄"];
+  var lower = (text || "").toLowerCase();
+  for (var i = 0; i < mergeKeywords.length; i++) {
+    if (lower.indexOf(mergeKeywords[i].toLowerCase()) > -1) return true;
+  }
   return false;
 }
 
@@ -430,6 +440,21 @@ router.post('/channeltalk', async function(req, res) {
         var allNegIds = negArr.map(function(m) { return m.id; });
         await channeltalk.addFollowers(chatId, allNegIds).catch(function() {});
       } catch(ne) {}
+    }
+
+    // Merge shipping request → immediate escalation
+    if (isMergeShippingRequest(userText)) {
+      setEscalationStep(chatId, 2);
+      var mergeMsg = {
+        "zh-TW": "合併寄送需要由客服人員為您處理喔！正在為您轉接客服 🙋‍♀️",
+        "ko": "합배송은 상담사가 직접 처리해드릴게요! 연결 중입니다 🙋‍♀️",
+        "en": "Combining shipments requires our support team! Connecting you now 🙋‍♀️",
+        "ja": "合併配送はスタッフが対応いたします！接続中です 🙋‍♀️"
+      };
+      await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: mergeMsg[detectedLang] || mergeMsg["zh-TW"] }] });
+      await connectManager(chatId, detectedLang);
+      aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "escalation", userMessage: userText.substring(0, 200), aiResponse: "합배송 요청 → 즉시 에스컬레이션", escalated: true });
+      return res.status(200).send("OK");
     }
 
     if (isEscalationRequest(userText) || trimmed === '0') {
