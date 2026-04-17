@@ -659,11 +659,20 @@ loadAllData();
 
 function loadCSScoreData() {
   var days = document.getElementById('days').value;
-  fetch('/api/analytics/cs-score-metrics?days=' + days)
-    .then(function(r) { return r.json(); })
-    .then(function(d) {
+  Promise.all([
+    fetch('/api/analytics/cs-score-metrics?days=' + days).then(function(r){ return r.json(); }),
+    fetch('/api/analytics/manager-performance?days=' + days).then(function(r){ return r.json(); }).catch(function(){ return null; })
+  ])
+    .then(function(results) {
+      var d = results[0];
+      var mgrPerf = results[1];
       if (!d.success) return;
       var container = document.getElementById('csscoreContent');
+      // Build manager name map
+      var mgrNameMap = {};
+      if (mgrPerf && mgrPerf.managers) {
+        mgrPerf.managers.forEach(function(m) { mgrNameMap[m.managerId] = m.name; });
+      }
       if (!container) return;
       cachedData.csscore = d;
 
@@ -740,7 +749,7 @@ function loadCSScoreData() {
         html += '<tr style="color:#64748b;border-bottom:1px solid #334155"><th style="padding:8px;text-align:left">Manager</th><th>Avg FRT</th><th>Within 30min</th><th>Samples</th><th>Status</th></tr>';
         d.managerResponseTime.forEach(function(m) {
           var si = m.within30Rate >= 80 ? '&#128994;' : m.within30Rate >= 50 ? '&#128993;' : '&#128308;';
-          html += '<tr style="color:white;border-bottom:1px solid #1e293b"><td style="padding:8px">' + m.managerId + '</td>';
+          html += '<tr style="color:white;border-bottom:1px solid #1e293b"><td style="padding:8px">' + (mgrNameMap[m.managerId] || m.managerId) + '</td>';
           html += '<td style="text-align:center">' + m.avgMin + 'min</td>';
           html += '<td style="text-align:center">' + m.within30Rate + '%</td>';
           html += '<td style="text-align:center">' + m.samples + '</td>';
