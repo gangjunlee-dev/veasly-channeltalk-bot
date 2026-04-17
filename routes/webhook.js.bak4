@@ -7,13 +7,10 @@ var fcrDataPath = path.join(__dirname, '..', 'data', 'fcr-tracker.json');
 function loadFCRData() {
   try { return JSON.parse(fs.readFileSync(fcrDataPath, 'utf8')); } catch(e) { return { resolved: [], reopened: [] }; }
 }
-var fcrWriteLock = false;
 function saveFCRData(data) {
   if (data.resolved.length > 2000) data.resolved = data.resolved.slice(-2000);
   if (data.reopened.length > 1000) data.reopened = data.reopened.slice(-1000);
-  if (fcrWriteLock) { console.log("[FCR] Write lock active, retry in 100ms"); setTimeout(function() { saveFCRData(data); }, 100); return; }
-  fcrWriteLock = true;
-  try { fs.writeFileSync(fcrDataPath, JSON.stringify(data, null, 2)); } finally { fcrWriteLock = false; }
+  fs.writeFileSync(fcrDataPath, JSON.stringify(data, null, 2));
 }
 function trackFCR(userId, chatId, issueType) {
   if (!userId) return;
@@ -682,18 +679,8 @@ router.post('/channeltalk', async function(req, res) {
 
         // CSAT 점수별 분기: 만족(1-2)→CES(간단), 보통(3)→CES, 불만족(4-5)→사유질문
         if (csatScore <= 2) {
-          // 만족 → CES 질문으로 편의성 측정 (데이터 수집 확대)
-          pendingCES[chatId] = { timestamp: Date.now(), chatId: chatId, userId: memberId || personId || '', managerId: '', csatScore: csatScore };
-          var cesQSatisfied = {
-            'zh-TW': '感謝您的好評！最後想請問，今天解決問題的過程容易嗎？\n1=非常困難 ~ 5=非常容易',
-            'ko': '좋은 평가 감사합니다! 마지막으로, 문제 해결 과정이 쉬웠나요?\n1=매우 어려움 ~ 5=매우 쉬움',
-            'en': 'Thanks for the great feedback! Lastly, how easy was it to resolve your issue?\n1=Very difficult ~ 5=Very easy',
-            'ja': '高評価ありがとうございます！最後に、問題解決は簡単でしたか？\n1=非常に難しい ~ 5=非常に簡単'
-          };
-          try {
-            await channeltalk.sendMessage(chatId, { blocks: [{ type: 'text', value: cesQSatisfied[detectedLang] || cesQSatisfied['zh-TW'] }] });
-            console.log('[CES] Satisfied CES question sent to chat:', chatId);
-          } catch(cesErr) { console.log('[CES] Satisfied send error:', cesErr.message); }
+          // 만족 → 추가 질문 없이 종료
+          console.log('[CSAT] Satisfied (' + csatScore + ') - no follow-up');
         } else if (csatScore === 3) {
           // 보통 → CES 질문
           pendingCES[chatId] = { timestamp: Date.now(), chatId: chatId, userId: memberId || personId || '', managerId: '', csatScore: csatScore };
@@ -1167,18 +1154,17 @@ router.post('/channeltalk', async function(req, res) {
             var hasOrderCtx = chatContext[chatId] && chatContext[chatId].lastOrderContext && (Date.now() - chatContext[chatId].lastOrderTime) < 60 * 60 * 1000;
             if (hasOrderCtx) {
               console.log("[AI] Medium confidence but order context exists - answer only, skip escalation");
-              // 주문 맥락 존재 → 경고 문구 없이 AI 답변만 전송
             } else {
               console.log("[AI] Medium confidence (" + confidence.toFixed(3) + ") - answer + auto-escalate");
-              // 답변은 보내되, 경고 문구 추가 + 에스컬레이션 진행
-              var medConfNote = {
-                "zh-TW": isBusinessHours() ? "\n\n⚠️ 以上為AI初步回覆，客服人員會再為您確認，請稍候！" : "\n\n⚠️ 以上為AI初步回覆。目前非客服時間，客服人員會在明天上班後（台灣09:00）優先為您確認！",
-                "ko": "\n\n⚠️ 위 답변은 AI 초기 응답입니다. 상담사가 확인 후 정확한 안내를 드리겠습니다!",
-                "en": "\n\n⚠️ This is an AI preliminary answer. An agent will confirm shortly!",
-                "ja": "\n\n⚠️ 上記はAIの初期回答です。担当者が確認後、正確にご案内いたします！"
+            // 답변은 보내되, 에스컬레이션도 함께 진행
+            } // close else for medium confidence order context check
+            var medConfNote = {
+              "zh-TW": isBusinessHours() ? "\n\n⚠️ 以上為AI初步回覆，客服人員會再為您確認，請稍候！" : "\n\n⚠️ 以上為AI初步回覆。目前非客服時間，客服人員會在明天上班後（台灣09:00）優先為您確認！",
+              "ko": "\n\n⚠️ 위 답변은 AI 초기 응답입니다. 상담사가 확인 후 정확한 안내를 드리겠습니다!",
+              "en": "\n\n⚠️ This is an AI preliminary answer. An agent will confirm shortly!",
+              "ja": "\n\n⚠️ 上記はAIの初期回答です。担当者が確認後、正確にご案内いたします！"
             };
-              aiAnswer += medConfNote[detectedLang] || medConfNote["zh-TW"];
-            } // close else (no order context)
+            aiAnswer += medConfNote[detectedLang] || medConfNote["zh-TW"];
           }
         } else {
           aiAnswer = aiResult;
