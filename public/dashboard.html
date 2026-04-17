@@ -658,7 +658,8 @@ function submitReview(encoded, rating) {
 loadAllData();
 
 function loadCSScoreData() {
-  fetch('/api/analytics/cs-score-metrics?days=' + currentDays)
+  var days = document.getElementById('days').value;
+  fetch('/api/analytics/cs-score-metrics?days=' + days)
     .then(function(r) { return r.json(); })
     .then(function(d) {
       if (!d.success) return;
