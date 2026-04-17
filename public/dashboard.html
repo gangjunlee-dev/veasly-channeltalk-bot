@@ -361,7 +361,7 @@ function loadStrategySection(days) {
     for (var i=0; i<metrics.length; i++) {
       var met = metrics[i];
       var icon = met.score >= 3 ? '🟢' : met.score >= 2.5 ? '🟡' : '🔴';
-      h += '<div class="strat-sub ' + sevClass(met.score) + '" onclick="this.classList.toggle('expanded')">';
+      h += '<div class="strat-sub ' + sevClass(met.score) + '" onclick="this.classList.toggle(\'expanded\')">';
       h += '<div class="sub-title">' + icon + ' ' + met.name + ' <span style="float:right;">' + met.score.toFixed(1) + '/5</span></div>';
       h += '<div class="sub-detail">' + met.detail + ' | 가중치 ' + (met.weight*100) + '%</div></div>';
     }
@@ -378,7 +378,7 @@ function loadStrategySection(days) {
     h += '<div class="strat-problems"><h2>🔍 핵심 문제점 Top 5</h2><div class="prob-cards">';
     for (var p=0; p<problems.length; p++) {
       var pr = problems[p];
-      h += '<div class="prob-card" onclick="this.classList.toggle('expanded')">';
+      h += '<div class="prob-card" onclick="this.classList.toggle(\'expanded\')">';
       h += '<div class="prob-header"><span class="prob-sev prob-'+pr.sev.toLowerCase()+'">'+pr.sev+'</span> '+pr.icon+' #'+pr.rank+' '+pr.title+'</div>';
       h += '<div class="prob-body"><b>원인:</b> '+pr.cause+'<br><b>영향:</b> '+pr.impact+'</div></div>';
     }
