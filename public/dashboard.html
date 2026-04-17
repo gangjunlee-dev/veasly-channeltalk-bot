@@ -287,11 +287,11 @@ function loadManagerData() {
 
       // Stats row
       html += '<div class="grid" style="padding:16px 0 0;margin:0;">';
-      html += miniCard('답변 수', m.totalReplies, 'blue');
-      html += miniCard('담당 채팅', m.uniqueChats, 'purple');
-      html += miniCard('평균 답변길이', m.avgReplyLength + '자', 'cyan');
+      html += miniCard('답변 수', m.totalReplies, 'blue', '💬 해당 매니저가 고객에게 보낸 총 메시지 수입니다.');
+      html += miniCard('담당 채팅', m.uniqueChats, 'purple', '🗂️ 해당 매니저가 참여한 고유 채팅 수입니다. 한 채팅에 여러 메시지를 보내도 1건으로 집계됩니다.');
+      html += miniCard('평균 답변길이', m.avgReplyLength + '자', 'cyan', '📏 매니저 답변의 평균 글자 수입니다. 너무 짧으면 정보 부족, 너무 길면 가독성 저하. 50~200자가 적정 범위입니다.');
       var rtColor = m.avgResponseTimeMin > 60 ? 'red' : m.avgResponseTimeMin > 30 ? 'yellow' : 'green';
-      html += miniCard('평균 응답시간', m.avgResponseTimeMin > 0 ? m.avgResponseTimeMin + '분' : '-', rtColor);
+      html += miniCard('평균 응답시간', m.avgResponseTimeMin > 0 ? m.avgResponseTimeMin + '분' : '-', rtColor, '⏱️ 고객 메시지 후 매니저가 첫 응답하기까지 평균 시간입니다. 30분 이내가 목표이며, 60분 초과 시 개선이 필요합니다.');
       html += '</div>';
 
       // AI Quality Scores (if available)
@@ -312,11 +312,11 @@ function loadManagerData() {
         var aiClass = aiTotal >= 20 ? 'score-high' : aiTotal >= 15 ? 'score-mid' : 'score-low';
         html += '<span class="score-badge ' + aiClass + '">' + aiTotal.toFixed(1) + '/25</span></div>';
         html += '<div class="radar-scores">';
-        html += radarItem('문제해결', (avg.resolution/n).toFixed(1));
-        html += radarItem('응대태도', (avg.attitude/n).toFixed(1));
-        html += radarItem('정보정확', (avg.accuracy/n).toFixed(1));
-        html += radarItem('응답속도', (avg.responsiveness/n).toFixed(1));
-        html += radarItem('전문성', (avg.professionalism/n).toFixed(1));
+        html += radarItem('문제해결 💡', (avg.resolution/n).toFixed(1));
+        html += radarItem('응대태도 🤝', (avg.attitude/n).toFixed(1));
+        html += radarItem('정보정확 ✅', (avg.accuracy/n).toFixed(1));
+        html += radarItem('응답속도 ⏱️', (avg.responsiveness/n).toFixed(1));
+        html += radarItem('전문성 🎓', (avg.professionalism/n).toFixed(1));
         html += '</div></div>';
       } else {
         html += '<div style="margin-top:12px;padding:12px;background:#0f172a;border-radius:8px;color:#64748b;font-size:13px;text-align:center;">AI 품질 채점 데이터 수집 중...</div>';
@@ -379,10 +379,10 @@ function loadAIData() {
       var badPct = Math.round((aiReviews.bad / aiReviews.total) * 100);
       var fixPct = Math.round((aiReviews.fix / aiReviews.total) * 100);
       html += '<div class="grid">';
-      html += card('수동 평가 합계', aiReviews.total, '건', 'blue', '대시보드 수동평가');
-      html += card('정확', aiReviews.good, '건 (' + goodPct + '%)', 'green', '올바른 답변');
-      html += card('부정확', aiReviews.bad, '건 (' + badPct + '%)', 'red', '잘못된 답변');
-      html += card('수정필요', aiReviews.fix, '건 (' + fixPct + '%)', 'yellow', '개선 가능');
+      html += card('수동 평가 합계', aiReviews.total, '건', 'blue', '대시보드 수동평가', '📝 대시보드에서 매니저가 수동으로 AI 답변을 검토한 총 건수입니다. 정확/부정확/수정필요로 분류됩니다.');
+      html += card('정확', aiReviews.good, '건 (' + goodPct + '%)', 'green', '올바른 답변', '✅ AI가 고객 질문에 정확하게 답변한 건수입니다. 비율이 80% 이상이면 우수합니다.');
+      html += card('부정확', aiReviews.bad, '건 (' + badPct + '%)', 'red', '잘못된 답변', '❌ AI가 잘못된 정보를 제공한 건수입니다. 이 항목이 높으면 Pinecone FAQ 데이터를 점검해야 합니다.');
+      html += card('수정필요', aiReviews.fix, '건 (' + fixPct + '%)', 'yellow', '개선 가능', '⚠️ 답변이 틀리지는 않지만 더 정확하거나 자세한 답변이 가능한 건수입니다. FAQ 보강을 통해 개선할 수 있습니다.');
       html += '</div>';
     }
 
@@ -390,9 +390,9 @@ function loadAIData() {
     if (aiConv && aiConv.success) {
       var st = aiConv.stats || {};
       html += '<div class="grid">';
-      html += card('오늘 AI 대화', st.today || 0, '건', 'blue', '금일 처리량');
-      html += card('전체 AI 대화', st.total || 0, '건', 'cyan', '누적');
-      html += card('에스컬레이션률', (st.escalatedRate || 0) + '%', '', st.escalatedRate > 20 ? 'red' : 'green', '목표: 20% 이하');
+      html += card('오늘 AI 대화', st.today || 0, '건', 'blue', '금일 처리량', '📅 오늘 하루 동안 AI가 처리한 대화 건수입니다. 일별 추이를 통해 트래픽 패턴을 파악할 수 있습니다.');
+      html += card('전체 AI 대화', st.total || 0, '건', 'cyan', '누적', '📈 시스템 가동 이후 AI가 처리한 전체 대화 누적 건수입니다.');
+      html += card('에스컬레이션률', (st.escalatedRate || 0) + '%', '', st.escalatedRate > 20 ? 'red' : 'green', '목표: 20% 이하', '🔺 AI가 답변하지 못해 매니저에게 전달된 비율입니다. 20% 이하가 목표이며, 높으면 FAQ 지식베이스 보강이 필요합니다. Confidence 0.6 미만 시 자동 에스컬레이션됩니다.');
 
       // Type distribution
       var types = {};
@@ -489,12 +489,12 @@ function loadCSATData() {
     if (csat && csat.success) {
       var starColor = csat.averageScore >= 4 ? 'green' : csat.averageScore >= 3 ? 'yellow' : 'red';
       html += '<div class="grid">';
-      html += card('CSAT 평균', csat.averageScore || '-', '/ 5', starColor, '목표: 4.0 이상');
-      html += card('총 응답', csat.totalResponses, '건', 'blue', '고객 피드백');
+      html += card('CSAT 평균', csat.averageScore || '-', '/ 5', starColor, '목표: 4.0 이상', '⭐ 고객 만족도 평균 점수입니다. 1점=매우만족, 5점=매우불만족. 상담 종료 후 자동 발송되는 설문 기반입니다. 4.0 이상이 업계 우수 기준입니다.');
+      html += card('총 응답', csat.totalResponses, '건', 'blue', '고객 피드백', '📮 CSAT 설문에 실제로 응답한 고객 수입니다. 응답률이 낮으면 설문 시점이나 문구를 조정해볼 수 있습니다.');
       var highSat = (csat.distribution ? (csat.distribution[1] || 0) + (csat.distribution[2] || 0) : 0);
       var lowSat = (csat.distribution ? (csat.distribution[4] || 0) + (csat.distribution[5] || 0) : 0);
-      html += card('만족 (1-2점)', highSat, '건', 'green', '긍정 평가');
-      html += card('불만 (4-5점)', lowSat, '건', lowSat > 0 ? 'red' : 'green', '개선 필요');
+      html += card('만족 (1-2점)', highSat, '건', 'green', '긍정 평가', '😊 1점(매우만족) + 2점(만족) 응답 합계입니다. 전체 응답 대비 비율이 70% 이상이면 서비스 품질이 우수합니다.');
+      html += card('불만 (4-5점)', lowSat, '건', lowSat > 0 ? 'red' : 'green', '개선 필요', '😟 4점(불만족) + 5점(매우불만족) 응답 합계입니다. 불만 고객의 피드백을 분석하여 반복되는 문제를 개선해야 합니다.');
       html += '</div>';
 
       if (csat.totalResponses > 0) {
@@ -537,9 +537,13 @@ function card(label, value, unit, color, sub, detail) {
     var clickAttr = detail ? ' onclick="toggleCardDetail(this)"' : '';
     return '<div class="card"' + clickAttr + '>' + arrowHtml + '<div class="label">' + label + '</div><div class="value" style="color:' + (colors[color] || colors.blue) + '">' + value + ' <small>' + unit + '</small></div><div class="sub">' + sub + '</div>' + detailHtml + '</div>';
   }
-function miniCard(label, value, color) {
-  return '<div style="background:#0f172a;padding:10px 14px;border-radius:8px;text-align:center;"><div style="font-size:11px;color:#64748b;">' + label + '</div><div style="font-size:18px;font-weight:700;margin-top:4px;" class="' + color + '">' + value + '</div></div>';
-}
+function miniCard(label, value, color, detail) {
+    var colors = { green: '#10b981', blue: '#3b82f6', red: '#ef4444', yellow: '#f59e0b', purple: '#8b5cf6', cyan: '#22d3ee' };
+    var detailHtml = detail ? '<div class="card-detail">' + detail + '</div>' : '';
+    var arrowHtml = detail ? '<span class="card-arrow" style="top:6px;right:6px;font-size:8px">▼</span>' : '';
+    var clickAttr = detail ? ' onclick="toggleCardDetail(this)"' : '';
+    return '<div class="card" style="padding:12px"' + clickAttr + '>' + arrowHtml + '<div class="label" style="font-size:10px">' + label + '</div><div class="value" style="font-size:20px;color:' + (colors[color] || colors.blue) + '">' + value + '</div>' + detailHtml + '</div>';
+  }
 function radarItem(label, value) {
   var v = parseFloat(value);
   var color = v >= 4 ? '#22c55e' : v >= 3 ? '#eab308' : '#ef4444';
@@ -722,12 +726,15 @@ function loadCSScoreData() {
       ];
       metrics.forEach(function(m) {
         var mColor = m.score >= 4 ? '#10b981' : m.score >= 3 ? '#f59e0b' : '#ef4444';
-        html += '<div style="background:#1e293b;border-radius:12px;padding:16px;text-align:center;border-left:4px solid ' + mColor + '">';
+        html += '<div style="background:#1e293b;border-radius:12px;padding:16px;text-align:center;border-left:4px solid ' + mColor + ';cursor:pointer" onclick="var tip=this.querySelector('.metric-tip');if(tip)tip.style.display=tip.style.display===\'none\'?\'block\':\'none\'">';
         html += '<div style="font-size:24px;margin-bottom:4px">' + m.icon + '</div>';
         html += '<div style="font-size:11px;color:#94a3b8;margin-bottom:8px">' + m.label + '</div>';
         html += '<div style="font-size:28px;font-weight:700;color:white">' + m.value + '</div>';
         html += '<div style="font-size:10px;color:#64748b">' + m.detail + '</div>';
+        var csMetricTips = {'첫 응답 속도':'⚡ FRT: 고객 메시지 후 매니저 첫 응답까지 시간. 30분 이내 80% 목표. 가중치 20%','첫 접촉 해결률':'🎯 FCR: 1회 상담으로 해결된 비율. 72시간 내 재문의 시 미해결 집계. 70% 목표. 가중치 25%','고객 만족도':'⭐ CSAT: 1~5점 만족도. 1=최고. 3.5 이상 목표. 가중치 20%','고객 노력 점수':'💪 CES: 문제 해결 용이성. 높을수록 좋음. 3.5 이상 목표. 가중치 15%','미응답 종료율':'📭 매니저 미응답으로 자동 종료된 비율. 10% 이하 목표. 가중치 20%'};
+        var tipText = csMetricTips[m.label] || '';
         html += '<div style="margin-top:8px;font-size:11px;color:' + mColor + ';font-weight:600">점수: ' + m.score.toFixed(1) + '/5 (목표 ' + m.target + ')</div>';
+        if (tipText) { html += '<div style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid #334155;font-size:10px;color:#94a3b8;line-height:1.5" class="metric-tip">' + tipText + '</div>'; }
         html += '</div>';
       });
       html += '</div>';
