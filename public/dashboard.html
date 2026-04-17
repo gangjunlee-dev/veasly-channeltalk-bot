@@ -24,6 +24,11 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; padding: 0 32px 16px; }
 .card { background: #1e293b; border-radius: 12px; padding: 20px; border: 1px solid #334155; transition: transform 0.2s; }
 .card:hover { transform: translateY(-2px); }
+.card { cursor: pointer; position: relative; }
+.card-detail { display: none; margin-top: 12px; padding-top: 12px; border-top: 1px solid #334155; font-size: 12px; color: #94a3b8; line-height: 1.6; }
+.card-detail.open { display: block; }
+.card-arrow { position: absolute; top: 12px; right: 12px; font-size: 10px; color: #475569; transition: transform 0.2s; }
+.card-arrow.open { transform: rotate(180deg); }
 .card .label { font-size: 12px; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; }
 .card .value { font-size: 28px; font-weight: 700; margin-top: 8px; }
 .card .sub { font-size: 13px; color: #64748b; margin-top: 4px; }
@@ -202,19 +207,19 @@ function loadOverview() {
     var escalationRate = r.userMessages > 0 ? Math.round((escalationCount / r.userMessages) * 100) : 0;
 
     var html = '<div class="grid">';
-    html += card('총 상담', r.totalChats, '건', 'blue', r.period);
-    html += card('AI 봇 응답', r.botMessages, '건', 'green', '응답률 ' + botRate + '%');
-    html += card('매니저 응답', r.managerMessages, '건', 'yellow', 'AI 해결률 ' + aiResolveRate + '%');
-    html += card('에스컬레이션', escalationCount, '건', escalationRate > 20 ? 'red' : 'yellow', '비율 ' + escalationRate + '%');
-    html += card('미해결 상담', r.unresolvedChats, '건', r.unresolvedChats > 10 ? 'red' : 'green', r.unresolvedChats > 10 ? '우선 처리 필요' : '양호');
+    html += card('총 상담', r.totalChats, '건', 'blue', r.period, '📊 선택한 기간 동안 접수된 전체 상담 건수입니다. 고객 메시지, AI 응답, 매니저 응답을 모두 포함합니다.');
+    html += card('AI 봇 응답', r.botMessages, '건', 'green', '응답률 ' + botRate + '%', '🤖 AI가 자동으로 처리한 메시지 수입니다. 응답률 = AI 응답 / 전체 메시지. 높을수록 AI가 효율적으로 운영되고 있습니다.');
+    html += card('매니저 응답', r.managerMessages, '건', 'yellow', 'AI 해결률 ' + aiResolveRate + '%', '👨‍💼 매니저가 직접 응답한 건수입니다. AI 해결률 = AI 응답 / (AI+매니저). 이 비율이 높을수록 AI로 충분히 처리되고 있다는 의미입니다.');
+    html += card('에스컬레이션', escalationCount, '건', escalationRate > 20 ? 'red' : 'yellow', '비율 ' + escalationRate + '%', '🔺 AI가 처리하지 못해 매니저에게 전달된 건수입니다. 비율 = 에스컬레이션 / 사용자 메시지. 20% 이상이면 FAQ 보강이 필요합니다.');
+    html += card('미해결 상담', r.unresolvedChats, '건', r.unresolvedChats > 10 ? 'red' : 'green', r.unresolvedChats > 10 ? '우선 처리 필요' : '양호', '⏳ 아직 종료되지 않은 열린 상담입니다. 10건 이상이면 빠른 처리가 필요합니다. 48시간 경과 시 종료 예고, 60시간 경과 시 자동 종료됩니다.');
     if (r.channelStats) {
       var cs = r.channelStats;
       var total = cs.line + cs.web + cs.other;
-      html += card('LINE', cs.line, '건 (' + (total > 0 ? (cs.line/total*100).toFixed(0) : 0) + '%)', 'green', 'LINE 메신저');
-      html += card('웹사이트', cs.web, '건 (' + (total > 0 ? (cs.web/total*100).toFixed(0) : 0) + '%)', 'blue', 'veasly.com');
+      html += card('LINE', cs.line, '건 (' + (total > 0 ? (cs.line/total*100).toFixed(0) : 0) + '%)', 'green', 'LINE 메신저', '💚 LINE 메신저를 통해 접수된 상담 건수입니다. 대만 고객의 주요 유입 채널입니다.');
+      html += card('웹사이트', cs.web, '건 (' + (total > 0 ? (cs.web/total*100).toFixed(0) : 0) + '%)', 'blue', 'veasly.com', '🌐 veasly.com 웹사이트 채팅을 통해 접수된 상담입니다.');
     }
     if (autoClose && autoClose.success) {
-      html += card('CSAT 대기', autoClose.csatPending, '건', autoClose.csatPending > 10 ? 'yellow' : 'green', '24h 후 자동종료');
+      html += card('CSAT 대기', autoClose.csatPending, '건', autoClose.csatPending > 10 ? 'yellow' : 'green', '24h 후 자동종료', '📋 CSAT 설문이 발송되었지만 아직 응답하지 않은 상담 건수입니다. 48시간 후 종료 예고 메시지가 발송됩니다.');
     }
     html += '</div>';
 
@@ -525,9 +530,13 @@ function loadCSATData() {
 }
 
 // ===== HELPERS =====
-function card(label, value, unit, color, sub) {
-  return '<div class="card"><div class="label">' + label + '</div><div class="value ' + color + '">' + value + '<span style="font-size:14px;color:#64748b;"> ' + unit + '</span></div><div class="sub">' + sub + '</div></div>';
-}
+function card(label, value, unit, color, sub, detail) {
+    var colors = { green: '#10b981', blue: '#3b82f6', red: '#ef4444', yellow: '#f59e0b', purple: '#8b5cf6' };
+    var detailHtml = detail ? '<div class="card-detail">' + detail + '</div>' : '';
+    var arrowHtml = detail ? '<span class="card-arrow">▼</span>' : '';
+    var clickAttr = detail ? ' onclick="toggleCardDetail(this)"' : '';
+    return '<div class="card"' + clickAttr + '>' + arrowHtml + '<div class="label">' + label + '</div><div class="value" style="color:' + (colors[color] || colors.blue) + '">' + value + ' <small>' + unit + '</small></div><div class="sub">' + sub + '</div>' + detailHtml + '</div>';
+  }
 function miniCard(label, value, color) {
   return '<div style="background:#0f172a;padding:10px 14px;border-radius:8px;text-align:center;"><div style="font-size:11px;color:#64748b;">' + label + '</div><div style="font-size:18px;font-weight:700;margin-top:4px;" class="' + color + '">' + value + '</div></div>';
 }
@@ -652,6 +661,14 @@ function submitReview(encoded, rating) {
       setTimeout(closeReview, 1500);
     }
   }).catch(function(e) { alert('Error: ' + e.message); });
+}
+
+// Card detail toggle
+function toggleCardDetail(el) {
+  var detail = el.querySelector(".card-detail");
+  var arrow = el.querySelector(".card-arrow");
+  if (detail) { detail.classList.toggle("open"); }
+  if (arrow) { arrow.classList.toggle("open"); }
 }
 
 // Initial load
