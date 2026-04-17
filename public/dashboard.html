@@ -77,6 +77,7 @@ td { padding: 10px 8px; border-bottom: 1px solid #0f172a; font-size: 13px; }
 .loading { text-align: center; padding: 60px; color: #64748b; font-size: 18px; }
 .pill { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
 @media (max-width: 768px) { .charts { grid-template-columns: 1fr; } .grid { grid-template-columns: repeat(2, 1fr); } .chart-card.full { grid-column: span 1; } .radar-scores { grid-template-columns: repeat(3, 1fr); } }
+.metric-tip { display:none; margin-top:10px; padding:10px; background:#0f172a; border-radius:8px; font-size:12px; color:#94a3b8; line-height:1.6; border:1px solid #334155; }
 </style>
 </head>
 <body>
@@ -722,13 +723,8 @@ function submitReview(encoded, rating) {
 
 // Card detail toggle
 function toggleMetricTip(el) {
-  var tips = el.querySelectorAll("div");
-  for (var i = 0; i < tips.length; i++) {
-    if (tips[i].className === "metric-tip") {
-      tips[i].style.display = tips[i].style.display === "none" ? "block" : "none";
-      break;
-    }
-  }
+  var tip = el.querySelector(".metric-tip");
+  if (tip) { tip.style.display = (tip.style.display === "none" || tip.style.display === "") ? "block" : "none"; }
 }
 
 function toggleCardDetail(el) {
@@ -789,7 +785,7 @@ function loadCSScoreData() {
       ];
       metrics.forEach(function(m) {
         var mColor = m.score >= 4 ? '#10b981' : m.score >= 3 ? '#f59e0b' : '#ef4444';
-        html += '<div style="background:#1e293b;border-radius:12px;padding:16px;text-align:center;border-left:4px solid ' + mColor + ';cursor:pointer" onclick="var t=this.getElementsByClassName(String.fromCharCode(109,101,116,114,105,99,45,116,105,112))[0];if(t)t.style.display=t.style.display===String.fromCharCode(110,111,110,101)?String.fromCharCode(98,108,111,99,107):String.fromCharCode(110,111,110,101)">';
+        html += '<div style="background:#1e293b;border-radius:12px;padding:16px;text-align:center;border-left:4px solid ' + mColor + ';cursor:pointer" onclick="toggleMetricTip(this)">';
         html += '<div style="font-size:24px;margin-bottom:4px">' + m.icon + '</div>';
         html += '<div style="font-size:11px;color:#94a3b8;margin-bottom:8px">' + m.label + '</div>';
         html += '<div style="font-size:28px;font-weight:700;color:white">' + m.value + '</div>';
