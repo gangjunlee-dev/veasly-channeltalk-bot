@@ -5,7 +5,7 @@
  * 2) 정확한 배송비 정보 벡터 등록
  */
 require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
-const ai = require('../lib/ai');
+const ai = require('../lib/ai-engine');
 
 const WRONG_IDS = [
   // 기존에 등록된 배송비 관련 벡터 ID들 (가능한 패턴 모두 커버)
