@@ -563,7 +563,7 @@ router.post('/channeltalk', async function(req, res) {
 
         // Clear CSAT pending
         // Clear CSAT pending from file
-        try { var csatFile = require("path").join(__dirname, "..", "data", "csat-sent.json"); var csatData = JSON.parse(require("fs").readFileSync(csatFile, "utf8")); delete csatData[chatId]; require("fs").writeFileSync(csatFile, JSON.stringify(csatData), "utf8"); } catch(ce) {}
+        try { var csatFile = require("path").join(__dirname, "..", "data", "csat-sent.json"); var csatData = JSON.parse(require("fs").readFileSync(csatFile, "utf8")); csatData[chatId] = { responded: true, respondedAt: Date.now() }; require("fs").writeFileSync(csatFile, JSON.stringify(csatData), "utf8"); } catch(ce) {}
 
         // Send CES follow-up question
         pendingCES[chatId] = { timestamp: Date.now(), chatId: chatId, userId: memberId || personId || "", managerId: "", csatScore: csatScore };
