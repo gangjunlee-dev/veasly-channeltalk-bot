@@ -155,7 +155,7 @@ function isBusinessHours() {
 }
 
 function isEscalationRequest(text) {
-  var keywords = ['客服', '真人', '真人客服', '人工客服', '人工', '找客服', '聯繫我們', '聯繫', '상담사', '상담원', '사람', 'agent', 'human', 'operator', 'help me', 'オペレーター', '담당자', '轉接', '轉人工', '轉客服', '轉做人工', '轉接客服', '人工回答', '找人工', '真人回答', '幫我轉', '請轉'];
+  var keywords = ['客服', '真人', '真人客服', '人工客服', '人工', '找客服', '聯繫我們', '聯繫', '상담사', '상담원', '사람', 'agent', 'human', 'operator', 'help me', 'オペレーター', '담당자', '轉接', '轉人工', '轉客服', '轉做人工', '轉接客服', '人工回答', '找人工', '真人回答', '幫我轉', '請轉', '轉接真人', '我要客服', '找真人', '需要客服', '聯絡客服', '請幫我', '幫幫我', '직원', '직원연결', '사람연결', 'talk to human', 'real person', 'live agent', 'カスタマーサービス', '人に繋いで'];
   text = text.replace(/[\\\s]+$/g, '').trim(); // clean trailing backslash/spaces
   var lower = text.toLowerCase().trim();
   for (var i = 0; i < keywords.length; i++) {
@@ -1051,7 +1051,7 @@ router.post('/channeltalk', async function(req, res) {
 
       // Log AI conversation
       var aiEscalated = false;
-      var escalateKeywords = ["轉接客服", "轉接", "客服確認", "客服人員", "為您確認", "幫您確認", "담당자를 연결", "담당자에게", "상담사", "connect you with", "support team", "担当者におつなぎ", "担当者に"];
+      var escalateKeywords = ["轉接客服", "轉接", "客服確認", "客服人員", "為您確認", "幫您確認", "需要客服", "建議聯繫", "請聯繫客服", "無法為您", "담당자를 연결", "담당자에게", "상담사", "확인이 필요", "상담원", "connect you with", "support team", "contact support", "unable to help", "担当者におつなぎ", "担当者に", "お問い合わせ"];
       var needEscalate = false;
       var mediumConfidenceEsc = (confidence > 0 && confidence < 0.6);
       for (var ek = 0; ek < escalateKeywords.length; ek++) {
