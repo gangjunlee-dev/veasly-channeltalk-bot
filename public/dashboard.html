@@ -1110,6 +1110,7 @@ function loadCSScoreData() {
 // CS Score 트렌드 로딩
 async function loadCSScoreTrend() {
   try {
+  try {
     const res = await fetch('/api/analytics/cs-score-trend?days=30');
     const data = await res.json();
     if (!data.success) return;
@@ -1149,10 +1150,13 @@ async function loadCSScoreTrend() {
   } catch(e) {
     console.error('CS Score trend load error:', e);
   }
+
+  } catch(e) { /* panel not in current view */ }
 }
 
 // FAQ 추천 로딩
 async function loadFAQRecommendations() {
+  try {
   try {
     const res = await fetch('/api/analytics/faq-recommendations?days=7');
     const data = await res.json();
@@ -1173,10 +1177,13 @@ async function loadFAQRecommendations() {
   } catch(e) {
     console.error('FAQ recommendation load error:', e);
   }
+
+  } catch(e) { /* panel not in current view */ }
 }
 
 // 사업 지표 로딩
 async function loadBusinessMetrics() {
+  try {
   try {
     const res = await fetch('/api/analytics/business-metrics?weeks=12');
     const data = await res.json();
@@ -1209,6 +1216,8 @@ async function loadBusinessMetrics() {
   } catch(e) {
     console.error('Business metrics load error:', e);
   }
+
+  } catch(e) { /* panel not in current view */ }
 }
 
 // CS Score 탭 활성화 시 모두 로딩
@@ -1237,6 +1246,7 @@ async function loadBusinessMetrics() {
 
 <script>
 async function loadDataHealth() {
+  try {
   try {
     var res = await fetch('/api/analytics/data-health');
     var data = await res.json();
@@ -1295,6 +1305,8 @@ async function loadDataHealth() {
     
     el.innerHTML = html;
   } catch(e) { console.error('Data health load error:', e); }
+
+  } catch(e) { /* panel not in current view */ }
 }
 
 // 페이지 로드 시 실행
