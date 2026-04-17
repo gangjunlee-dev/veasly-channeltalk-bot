@@ -256,6 +256,9 @@ function loadManagerData() {
     var reviewData = {};
     if (aiReviews && aiReviews.recent) {
       aiReviews.recent.forEach(function(rev) {
+        // Only process AI auto-scored reviews (have scores.totalScore)
+        if (!rev.scores || !rev.scores.totalScore) return;
+        if (!rev.managerId) return;
         if (!reviewData[rev.managerId]) reviewData[rev.managerId] = { scores: [], count: 0 };
         reviewData[rev.managerId].scores.push(rev.scores);
         reviewData[rev.managerId].count++;
