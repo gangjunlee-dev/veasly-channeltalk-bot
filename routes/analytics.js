@@ -1,4 +1,5 @@
 var express = require('express');
+var path = require('path');
 var fs = require('fs');
 var mgrStats = require('../lib/manager-stats');
 var aiLog = require('../lib/ai-log');
@@ -485,7 +486,8 @@ router.get('/cs-score-metrics', async function(req, res) {
   // === CES Data ===
   var cesData = [];
   try { cesData = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'data', 'ces-results.json'), 'utf8')); } catch(e) {}
-  var recentCES = cesData.filter(function(c) { return new Date(c.timestamp) >= cutoff; });
+  var cesCutoff = new Date(Date.now() - days * 86400000);
+  var recentCES = cesData.filter(function(c) { return new Date(c.timestamp) >= cesCutoff; });
   var cesAvg = 0;
   if (recentCES.length > 0) {
     cesAvg = recentCES.reduce(function(sum, c) { return sum + c.score; }, 0) / recentCES.length;
@@ -495,16 +497,17 @@ router.get('/cs-score-metrics', async function(req, res) {
   // === FCR Data ===
   var fcrData = { resolved: [], reopened: [] };
   try { fcrData = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'data', 'fcr-tracker.json'), 'utf8')); } catch(e) {}
-  var recentResolved = (fcrData.resolved || []).filter(function(r) { return r.timestamp >= cutoff.getTime(); });
-  var recentReopened = (fcrData.reopened || []).filter(function(r) { return r.timestamp >= cutoff.getTime(); });
+  var fcrCutoff = Date.now() - days * 86400000;
+  var recentResolved = (fcrData.resolved || []).filter(function(r) { return r.timestamp >= fcrCutoff; });
+  var recentReopened = (fcrData.reopened || []).filter(function(r) { return r.timestamp >= fcrCutoff; });
   var fcrRate = recentResolved.length > 0 ? Math.round((1 - recentReopened.length / recentResolved.length) * 100) : 0;
 
   // === Integrated CS Quality Score (5-point scale) ===
   // Weights: FRT 20%, FCR 25%, CSAT 20%, CES 15%, No-Reply 20%
   var frtScore = 0;
-  if (typeof responseTime !== 'undefined' && responseTime.within30MinRate >= 80) frtScore = 5;
-  else if (typeof responseTime !== 'undefined' && responseTime.within30MinRate >= 60) frtScore = 3.5;
-  else if (typeof responseTime !== 'undefined' && responseTime.within30MinRate >= 40) frtScore = 2.5;
+  if (within30Rate >= 80) frtScore = 5;
+  else if (within30Rate >= 60) frtScore = 3.5;
+  else if (within30Rate >= 40) frtScore = 2.5;
   else frtScore = 1.5;
 
   var fcrScore = 0;
@@ -526,12 +529,10 @@ router.get('/cs-score-metrics', async function(req, res) {
   var cesScoreVal = cesAvg > 0 ? cesAvg : 2.5; // default if no data
 
   var noReplyScore = 0;
-  if (typeof noReplyClose !== 'undefined') {
-    if (noReplyClose.rate <= 10) noReplyScore = 5;
-    else if (noReplyClose.rate <= 20) noReplyScore = 4;
-    else if (noReplyClose.rate <= 30) noReplyScore = 3;
-    else noReplyScore = 1.5;
-  }
+  if (noReplyRate <= 10) noReplyScore = 5;
+  else if (noReplyRate <= 20) noReplyScore = 4;
+  else if (noReplyRate <= 30) noReplyScore = 3;
+  else noReplyScore = 1.5;
 
   var integratedScore = (frtScore * 0.20) + (fcrScore * 0.25) + (csatScore * 0.20) + (cesScoreVal * 0.15) + (noReplyScore * 0.20);
   integratedScore = Math.round(integratedScore * 100) / 100;
@@ -574,6 +575,25 @@ router.get('/cs-score-metrics', async function(req, res) {
   } catch(e) {
     res.status(500).json({ success: false, error: e.message });
   }
+});
+
+
+// === CES API ===
+router.get('/ces', function(req, res) {
+  try {
+    var cesPath2 = path.join(__dirname, '..', 'data', 'ces-results.json');
+    var data = [];
+    try { data = JSON.parse(fs.readFileSync(cesPath2, 'utf8')); } catch(e) {}
+    var days = parseInt(req.query.days) || 30;
+    var cutoff = Date.now() - (days * 24 * 60 * 60 * 1000);
+    var recent = data.filter(function(d) { return new Date(d.timestamp).getTime() > cutoff; });
+    var total = recent.length;
+    var avg = 0;
+    if (total > 0) { var sum = 0; recent.forEach(function(d) { sum += d.score; }); avg = parseFloat((sum / total).toFixed(2)); }
+    var dist = { 1:0, 2:0, 3:0, 4:0, 5:0 };
+    recent.forEach(function(d) { if (d.score >= 1 && d.score <= 5) dist[d.score]++; });
+    res.json({ success: true, average: avg, total: total, distribution: dist, recent: recent.slice(-20).reverse() });
+  } catch(e) { res.json({ success: false, error: e.message }); }
 });
 
 module.exports = router;
