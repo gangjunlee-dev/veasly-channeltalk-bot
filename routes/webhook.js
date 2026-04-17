@@ -308,7 +308,21 @@ router.post('/channeltalk', async function(req, res) {
         }, 3000);
 
         // AI quality review for manager conversations
-        if (closedChat && stats_managerId) {
+        if (closedChat) {
+          // Fallback: extract managerId from chat messages if stats missing
+          if (!stats_managerId) {
+            try {
+              var _msgData = await channeltalk.getChatMessages(chatId0, 50);
+              var _msgs = (_msgData.messages || _msgData || []);
+              for (var _mi = 0; _mi < _msgs.length; _mi++) {
+                if (_msgs[_mi].personType === 'manager' && _msgs[_mi].personId) {
+                  stats_managerId = _msgs[_mi].personId;
+                  break;
+                }
+              }
+            } catch(_me) {}
+          }
+          if (stats_managerId) {
           (async function(cid, mid) {
             try {
               var msgData = await channeltalk.getChatMessages(cid, 50);
@@ -323,6 +337,7 @@ router.post('/channeltalk', async function(req, res) {
               }
             } catch(revErr) { console.error("[AIReview] Trigger error:", revErr.message); }
           })(chatId0, stats_managerId);
+          }
         }
         delete managerActive[chatId0];
         delete chatContext[chatId0];
