@@ -1127,7 +1127,7 @@ router.post('/channeltalk', async function(req, res) {
             // Auto-escalate on very low confidence
             try {
               var lowConfMsgs = {
-                "zh-TW": "您的問題需要客服人員協助，正在為您轉接，請稍候 🙏",
+                "zh-TW": isBusinessHours() ? "您的問題需要客服人員協助，正在為您轉接，請稍候 🙏" : "您的問題需要客服人員協助 🙏 目前非客服時間，請先留下詳細問題，客服人員會在明天上班後（台灣09:00）優先回覆您！",
                 "ko": "해당 질문은 상담사의 도움이 필요합니다. 연결 중이니 잠시만 기다려주세요 🙏",
                 "en": "Your question needs agent assistance. Connecting you now, please wait 🙏",
                 "ja": "担当者におつなぎいたします。少々お待ちください 🙏"
@@ -1152,7 +1152,7 @@ router.post('/channeltalk', async function(req, res) {
             // 답변은 보내되, 에스컬레이션도 함께 진행
             } // close else for medium confidence order context check
             var medConfNote = {
-              "zh-TW": "\n\n⚠️ 以上為AI初步回覆，客服人員會再為您確認，請稍候！",
+              "zh-TW": isBusinessHours() ? "\n\n⚠️ 以上為AI初步回覆，客服人員會再為您確認，請稍候！" : "\n\n⚠️ 以上為AI初步回覆。目前非客服時間，客服人員會在明天上班後（台灣09:00）優先為您確認！",
               "ko": "\n\n⚠️ 위 답변은 AI 초기 응답입니다. 상담사가 확인 후 정확한 안내를 드리겠습니다!",
               "en": "\n\n⚠️ This is an AI preliminary answer. An agent will confirm shortly!",
               "ja": "\n\n⚠️ 上記はAIの初期回答です。担当者が確認後、正確にご案内いたします！"
@@ -1327,7 +1327,7 @@ setInterval(async function() {
       console.log('[ESCALATION-WARN] 10min no reply - chatId:', cid);
       esc.warned10 = true;
     }
-    if (elapsedMin >= 30 && !esc.waitingSent) {
+    if (elapsedMin >= 20 && !esc.waitingSent) {
       sendWaitingMessage(cid, esc.lang || 'zh-TW');
       esc.waitingSent = true;
     }
