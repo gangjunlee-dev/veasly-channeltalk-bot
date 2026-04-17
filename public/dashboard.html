@@ -691,7 +691,7 @@ function loadCSScoreData() {
       html += '<div style="font-size:72px;font-weight:800;color:' + scoreColor + ';margin:10px 0">' + score.toFixed(2) + '</div>';
       html += '<div style="font-size:18px;opacity:0.9">/ 5.00</div>';
       html += '<div style="margin-top:12px;font-size:16px;font-weight:600">' + targetStatus + '</div>';
-      html += '<div style="margin-top:8px;font-size:12px;opacity:0.5">목표: ' + target.toFixed(1) + ' | 기간: ' + d.period + '</div>';
+      html += '<div style="margin-top:8px;font-size:12px;opacity:0.5">목표: ' + target.toFixed(1) + ' | 기간: ' + d.period.replace('days','일') + '</div>';
       html += '</div>';
 
       // 5 Metric Breakdown
