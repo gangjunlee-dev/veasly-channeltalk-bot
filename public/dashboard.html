@@ -439,6 +439,51 @@ function loadStrategySection(days) {
   });
 }
 
+function drawGauge(score, target) {
+  var canvas = document.getElementById('csGauge');
+  if (!canvas || !canvas.getContext) return;
+  var ctx = canvas.getContext('2d');
+  var w = canvas.width, h = canvas.height;
+  var cx = w/2, cy = h - 10;
+  var r = Math.min(cx, cy) - 10;
+
+  ctx.clearRect(0, 0, w, h);
+
+  // 배경 호
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, Math.PI, 0, false);
+  ctx.lineWidth = 18;
+  ctx.strokeStyle = '#1e293b';
+  ctx.stroke();
+
+  // 점수 호
+  var pct = Math.min(score / 5, 1);
+  var endAngle = Math.PI + (Math.PI * pct);
+  var color = score >= 3 ? '#22c55e' : score >= 2.5 ? '#eab308' : '#ef4444';
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, Math.PI, endAngle, false);
+  ctx.lineWidth = 18;
+  ctx.strokeStyle = color;
+  ctx.lineCap = 'round';
+  ctx.stroke();
+
+  // 목표 마커
+  var tPct = Math.min(target / 5, 1);
+  var tAngle = Math.PI + (Math.PI * tPct);
+  var mx = cx + r * Math.cos(tAngle);
+  var my = cy + r * Math.sin(tAngle);
+  ctx.beginPath();
+  ctx.arc(mx, my, 4, 0, 2 * Math.PI);
+  ctx.fillStyle = '#38bdf8';
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(mx, my, 7, 0, 2 * Math.PI);
+  ctx.strokeStyle = '#38bdf8';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+}
+
+
 
 function loadManagerData() {
   var days = document.getElementById('days').value;
