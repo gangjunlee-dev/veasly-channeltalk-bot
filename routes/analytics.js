@@ -792,4 +792,111 @@ router.get('/faq-recommendations', (req, res) => {
 });
 
 
+
+// 데이터 축적 상태 모니터링 API
+router.get('/data-health', (req, res) => {
+  try {
+    var checks = {};
+    
+    // CSAT 데이터 상태
+    var csatFile = path.join(__dirname, '../data/csat-results.json');
+    var csatData = [];
+    if (fs.existsSync(csatFile)) { try { csatData = JSON.parse(fs.readFileSync(csatFile, 'utf8')); } catch(e) {} }
+    var csatRecent = csatData.filter(function(c) { return c.timestamp > Date.now() - 7 * 24 * 60 * 60 * 1000; });
+    checks.csat = {
+      total: csatData.length,
+      last7days: csatRecent.length,
+      sufficient: csatRecent.length >= 10,
+      target: 10,
+      status: csatRecent.length >= 10 ? 'OK' : csatRecent.length >= 5 ? 'PARTIAL' : 'INSUFFICIENT'
+    };
+    
+    // CES 데이터 상태
+    var cesFile = path.join(__dirname, '../data/ces-results.json');
+    var cesData = [];
+    if (fs.existsSync(cesFile)) { try { cesData = JSON.parse(fs.readFileSync(cesFile, 'utf8')); } catch(e) {} }
+    var cesRecent = cesData.filter(function(c) { return c.timestamp > Date.now() - 14 * 24 * 60 * 60 * 1000; });
+    checks.ces = {
+      total: cesData.length,
+      last14days: cesRecent.length,
+      sufficient: cesRecent.length >= 20,
+      target: 20,
+      status: cesRecent.length >= 20 ? 'OK' : cesRecent.length >= 5 ? 'PARTIAL' : 'INSUFFICIENT'
+    };
+    
+    // FCR 데이터 상태
+    var fcrFile = path.join(__dirname, '../data/fcr-tracker.json');
+    var fcrData = { resolved: [], reopened: [] };
+    if (fs.existsSync(fcrFile)) { try { fcrData = JSON.parse(fs.readFileSync(fcrFile, 'utf8')); } catch(e) {} }
+    checks.fcr = {
+      resolved: (fcrData.resolved || []).length,
+      reopened: (fcrData.reopened || []).length,
+      sufficient: (fcrData.resolved || []).length >= 10,
+      target: 10,
+      status: (fcrData.resolved || []).length >= 10 ? 'OK' : (fcrData.resolved || []).length >= 3 ? 'PARTIAL' : 'INSUFFICIENT'
+    };
+    
+    // CS Score History
+    var histFile = path.join(__dirname, '../data/cs-score-history.json');
+    var histData = [];
+    if (fs.existsSync(histFile)) { try { histData = JSON.parse(fs.readFileSync(histFile, 'utf8')); } catch(e) {} }
+    checks.scoreHistory = {
+      dataPoints: histData.length,
+      sufficient: histData.length >= 7,
+      target: 7,
+      status: histData.length >= 7 ? 'OK' : histData.length >= 3 ? 'PARTIAL' : 'INSUFFICIENT',
+      latestScore: histData.length > 0 ? histData[histData.length - 1].score : null,
+      latestDate: histData.length > 0 ? histData[histData.length - 1].date : null
+    };
+    
+    // AI 대화 로그
+    var aiFile = path.join(__dirname, '../data/ai-conversations.json');
+    var aiData = [];
+    if (fs.existsSync(aiFile)) { try { aiData = JSON.parse(fs.readFileSync(aiFile, 'utf8')); } catch(e) {} }
+    var aiRecent = aiData.filter(function(a) { 
+      var ts = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+      return ts > Date.now() - 7 * 24 * 60 * 60 * 1000; 
+    });
+    var escalatedRecent = aiRecent.filter(function(a) { return a.escalated; });
+    checks.aiConversations = {
+      total: aiData.length,
+      last7days: aiRecent.length,
+      escalated7days: escalatedRecent.length,
+      escalationRate: aiRecent.length > 0 ? Math.round(escalatedRecent.length / aiRecent.length * 100) : 0
+    };
+    
+    // CSAT Feedback
+    var fbFile = path.join(__dirname, '../data/csat-feedback.json');
+    var fbData = [];
+    if (fs.existsSync(fbFile)) { try { fbData = JSON.parse(fs.readFileSync(fbFile, 'utf8')); } catch(e) {} }
+    checks.csatFeedback = {
+      total: fbData.length,
+      status: fbData.length > 0 ? 'COLLECTING' : 'WAITING'
+    };
+    
+    // 전체 상태 판단
+    var allStatuses = [checks.csat.status, checks.ces.status, checks.fcr.status, checks.scoreHistory.status];
+    var overallStatus = allStatuses.every(function(s) { return s === 'OK'; }) ? 'HEALTHY' :
+                        allStatuses.some(function(s) { return s === 'OK'; }) ? 'PARTIAL' : 'NEEDS_DATA';
+    
+    // 추천 액션
+    var recommendations = [];
+    if (checks.csat.status !== 'OK') recommendations.push('CSAT 응답 ' + checks.csat.target + '건 목표 대비 ' + checks.csat.last7days + '건 - CSAT 설문 응답률 개선 필요');
+    if (checks.ces.status !== 'OK') recommendations.push('CES 응답 ' + checks.ces.target + '건 목표 대비 ' + checks.ces.last14days + '건 - CES 수집 파이프라인 확인 필요');
+    if (checks.fcr.status !== 'OK') recommendations.push('FCR resolved ' + checks.fcr.target + '건 목표 대비 ' + checks.fcr.resolved + '건 - 채팅 종료 시 FCR 기록 확인');
+    if (checks.aiConversations.escalationRate > 40) recommendations.push('에스컬레이션율 ' + checks.aiConversations.escalationRate + '% - FAQ 보강 또는 AI confidence 개선 필요');
+    
+    res.json({
+      success: true,
+      overallStatus: overallStatus,
+      checks: checks,
+      recommendations: recommendations,
+      timestamp: new Date().toISOString()
+    });
+  } catch(e) {
+    res.json({ success: false, error: e.message });
+  }
+});
+
+
 module.exports = router;

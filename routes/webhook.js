@@ -215,7 +215,13 @@ async function connectManager(chatId, lang) {
     for (var i = 0; i < managers.length; i++) {
       if (managers[i].operator) {
         await channeltalk.inviteManager(chatId, managers[i].id);
-        managerActive[chatId] = Date.now();
+        
+      // shortReplyWarning: 매니저 답변이 너무 짧으면 로그
+      var replyLen = (plainText || '').length;
+      if (replyLen > 0 && replyLen < 30) {
+        console.log('[QA] 매니저 짧은 답변 경고 - chatId:', chatId, 'length:', replyLen, 'text:', (plainText || '').substring(0, 50));
+      }
+managerActive[chatId] = Date.now();
         // MANAGER_DIRECT_ALERT: 매니저에게 직접 알림
         console.log('[ESCALATION] Manager invited:', managers[i].id, 'for chat:', chatId);
         pendingEscalations[chatId] = { time: Date.now(), managerId: managers[i].id, lang: lang || "zh-TW" };
@@ -359,7 +365,7 @@ router.post('/channeltalk', async function(req, res) {
         try { var _ms = require("../lib/manager-stats"); var _st = JSON.parse(require("fs").readFileSync(require("path").join(__dirname, "..", "data", "manager-stats.json"), "utf8")); if (_st.chats && _st.chats[chatId0]) stats_managerId = _st.chats[chatId0].managerId; } catch(e) {}
         if (managerActive[chatId0]) {
           var csSurveys = {
-            'zh-TW': '💬 感謝您的諮詢！請為這次的客服體驗評分：\n\n⭐⭐⭐⭐⭐ 非常滿意 → 輸入 5\n⭐⭐⭐⭐ 滿意 → 輸入 4\n⭐⭐⭐ 普通 → 輸入 3\n⭐⭐ 不太滿意 → 輸入 2\n⭐ 不滿意 → 輸入 1\n\n您的回饋是我們進步的動力！',
+            'zh-TW': '💬 感謝您的諮詢！\n\n請用1~5分評價這次體驗：\n5 = 😍 超讚\n4 = 😊 不錯\n3 = 😐 普通\n2 = 😕 不太好\n1 = 😞 很差\n\n直接輸入數字就好囉！',
             'ko': '💬 상담이 종료되었습니다. 평가해주세요：\n\n⭐⭐⭐⭐⭐ 매우 만족 → 5\n⭐⭐⭐⭐ 만족 → 4\n⭐⭐⭐ 보통 → 3\n⭐⭐ 불만족 → 2\n⭐ 매우 불만족 → 1',
             'en': '💬 Please rate your experience:\n\n⭐⭐⭐⭐⭐ Excellent → 5\n⭐⭐⭐⭐ Good → 4\n⭐⭐⭐ Average → 3\n⭐⭐ Poor → 2\n⭐ Very Poor → 1',
             'ja': '💬 今回の対応を評価してください：\n\n⭐⭐⭐⭐⭐ 大満足 → 5\n⭐⭐⭐⭐ 満足 → 4\n⭐⭐⭐ 普通 → 3\n⭐⭐ 不満 → 2\n⭐ 大不満 → 1'

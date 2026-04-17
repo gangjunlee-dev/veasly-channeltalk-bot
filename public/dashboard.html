@@ -1029,5 +1029,74 @@ async function loadBusinessMetrics() {
 })();
 </script>
 
+
+<script>
+async function loadDataHealth() {
+  try {
+    var res = await fetch('/api/analytics/data-health');
+    var data = await res.json();
+    var el = document.getElementById('health-content');
+    if (!data.success) { el.innerHTML = '데이터 로딩 실패'; return; }
+    
+    var statusColors = { 'OK': '#22c55e', 'PARTIAL': '#eab308', 'INSUFFICIENT': '#ef4444', 'WAITING': '#64748b', 'COLLECTING': '#38bdf8' };
+    var statusLabels = { 'OK': '충분', 'PARTIAL': '부분 수집', 'INSUFFICIENT': '부족', 'HEALTHY': '정상', 'NEEDS_DATA': '데이터 필요', 'WAITING': '대기중', 'COLLECTING': '수집중' };
+    
+    var overallColor = data.overallStatus === 'HEALTHY' ? '#22c55e' : data.overallStatus === 'PARTIAL' ? '#eab308' : '#ef4444';
+    
+    var html = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:15px;">';
+    html += '<div style="width:12px;height:12px;border-radius:50%;background:' + overallColor + ';"></div>';
+    html += '<span style="color:' + overallColor + ';font-weight:bold;">' + (statusLabels[data.overallStatus] || data.overallStatus) + '</span>';
+    html += '</div>';
+    
+    var checks = data.checks;
+    var items = [
+      { name: 'CSAT (7일)', status: checks.csat.status, current: checks.csat.last7days, target: checks.csat.target },
+      { name: 'CES (14일)', status: checks.ces.status, current: checks.ces.last14days, target: checks.ces.target },
+      { name: 'FCR resolved', status: checks.fcr.status, current: checks.fcr.resolved, target: checks.fcr.target },
+      { name: 'CS Score 이력', status: checks.scoreHistory.status, current: checks.scoreHistory.dataPoints, target: checks.scoreHistory.target }
+    ];
+    
+    html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;">';
+    items.forEach(function(item) {
+      var color = statusColors[item.status] || '#64748b';
+      var pct = Math.min(100, Math.round(item.current / item.target * 100));
+      html += '<div style="padding:10px;background:#0f172a;border-radius:8px;border-left:3px solid ' + color + ';">';
+      html += '<div style="font-size:11px;color:#64748b;">' + item.name + '</div>';
+      html += '<div style="font-size:16px;color:' + color + ';font-weight:bold;margin:4px 0;">' + item.current + '/' + item.target + '</div>';
+      html += '<div style="width:100%;height:4px;background:#1e293b;border-radius:2px;"><div style="width:' + pct + '%;height:100%;background:' + color + ';border-radius:2px;"></div></div>';
+      html += '</div>';
+    });
+    html += '</div>';
+    
+    // 에스컬레이션율
+    if (checks.aiConversations) {
+      html += '<div style="margin-top:12px;padding:10px;background:#0f172a;border-radius:8px;">';
+      html += '<span style="font-size:11px;color:#64748b;">AI 에스컬레이션율 (7일):</span> ';
+      var escColor = checks.aiConversations.escalationRate > 40 ? '#ef4444' : checks.aiConversations.escalationRate > 25 ? '#eab308' : '#22c55e';
+      html += '<span style="color:' + escColor + ';font-weight:bold;">' + checks.aiConversations.escalationRate + '%</span>';
+      html += ' (' + checks.aiConversations.escalated7days + '/' + checks.aiConversations.last7days + '건)';
+      html += '</div>';
+    }
+    
+    // 추천 액션
+    if (data.recommendations && data.recommendations.length > 0) {
+      html += '<div style="margin-top:12px;padding:10px;background:#0f172a;border-radius:8px;border-left:3px solid #f59e0b;">';
+      html += '<div style="font-size:11px;color:#f59e0b;font-weight:bold;margin-bottom:6px;">📋 필요 조치</div>';
+      data.recommendations.forEach(function(r) {
+        html += '<div style="font-size:11px;color:#94a3b8;margin-bottom:4px;">• ' + r + '</div>';
+      });
+      html += '</div>';
+    }
+    
+    el.innerHTML = html;
+  } catch(e) { console.error('Data health load error:', e); }
+}
+
+// 페이지 로드 시 실행
+document.addEventListener('DOMContentLoaded', function() {
+  setTimeout(loadDataHealth, 1500);
+});
+</script>
+
 </body>
 </html>
