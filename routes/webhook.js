@@ -46,6 +46,11 @@ function recordFCRResolved(userId, chatId, issueType) {
 }
 var router = express.Router();
 var pendingCES = {};
+var pendingCSATReason = {};
+var csatFeedbackPath = require('path').join(__dirname, '..', 'data', 'csat-feedback.json');
+function loadCSATFeedback() { try { return JSON.parse(fs.readFileSync(csatFeedbackPath, 'utf8')); } catch(e) { return []; } }
+function saveCSATFeedback(data) { if (data.length > 1000) data = data.slice(-1000); fs.writeFileSync(csatFeedbackPath, JSON.stringify(data, null, 2)); }
+
 var cesDataPath = path.join(__dirname, '..', 'data', 'ces-results.json');
 function loadCESData() {
   try { return JSON.parse(fs.readFileSync(cesDataPath, 'utf8')); } catch(e) { return []; }
@@ -515,6 +520,37 @@ router.post('/channeltalk', async function(req, res) {
     try { var srcData = JSON.parse(req.body.entity || "{}"); if (srcData.source && srcData.source.medium && srcData.source.medium.mediumType === "app") chatSource = "LINE"; } catch(se) {}
     try { var lf = require("path").join(__dirname, "..", "data", "chat-languages.json"); var ld = {}; try { ld = JSON.parse(fs.readFileSync(lf, "utf8")); } catch(e) {} ld[chatId] = detectedLang; fs.writeFileSync(lf, JSON.stringify(ld), "utf8"); } catch(e) {}
 
+
+    // CSAT dissatisfaction reason handler
+    if (pendingCSATReason[chatId]) {
+      var reasonText = (userText || '').trim();
+      if (reasonText.length > 0 && reasonText.length <= 500) {
+        var feedback = loadCSATFeedback();
+        feedback.push({
+          timestamp: new Date().toISOString(),
+          chatId: chatId,
+          userId: pendingCSATReason[chatId].userId,
+          csatScore: pendingCSATReason[chatId].csatScore,
+          reason: reasonText,
+          lang: detectedLang
+        });
+        saveCSATFeedback(feedback);
+        delete pendingCSATReason[chatId];
+        var reasonThanks = {
+          'zh-TW': '非常感謝您寶貴的意見！我們會認真檢討並改善，期待下次能給您更好的體驗 🙏',
+          'ko': '소중한 의견 감사합니다! 꼭 개선하겠습니다. 더 나은 서비스로 보답하겠습니다 🙏',
+          'en': 'Thank you so much for sharing! We will work hard to improve your experience 🙏',
+          'ja': '貴重なご意見ありがとうございます！改善に全力で取り組みます 🙏'
+        };
+        await channeltalk.sendMessage(chatId, { blocks: [{ type: 'text', value: reasonThanks[detectedLang] || reasonThanks['zh-TW'] }] });
+        console.log('[CSAT-REASON] Feedback saved for chat:', chatId, '| Score:', pendingCSATReason[chatId] ? pendingCSATReason[chatId].csatScore : '?', '| Reason:', reasonText.substring(0, 50));
+        aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || '', userName: '', lang: detectedLang, type: 'csat_feedback', userMessage: reasonText, aiResponse: 'CSAT feedback recorded', escalated: false });
+        return res.status(200).send('OK');
+      }
+      if (Date.now() - pendingCSATReason[chatId].timestamp > 600000) {
+        delete pendingCSATReason[chatId];
+      }
+    }
     // CES response handler
     if (pendingCES[chatId]) {
       var cesText = (userText || '').trim();
@@ -590,18 +626,37 @@ router.post('/channeltalk', async function(req, res) {
         // Clear CSAT pending from file
         try { var csatFile = require("path").join(__dirname, "..", "data", "csat-sent.json"); var csatData = JSON.parse(require("fs").readFileSync(csatFile, "utf8")); csatData[chatId] = { responded: true, respondedAt: Date.now() }; require("fs").writeFileSync(csatFile, JSON.stringify(csatData), "utf8"); } catch(ce) {}
 
-        // Send CES follow-up question
-        pendingCES[chatId] = { timestamp: Date.now(), chatId: chatId, userId: memberId || personId || "", managerId: "", csatScore: csatScore };
-        var cesQ = {
-          "zh-TW": "最後一個問題！今天解決問題容易嗎？\n1=非常困難 2=困難 3=普通 4=容易 5=非常容易",
-          "ko": "마지막 질문! 오늘 문제 해결이 쉬웠나요?\n1=매우 어려움 2=어려움 3=보통 4=쉬움 5=매우 쉬움",
-          "en": "One last question! How easy was it to resolve your issue?\n1=Very difficult 2=Difficult 3=Neutral 4=Easy 5=Very easy",
-          "ja": "最後の質問です！今日の問題解決は簡単でしたか？\n1=非常に難しい 2=難しい 3=普通 4=簡単 5=非常に簡単"
-        };
-        try {
-          await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: cesQ[detectedLang] || cesQ["zh-TW"] }] });
-          console.log("[CES] Question sent to chat:", chatId);
-        } catch(cesErr) { console.log("[CES] Send error:", cesErr.message); }
+        // CSAT 점수별 분기: 만족(1-2)→끝, 보통(3)→CES, 불만족(4-5)→사유질문
+        if (csatScore <= 2) {
+          // 만족 → 추가 질문 없이 종료
+          console.log('[CSAT] Satisfied (' + csatScore + ') - no follow-up');
+        } else if (csatScore === 3) {
+          // 보통 → CES 질문
+          pendingCES[chatId] = { timestamp: Date.now(), chatId: chatId, userId: memberId || personId || '', managerId: '', csatScore: csatScore };
+          var cesQ = {
+            'zh-TW': '最後一個問題！今天解決問題容易嗎？\n1=非常困難 2=困難 3=普通 4=容易 5=非常容易',
+            'ko': '마지막 질문! 오늘 문제 해결이 쉬웠나요?\n1=매우 어려움 2=어려움 3=보통 4=쉬움 5=매우 쉬움',
+            'en': 'One last question! How easy was it to resolve your issue?\n1=Very difficult 2=Difficult 3=Neutral 4=Easy 5=Very easy',
+            'ja': '最後の質問です！今日の問題解決は簡単でしたか？\n1=非常に難しい 2=難しい 3=普通 4=簡単 5=非常に簡単'
+          };
+          try {
+            await channeltalk.sendMessage(chatId, { blocks: [{ type: 'text', value: cesQ[detectedLang] || cesQ['zh-TW'] }] });
+            console.log('[CES] Question sent to chat:', chatId);
+          } catch(cesErr) { console.log('[CES] Send error:', cesErr.message); }
+        } else {
+          // 불만족(4-5) → 사유 질문
+          pendingCSATReason[chatId] = { timestamp: Date.now(), chatId: chatId, userId: memberId || personId || '', csatScore: csatScore };
+          var reasonQ = {
+            'zh-TW': '很抱歉讓您不滿意 🙏 方便告訴我們哪裡做得不好嗎？您的一句話就能幫助我們改善！',
+            'ko': '불편을 드려 죄송합니다 🙏 어떤 부분이 아쉬우셨는지 한 마디만 남겨주시면 큰 도움이 됩니다!',
+            'en': "We're sorry to hear that 🙏 Could you tell us what we could improve? Your feedback helps us get better!",
+            'ja': 'ご期待に沿えず申し訳ございません 🙏 改善すべき点をお聞かせいただけますか？'
+          };
+          try {
+            await channeltalk.sendMessage(chatId, { blocks: [{ type: 'text', value: reasonQ[detectedLang] || reasonQ['zh-TW'] }] });
+            console.log('[CSAT-REASON] Question sent to chat:', chatId, '| Score:', csatScore);
+          } catch(reasonErr) { console.log('[CSAT-REASON] Send error:', reasonErr.message); }
+        }
         return res.status(200).send("OK");
       }
     }

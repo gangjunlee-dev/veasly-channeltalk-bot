@@ -596,4 +596,18 @@ router.get('/ces', function(req, res) {
   } catch(e) { res.json({ success: false, error: e.message }); }
 });
 
+
+// === CSAT Feedback (Dissatisfaction Reasons) API ===
+router.get('/csat-feedback', function(req, res) {
+  try {
+    var fbPath = require('path').join(__dirname, '..', 'data', 'csat-feedback.json');
+    var data = [];
+    try { data = JSON.parse(require('fs').readFileSync(fbPath, 'utf8')); } catch(e) {}
+    var days = parseInt(req.query.days) || 30;
+    var cutoff = Date.now() - (days * 24 * 60 * 60 * 1000);
+    var recent = data.filter(function(d) { return new Date(d.timestamp).getTime() > cutoff; });
+    res.json({ success: true, total: recent.length, feedback: recent.reverse() });
+  } catch(e) { res.json({ success: false, error: e.message }); }
+});
+
 module.exports = router;

@@ -533,10 +533,12 @@ function loadCSATData() {
   
   Promise.all([
     fetch('/api/analytics/csat?days=' + days).then(function(r) { return r.json(); }),
+    fetch('/api/analytics/csat-feedback?days=' + days).then(function(r) { return r.json(); }).catch(function() { return null; }),
     fetch('/api/analytics/manager-performance?days=' + days).then(function(r) { return r.json(); }).catch(function() { return null; })
   ]).then(function(results) {
     var csat = results[0];
-    var mgrPerf = results[1];
+    var csatFeedback = results[1];
+    var mgrPerf = results[2];
     cachedData.csat = true;
 
     var html = '';
