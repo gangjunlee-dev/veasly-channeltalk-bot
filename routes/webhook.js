@@ -100,6 +100,7 @@ async function sendWaitingMessage(chatId, lang) {
 // Clean up waitingMessageSent when manager replies (max 500 entries)
 function cleanWaitingMsg(chatId) {
   delete waitingMessageSent[chatId];
+  if (typeof clearEscalationReminder === 'function') clearEscalationReminder(chatId);
 }
 
 
@@ -275,6 +276,30 @@ function setEscalationStep(chatId, step) {
   chatContext[chatId].escalationStep = step;
 }
 
+
+// === ESCALATION REMINDER: 15min no-reply from manager ===
+var ESCALATION_REMINDER = {};
+function scheduleEscalationReminder(chatId, lang) {
+  if (ESCALATION_REMINDER[chatId]) clearTimeout(ESCALATION_REMINDER[chatId]);
+  ESCALATION_REMINDER[chatId] = setTimeout(async function() {
+    try {
+      // Check if manager has replied
+      if (managerActive[chatId] && !pendingEscalations[chatId]) return;
+      var reminderMsgs = {
+        'zh-TW': '🔔 提醒：已等待15分鐘，客服人員正在盡快處理您的問題，請稍候！',
+        'ko': '🔔 알림: 15분 경과하였습니다. 담당자가 최대한 빨리 답변드리겠습니다!',
+        'en': '🔔 Reminder: 15 minutes have passed. Our team will respond as soon as possible!',
+        'ja': '🔔 お知らせ：15分経過しました。担当者ができるだけ早くご対応いたします！'
+      };
+      await channeltalk.sendMessage(chatId, { blocks: [{ type: 'text', value: reminderMsgs[lang] || reminderMsgs['zh-TW'] }] });
+      console.log('[REMINDER] 15min escalation reminder sent to:', chatId);
+    } catch(e) { console.log('[REMINDER] Error:', e.message); }
+    delete ESCALATION_REMINDER[chatId];
+  }, 15 * 60 * 1000); // 15 minutes
+}
+function clearEscalationReminder(chatId) {
+  if (ESCALATION_REMINDER[chatId]) { clearTimeout(ESCALATION_REMINDER[chatId]); delete ESCALATION_REMINDER[chatId]; }
+}
 router.post('/channeltalk', async function(req, res) {
   try {
     var body = req.body || {};
