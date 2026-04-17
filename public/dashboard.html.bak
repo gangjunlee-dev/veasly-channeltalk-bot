@@ -78,76 +78,6 @@ td { padding: 10px 8px; border-bottom: 1px solid #0f172a; font-size: 13px; }
 .pill { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
 @media (max-width: 768px) { .charts { grid-template-columns: 1fr; } .grid { grid-template-columns: repeat(2, 1fr); } .chart-card.full { grid-column: span 1; } .radar-scores { grid-template-columns: repeat(3, 1fr); } }
 .metric-tip { display:none; margin-top:10px; padding:10px; background:#0f172a; border-radius:8px; font-size:12px; color:#94a3b8; line-height:1.6; border:1px solid #334155; }
-
-/* ===== Strategic Dashboard CSS ===== */
-.strat-hero { display:flex; align-items:center; gap:32px; padding:24px 32px; }
-.strat-gauge { position:relative; width:180px; height:180px; flex-shrink:0; }
-.strat-gauge canvas { width:180px; height:180px; }
-.strat-gauge .gauge-center { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); text-align:center; }
-.strat-gauge .gauge-score { font-size:36px; font-weight:800; color:#f8fafc; line-height:1; }
-.strat-gauge .gauge-target { font-size:12px; color:#64748b; margin-top:2px; }
-.strat-subs { flex:1; display:grid; grid-template-columns:repeat(5,1fr); gap:12px; }
-.strat-sub { background:#1e293b; border-radius:12px; padding:14px; border-left:4px solid #334155; transition:transform .15s; cursor:pointer; position:relative; }
-.strat-sub:hover { transform:translateY(-2px); }
-.strat-sub.sev-red { border-left-color:#ef4444; }
-.strat-sub.sev-yellow { border-left-color:#eab308; }
-.strat-sub.sev-green { border-left-color:#22c55e; }
-.strat-sub .sub-icon { position:absolute; top:8px; right:10px; font-size:14px; }
-.strat-sub .sub-name { font-size:11px; color:#94a3b8; font-weight:600; text-transform:uppercase; letter-spacing:.5px; }
-.strat-sub .sub-score { font-size:24px; font-weight:700; color:#f8fafc; margin:4px 0 2px; }
-.strat-sub .sub-actual { font-size:12px; color:#cbd5e1; }
-.strat-sub .sub-detail { display:none; margin-top:10px; padding-top:10px; border-top:1px solid #334155; font-size:11px; color:#94a3b8; line-height:1.6; }
-.strat-sub.expanded .sub-detail { display:block; }
-.strat-problems { padding:0 32px 16px; }
-.strat-problems h2 { font-size:16px; color:#f8fafc; margin:0 0 12px; display:flex; align-items:center; gap:8px; }
-.prob-cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:12px; }
-.prob-card { background:#1e293b; border-radius:12px; padding:16px; cursor:pointer; transition:all .15s; position:relative; overflow:hidden; }
-.prob-card:hover { background:#253349; }
-.prob-card .prob-rank { position:absolute; top:12px; right:14px; font-size:28px; font-weight:800; color:rgba(148,163,184,0.12); }
-.prob-card .prob-sev { display:inline-block; padding:2px 8px; border-radius:6px; font-size:10px; font-weight:700; margin-bottom:8px; }
-.prob-card .prob-sev.critical { background:rgba(239,68,68,0.15); color:#ef4444; }
-.prob-card .prob-sev.warning { background:rgba(234,179,8,0.15); color:#eab308; }
-.prob-card .prob-title { font-size:14px; font-weight:700; color:#f8fafc; margin-bottom:6px; }
-.prob-card .prob-data { font-size:12px; color:#94a3b8; line-height:1.7; }
-.prob-card .prob-data b { color:#e2e8f0; }
-.prob-card .prob-why { display:none; margin-top:10px; padding-top:10px; border-top:1px solid #334155; font-size:11px; color:#94a3b8; line-height:1.7; }
-.prob-card.expanded .prob-why { display:block; }
-.strat-actions { padding:0 32px 16px; }
-.strat-actions h2 { font-size:16px; color:#f8fafc; margin:0 0 12px; display:flex; align-items:center; gap:8px; }
-.action-timeline { position:relative; padding-left:28px; }
-.action-timeline::before { content:''; position:absolute; left:10px; top:0; bottom:0; width:2px; background:#334155; }
-.action-item { position:relative; margin-bottom:16px; }
-.action-item .action-dot { position:absolute; left:-24px; top:4px; width:14px; height:14px; border-radius:50%; border:2px solid #334155; background:#0f172a; }
-.action-item.done .action-dot { background:#22c55e; border-color:#22c55e; }
-.action-item.active .action-dot { background:#3b82f6; border-color:#3b82f6; box-shadow:0 0 8px rgba(59,130,246,0.5); }
-.action-item.waiting .action-dot { background:#475569; border-color:#475569; }
-.action-inner { background:#1e293b; border-radius:12px; padding:14px 16px; }
-.action-inner .action-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; }
-.action-inner .action-num { font-size:11px; font-weight:700; padding:2px 8px; border-radius:6px; }
-.action-inner .action-num.p1 { background:rgba(239,68,68,0.15); color:#ef4444; }
-.action-inner .action-num.p2 { background:rgba(251,146,60,0.15); color:#fb923c; }
-.action-inner .action-num.p3 { background:rgba(234,179,8,0.15); color:#eab308; }
-.action-inner .action-num.p4 { background:rgba(59,130,246,0.15); color:#3b82f6; }
-.action-inner .action-num.p5 { background:rgba(34,197,94,0.15); color:#22c55e; }
-.action-status { font-size:10px; padding:2px 8px; border-radius:6px; font-weight:600; }
-.action-status.s-done { background:rgba(34,197,94,0.15); color:#22c55e; }
-.action-status.s-active { background:rgba(59,130,246,0.15); color:#3b82f6; }
-.action-status.s-wait { background:rgba(100,116,139,0.15); color:#64748b; }
-.action-inner .action-title { font-size:13px; font-weight:700; color:#f8fafc; }
-.action-inner .action-desc { font-size:11px; color:#94a3b8; margin-top:4px; line-height:1.6; }
-.action-inner .action-impact { display:inline-block; margin-top:6px; font-size:11px; color:#22c55e; background:rgba(34,197,94,0.08); padding:2px 8px; border-radius:6px; }
-.strat-mgr { padding:0 32px 24px; }
-.strat-mgr h2 { font-size:16px; color:#f8fafc; margin:0 0 12px; display:flex; align-items:center; gap:8px; }
-.mgr-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:12px; }
-.mgr-card { background:#1e293b; border-radius:12px; padding:16px; }
-.mgr-card .mgr-name { font-size:14px; font-weight:700; color:#f8fafc; margin-bottom:8px; }
-.mgr-card .mgr-stat { display:flex; justify-content:space-between; font-size:12px; color:#94a3b8; padding:4px 0; border-bottom:1px solid #1a2332; }
-.mgr-card .mgr-stat:last-child { border:none; }
-.mgr-card .mgr-stat b { color:#e2e8f0; }
-.mgr-bar { height:6px; background:#334155; border-radius:3px; margin-top:4px; overflow:hidden; }
-.mgr-bar-fill { height:100%; border-radius:3px; transition:width .3s; }
-.strat-refresh-time { text-align:right; padding:0 32px 16px; font-size:11px; color:#475569; }
-
 </style>
 </head>
 <body>
@@ -157,7 +87,7 @@ td { padding: 10px 8px; border-bottom: 1px solid #0f172a; font-size: 13px; }
     <h1>VEASLY CS AI Dashboard</h1>
     <p>CS 문의 분석 & AI 성과 & 매니저 품질 평가</p>
   </div>
-  <span class="version">v3.0 Strategic</span>
+  <span class="version">v2.0</span>
 </div>
 
 <div class="tabs">
@@ -261,190 +191,55 @@ function loadAllData() {
 // ===== OVERVIEW TAB =====
 function loadOverview() {
   var days = document.getElementById('days').value;
-  document.getElementById('overviewContent').innerHTML = '<div class="loading">전략 분석 로딩 중...</div>';
+  document.getElementById('overviewContent').innerHTML = '<div class="loading">분석 중...</div>';
+  
   Promise.all([
-    fetch('/api/analytics/cs-score-metrics?days=' + days).then(function(r){ return r.json(); }),
-    fetch('/api/analytics/manager-performance?days=' + days).then(function(r){ return r.json(); }),
-    fetch('/api/analytics/report?days=' + days).then(function(r){ return r.json(); }),
-    fetch('/api/analytics/escalation-analysis?days=' + days).then(function(r){ return r.json(); }).catch(function(){ return null; }),
-    fetch('/api/analytics/data-health').then(function(r){ return r.json(); }).catch(function(){ return null; }),
-    fetch('/api/analytics/csat?days=30').then(function(r){ return r.json(); }).catch(function(){ return null; })
+    fetch(API_BASE + '/api/analytics/report?days=' + days).then(function(r) { return r.json(); }),
+    fetch('/api/analytics/auto-close').then(function(r) { return r.json(); }).catch(function() { return null; })
   ]).then(function(results) {
-    var m = results[0];
-    var mgr = results[1];
-    var rpt = results[2];
-    var esc = results[3];
-    var hlth = results[4];
-    var csat = results[5];
-    if (!m || !m.success) { document.getElementById('overviewContent').innerHTML = '<div class="loading" style="color:#ef4444;">CS Score 데이터를 불러올 수 없습니다.</div>'; return; }
-    var sc = m.integratedScore || {};
-    var bd = sc.breakdown || {};
-    var nr = m.noReplyClose || {};
-    var rt = m.responseTime || {};
-    var ai = m.aiResolution || {};
-    var bh = m.businessHours || {};
-    var fcr = m.fcr || {};
-    var ces = m.ces || {};
-    function scoreColor(s) { return s >= 3.5 ? '#22c55e' : s >= 2.5 ? '#eab308' : '#ef4444'; }
-    function sevClass(s) { return s >= 3.5 ? 'sev-green' : s >= 2.5 ? 'sev-yellow' : 'sev-red'; }
-    function sevIcon(s) { return s >= 3.5 ? '\u{1F7E2}' : s >= 2.5 ? '\u{1F7E1}' : '\u{1F534}'; }
-    var totalScore = sc.score || 0;
-    var h = '';
-    h += '<div class="strat-hero">';
-    h += '<div class="strat-gauge"><canvas id="gaugeCanvas" width="180" height="180"></canvas>';
-    h += '<div class="gauge-center"><div class="gauge-score" style="color:' + scoreColor(totalScore) + '">' + totalScore.toFixed(2) + '</div>';
-    h += '<div class="gauge-target">\ubaa9\ud45c ' + (sc.target || 3) + '.0</div></div></div>';
-    h += '<div class="strat-subs">';
-    var metrics = [
-      {key:'noReply',name:'NoReply',score:bd.noReply?bd.noReply.score:0,actual:(nr.rate||0)+'% ('+( nr.count||0)+'/'+(nr.total||0)+')',detail:'\ubbf8\uc751\ub2f5 \uc885\ub8cc\uc728. \ubaa9\ud45c: 15% \uc774\ud558.<br>\uac00\uc911\uce58: '+((bd.noReply?bd.noReply.weight:0)*100)+'%<br>\uc624\ud504\uc2dc\uac04 \ube44\uc728: '+(bh.offHourRate||0)+'%'},
-      {key:'frt',name:'FRT',score:bd.frt?bd.frt.score:0,actual:'30\ubd84 \uc774\ub0b4 '+(rt.within30MinRate||0)+'% (\ud3c9\uade0 '+(rt.avgMinutes||0)+'\ubd84)',detail:'\uccab \uc751\ub2f5 \uc2dc\uac04. \ubaa9\ud45c: 80%.<br>\uac00\uc911\uce58: '+((bd.frt?bd.frt.weight:0)*100)+'%<br>\uc0d8\ud50c: '+(rt.totalSamples||0)+'\uac74'},
-      {key:'fcr',name:'FCR',score:bd.fcr?bd.fcr.score:0,actual:'\ud574\uacb0 '+(fcr.resolved||0)+'\uac74 / \uc7ac\uc624\ud508 '+(fcr.reopened||0)+'\uac74',detail:'1\ud68c \ud574\uacb0\uc728. \ub370\uc774\ud130 \ucd95\uc801 \ud544\uc694.<br>\uac00\uc911\uce58: '+((bd.fcr?bd.fcr.weight:0)*100)+'%'},
-      {key:'csat',name:'CSAT',score:bd.csat?bd.csat.score:0,actual:'\ud3c9\uade0 '+((csat&&csat.avgScore)?csat.avgScore.toFixed(1):'0')+'/5 ('+((csat&&csat.totalResponses)?csat.totalResponses:0)+'\uac74)',detail:'\uace0\uac1d \ub9cc\uc871\ub3c4. \ubaa9\ud45c: 3.5+<br>\uac00\uc911\uce58: '+((bd.csat?bd.csat.weight:0)*100)+'%'},
-      {key:'ces',name:'CES',score:bd.ces?bd.ces.score:0,actual:'\uc218\uc9d1 '+(ces.totalResponses||0)+'\uac74',detail:'\uace0\uac1d \ub178\ub825 \uc810\uc218. \ub370\uc774\ud130 \ucd95\uc801 \ud544\uc694.<br>\uac00\uc911\uce58: '+((bd.ces?bd.ces.weight:0)*100)+'%'}
-    ];
-    metrics.forEach(function(met) {
-      h += '<div class="strat-sub ' + sevClass(met.score) + '" onclick="this.classList.toggle(\'expanded\')">';
-      h += '<span class="sub-icon">' + sevIcon(met.score) + '</span>';
-      h += '<div class="sub-name">' + met.name + '</div>';
-      h += '<div class="sub-score">' + met.score.toFixed(1) + '<small>/5</small></div>';
-      h += '<div class="sub-actual">' + met.actual + '</div>';
-      h += '<div class="sub-detail">' + met.detail + '</div>';
-      h += '</div>';
-    });
-    h += '</div></div>';
-    h += '<div class="strat-problems"><h2>\u{1F50D} \ud575\uc2ec \ubb38\uc81c\uc810 Top 5</h2><div class="prob-cards">';
-    var problems = [
-      {rank:1,sev:'critical',title:'NoReply \ubbf8\uc751\ub2f5 \uc885\ub8cc '+(nr.rate||0)+'%',data:'\ubbf8\uc751\ub2f5 <b>'+(nr.count||0)+'/'+(nr.total||0)+'</b>\uac74<br>\uc624\ud504\uc2dc\uac04 \ube44\uc728 <b>'+(bh.offHourRate||0)+'%</b><br>\ud3c9\uade0 \uc751\ub2f5 <b>'+(rt.avgMinutes||0)+'\ubd84</b>',why:'<b>\uc6d0\uc778:</b> \uc624\ud504\uc2dc\uac04(50%) \ubb38\uc758\uc5d0 \ub9e4\ub2c8\uc800 \ubd80\uc7ac. \ub300\ub9cc \ud53c\ud06c(20-23\uc2dc TWT) \uc2dc \uc601\uc5c5\uc678 \uc2dc\uac04.<br><b>\uc601\ud5a5:</b> CS Score \uac00\uc911\uce58 20%, \ud604\uc7ac 1.5/5\ub85c \uc804\uccb4 0.30 \uae30\uc5ec (\ucd5c\ub300 1.00)'},
-      {rank:2,sev:'critical',title:'\uc5d0\uc2a4\uceec\ub808\uc774\uc158\uc728 '+(100-(ai.rate||0))+'% (AI\ud574\uacb0 '+(ai.rate||0)+'%)',data:'AI \ucc98\ub9ac <b>'+(ai.resolved||0)+'/'+(ai.total||0)+'</b>\uac74<br>\uc5d0\uc2a4\uceec\ub808\uc774\uc158 <b>'+((ai.total||0)-(ai.resolved||0))+'</b>\uac74',why:'<b>\uc6d0\uc778:</b> "other" \uce74\ud14c\uace0\ub9ac \ubcf5\ud569 \uc9c8\ubb38 AI \ubd84\ub958 \ubd88\uac00. "\u5ba2\u670d" \ud0a4\uc6cc\ub4dc \uc989\uc2dc \uc5d0\uc2a4\uceec\ub808\uc774\uc158.<br><b>\uc601\ud5a5:</b> \ub9e4\ub2c8\uc800 \ubd80\ud558 \uc99d\uac00 \u2192 FRT \uc545\ud654 \u2192 NoReply \uc99d\uac00 \uc545\uc21c\ud658'},
-      {rank:3,sev:'critical',title:'CSAT \ud3c9\uade0 '+((csat&&csat.avgScore)?csat.avgScore.toFixed(1):'0')+'/5',data:'\uc751\ub2f5 <b>'+((csat&&csat.totalResponses)?csat.totalResponses:0)+'</b>\uac74<br>70% \u2264 2\uc810',why:'<b>\uc6d0\uc778:</b> \ub9e4\ub2c8\uc800 \uc751\ub2f5 \uc2dc\uac04 \uacfc\ub2e4, \ub2f5\ubcc0 \uad6c\uccb4\uc131 \ubd80\uc871.<br><b>\uc601\ud5a5:</b> CS Score \uac00\uc911\uce58 20%, \ud604\uc7ac 2.5/5'},
-      {rank:4,sev:'warning',title:'CES\u00b7FCR \ub370\uc774\ud130 \ubd80\uc7ac',data:'CES <b>'+(ces.totalResponses||0)+'/20</b>\uac74<br>FCR <b>'+(fcr.resolved||0)+'/10</b>\uac74<br>\uac00\uc911\uce58 \ud569\uacc4 <b>40%</b>',why:'<b>\uc6d0\uc778:</b> \uc124\ubb38 \uc751\ub2f5 \uc544\uc9c1 \uc5c6\uc74c. \uae30\ubcf8\uac12 2.0/2.5 \uc801\uc6a9 \uc911.<br><b>\uc601\ud5a5:</b> \uc2e4\uc81c CS \ud488\uc9c8 \ub300\ube44 \uc810\uc218 \uacfc\ub300/\uacfc\uc18c \ud3c9\uac00'},
-      {rank:5,sev:'warning',title:'\ub9e4\ub2c8\uc800 \uc5c5\ubb34 \ud3b8\uc911',data:'',why:'<b>\uc6d0\uc778:</b> vida\uac00 85%+ \ucc98\ub9ac. mia \ud3c9\uade0 408\ubd84.<br><b>\uc601\ud5a5:</b> vida \uacfc\ubd80\ud558 \u2192 \uc751\ub2f5 \ud488\uc9c8 \uc800\ud558 \u2192 CSAT \ud558\ub77d'}
-    ];
-    var mgrPerf = m.managerResponseTime || [];
-    var mgrDataStr = '';
-    mgrPerf.forEach(function(mp) {
-      var mName = mp.managerId === '622148' ? 'vida' : mp.managerId === '609410' ? 'mia' : mp.managerId === '357940' ? 'andy' : mp.managerId;
-      mgrDataStr += mName + ': <b>' + mp.avgMin + '\ubd84</b>, 30\ubd84\ub0b4 <b>' + mp.within30Rate + '%</b> (' + mp.samples + '\uac74)<br>';
-    });
-    problems[4].data = mgrDataStr;
-    problems.forEach(function(p) {
-      h += '<div class="prob-card" onclick="this.classList.toggle(\'expanded\')">';
-      h += '<div class="prob-rank">#' + p.rank + '</div>';
-      h += '<div class="prob-sev ' + p.sev + '">' + p.sev.toUpperCase() + '</div>';
-      h += '<div class="prob-title">' + p.title + '</div>';
-      h += '<div class="prob-data">' + p.data + '</div>';
-      h += '<div class="prob-why">' + p.why + '</div>';
-      h += '</div>';
-    });
-    h += '</div></div>';
-    h += '<div class="strat-actions"><h2>\u{1F3AF} \uc6b0\uc120\uc21c\uc704 \uc561\uc158 \ud50c\ub79c</h2><div class="action-timeline">';
-    var actions = [
-      {st:'done',num:'p1',label:'1\uc21c\uc704',status:'s-done',statusTxt:'\u2705 \uc644\ub8cc',title:'AI \uc5d0\uc2a4\uceec\ub808\uc774\uc158 \u2193 47% \u2192 30%',desc:'\uc8fc\ubb38 \uc0c1\ud0dc AI \ud574\uc11d, \uc5d0\uc2a4\uceec\ub808\uc774\uc158 \ud544\ud130 \uac04\uacb0\ud654, \ucde8\uc18c/\ud658\ubd88/\ud1b5\uad00 FAQ 8\uac74',impact:'NoReply 1.5\u21923.0 | FRT 2.5\u21923.0'},
-      {st:'done',num:'p2',label:'2\uc21c\uc704',status:'s-done',statusTxt:'\u2705 \uc644\ub8cc',title:'\ub9e4\ub2c8\uc800 \uc751\ub2f5 \uc18d\ub3c4 FRT 80%',desc:'\uc624\ud504\uc2dc\uac04 AI \uc120\uc751\ub2f5, \ub300\uae30 20\ubd84 \ub2e8\ucd95, \uc8fc\ub9d0 \uc81c\uc678, \uc624\uc804/\uc624\ud6c4 \uc54c\ub9bc',impact:'FRT 42%\u219280% | NoReply 33%\u219215%'},
-      {st:'done',num:'p3',label:'3\uc21c\uc704',status:'s-done',statusTxt:'\u2705 \uc644\ub8cc',title:'CSAT \uc0c1\uc2b9 2.3 \u2192 3.5',desc:'\uc774\ubaa8\uc9c0 \uac04\uc18c\ud654 \uc124\ubb38, \uc9e7\uc740 \ub2f5\ubcc0 \uacbd\uace0, \uc124\ubb38 \uc751\ub2f5\ub960 15-20%',impact:'CSAT 2.3\u21923.5 | \uc124\ubb38 10\uac74\u219230\uac74+'},
-      {st:'active',num:'p4',label:'4\uc21c\uc704',status:'s-active',statusTxt:'\u{1F4CA} \ub370\uc774\ud130 \ucd95\uc801 \uc911',title:'CES\u00b7FCR \ub370\uc774\ud130 \uc218\uc9d1',desc:'CES 20\uac74+ \ubaa9\ud45c, FCR 10\uac74+ \uae30\ub85d, \uc8fc\uac04 data-health \uccb4\ud06c',impact:'\ub370\uc774\ud130 \uae30\ubc18 \uc815\ud655\ud55c CS Score'},
-      {st:'waiting',num:'p5',label:'5\uc21c\uc704',status:'s-wait',statusTxt:'\u23f3 \ub300\uae30',title:'CS \u2194 \uc0ac\uc5c5 KPI \uc5f0\ub3d9',desc:'CS Score vs \uc7ac\uad6c\ub9e4\uc728/\ud658\ubd88\uc728/\uac1d\ub2e8\uac00 \uc0c1\uad00\uad00\uacc4 \ubd84\uc11d',impact:'CS Score 3.0 \u2192 \uc7ac\uad6c\ub9e4\uc728 \u219115%'}
-    ];
-    actions.forEach(function(a) {
-      h += '<div class="action-item ' + a.st + '"><div class="action-dot"></div><div class="action-inner">';
-      h += '<div class="action-head"><span class="action-num ' + a.num + '">' + a.label + '</span><span class="action-status ' + a.status + '">' + a.statusTxt + '</span></div>';
-      h += '<div class="action-title">' + a.title + '</div>';
-      h += '<div class="action-desc">' + a.desc + '</div>';
-      h += '<div class="action-impact">\uc608\uc0c1 \ud6a8\uacfc: ' + a.impact + '</div>';
-      h += '</div></div>';
-    });
-    h += '</div></div>';
-    h += '<div class="strat-mgr"><h2>\u{1F465} \ub9e4\ub2c8\uc800\ubcc4 \uc2e4\uc2dc\uac04 \ud604\ud669</h2><div class="mgr-grid">';
-    mgrPerf.forEach(function(mp) {
-      var mName = mp.managerId === '622148' ? 'vida (\uc8fc \ub2f4\ub2f9)' : mp.managerId === '609410' ? 'mia' : mp.managerId === '357940' ? 'andy (\ub9ac\ub354)' : 'Manager ' + mp.managerId;
-      var barColor = mp.within30Rate >= 80 ? '#22c55e' : mp.within30Rate >= 50 ? '#eab308' : '#ef4444';
-      var avgColor = mp.avgMin <= 30 ? '#22c55e' : mp.avgMin <= 120 ? '#eab308' : '#ef4444';
-      h += '<div class="mgr-card"><div class="mgr-name">' + mName + '</div>';
-      h += '<div class="mgr-stat"><span>\ud3c9\uade0 \uc751\ub2f5</span><b style="color:' + avgColor + '">' + mp.avgMin + '\ubd84</b></div>';
-      h += '<div class="mgr-stat"><span>30\ubd84 \uc774\ub0b4</span><b style="color:' + barColor + '">' + mp.within30Rate + '%</b></div>';
-      h += '<div class="mgr-bar"><div class="mgr-bar-fill" style="width:' + mp.within30Rate + '%;background:' + barColor + '"></div></div>';
-      h += '<div class="mgr-stat"><span>\ucc98\ub9ac \uac74\uc218</span><b>' + mp.samples + '\uac74</b></div></div>';
-    });
-    h += '</div></div>';
-    h += '<div style="padding:0 32px 16px;"><div style="background:linear-gradient(135deg,#1e293b,#0f2027);border-radius:12px;padding:20px;">';
-    h += '<h2 style="font-size:16px;color:#f8fafc;margin:0 0 12px;">\u{1F4C8} CS Score 3.0 \ub2ec\uc131 \uc608\uce21</h2>';
-    h += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;">';
-    h += '<div style="text-align:center;padding:12px;background:rgba(239,68,68,0.1);border-radius:8px;"><div style="font-size:11px;color:#94a3b8;">\ud604\uc7ac</div><div style="font-size:28px;font-weight:800;color:#ef4444;">' + totalScore.toFixed(2) + '</div><div style="font-size:10px;color:#64748b;">2026-04-17</div></div>';
-    h += '<div style="text-align:center;padding:12px;background:rgba(234,179,8,0.1);border-radius:8px;"><div style="font-size:11px;color:#94a3b8;">2\uc8fc \ud6c4</div><div style="font-size:28px;font-weight:800;color:#eab308;">2.72</div><div style="font-size:10px;color:#64748b;">AI \uac1c\uc120</div></div>';
-    h += '<div style="text-align:center;padding:12px;background:rgba(34,197,94,0.1);border-radius:8px;"><div style="font-size:11px;color:#94a3b8;">4\uc8fc \ud6c4</div><div style="font-size:28px;font-weight:800;color:#22c55e;">3.12</div><div style="font-size:10px;color:#64748b;">\ub9e4\ub2c8\uc800+\ub370\uc774\ud130</div></div>';
-    h += '<div style="text-align:center;padding:12px;background:rgba(59,130,246,0.1);border-radius:8px;"><div style="font-size:11px;color:#94a3b8;">\ubaa9\ud45c</div><div style="font-size:28px;font-weight:800;color:#3b82f6;">3.00</div><div style="font-size:10px;color:#64748b;">Target</div></div>';
-    h += '</div>';
-    var pct = Math.min(100, Math.max(0, (totalScore / 5) * 100));
-    h += '<div style="margin-top:16px;"><div style="display:flex;justify-content:space-between;font-size:11px;color:#64748b;margin-bottom:4px;"><span>1.0</span><span>\ubaa9\ud45c 3.0</span><span>5.0</span></div>';
-    h += '<div style="height:10px;background:#334155;border-radius:5px;position:relative;">';
-    h += '<div style="height:100%;width:' + pct + '%;background:linear-gradient(90deg,' + scoreColor(totalScore) + ',#3b82f6);border-radius:5px;"></div>';
-    h += '<div style="position:absolute;left:60%;top:-3px;width:2px;height:16px;background:#f8fafc;border-radius:1px;"></div>';
-    h += '</div></div></div></div>';
-    if (hlth && hlth.overallStatus) {
-      h += '<div style="padding:0 32px 16px;"><div style="background:#1e293b;border-radius:12px;padding:16px;">';
-      h += '<h2 style="font-size:14px;color:#f8fafc;margin:0 0 10px;">\u{1F3E5} \ub370\uc774\ud130 \uc218\uc9d1 \ud604\ud669 (' + hlth.overallStatus + ')</h2>';
-      h += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;">';
-      var hkeys = ['csat','ces','fcr','scoreHistory','csatFeedback'];
-      var hlabels = {csat:'CSAT',ces:'CES',fcr:'FCR',scoreHistory:'Score \uc774\ub825',csatFeedback:'\ubd88\ub9cc \uc0ac\uc720'};
-      hkeys.forEach(function(k) {
-        var item = hlth[k];
-        if (!item) return;
-        var stColor = item.status === 'OK' ? '#22c55e' : item.status === 'INSUFFICIENT' ? '#ef4444' : '#eab308';
-        h += '<div style="background:#0f172a;border-radius:8px;padding:10px;text-align:center;">';
-        h += '<div style="font-size:10px;color:#64748b;">' + (hlabels[k] || k) + '</div>';
-        h += '<div style="font-size:16px;font-weight:700;color:' + stColor + ';">' + item.status + '</div>';
-        if (item.total !== undefined) h += '<div style="font-size:10px;color:#94a3b8;">' + item.total + '\uac74</div>';
-        if (item.dataPoints !== undefined) h += '<div style="font-size:10px;color:#94a3b8;">' + item.dataPoints + '\uc77c</div>';
-        h += '</div>';
-      });
-      h += '</div></div></div>';
+    var data = results[0];
+    var autoClose = results[1];
+    if (!data.success) throw new Error(data.error);
+    var r = data.raw;
+    cachedData.overview = r;
+
+    var botRate = r.totalMessages > 0 ? Math.round((r.botMessages / r.totalMessages) * 100) : 0;
+    var aiResolveRate = (r.botMessages + r.managerMessages) > 0 ? Math.round((r.botMessages / (r.botMessages + r.managerMessages)) * 100) : 0;
+    var escalationCount = r.categories.escalation ? r.categories.escalation.count : 0;
+    var escalationRate = r.userMessages > 0 ? Math.round((escalationCount / r.userMessages) * 100) : 0;
+
+    var html = '<div class="grid">';
+    html += card('총 상담', r.totalChats, '건', 'blue', r.period, '📊 선택한 기간 동안 접수된 전체 상담 건수입니다. 고객 메시지, AI 응답, 매니저 응답을 모두 포함합니다.');
+    html += card('AI 봇 응답', r.botMessages, '건', 'green', '응답률 ' + botRate + '%', '🤖 AI가 자동으로 처리한 메시지 수입니다. 응답률 = AI 응답 / 전체 메시지. 높을수록 AI가 효율적으로 운영되고 있습니다.');
+    html += card('매니저 응답', r.managerMessages, '건', 'yellow', 'AI 해결률 ' + aiResolveRate + '%', '👨‍💼 매니저가 직접 응답한 건수입니다. AI 해결률 = AI 응답 / (AI+매니저). 이 비율이 높을수록 AI로 충분히 처리되고 있다는 의미입니다.');
+    html += card('에스컬레이션', escalationCount, '건', escalationRate > 20 ? 'red' : 'yellow', '비율 ' + escalationRate + '%', '🔺 AI가 처리하지 못해 매니저에게 전달된 건수입니다. 비율 = 에스컬레이션 / 사용자 메시지. 20% 이상이면 FAQ 보강이 필요합니다.');
+    html += card('미해결 상담', r.unresolvedChats, '건', r.unresolvedChats > 10 ? 'red' : 'green', r.unresolvedChats > 10 ? '우선 처리 필요' : '양호', '⏳ 아직 종료되지 않은 열린 상담입니다. 10건 이상이면 빠른 처리가 필요합니다. 48시간 경과 시 종료 예고, 60시간 경과 시 자동 종료됩니다.');
+    if (r.channelStats) {
+      var cs = r.channelStats;
+      var total = cs.line + cs.web + cs.other;
+      html += card('LINE', cs.line, '건 (' + (total > 0 ? (cs.line/total*100).toFixed(0) : 0) + '%)', 'green', 'LINE 메신저', '💚 LINE 메신저를 통해 접수된 상담 건수입니다. 대만 고객의 주요 유입 채널입니다.');
+      html += card('웹사이트', cs.web, '건 (' + (total > 0 ? (cs.web/total*100).toFixed(0) : 0) + '%)', 'blue', 'veasly.com', '🌐 veasly.com 웹사이트 채팅을 통해 접수된 상담입니다.');
     }
-    h += '<div class="strat-refresh-time">\ub9c8\uc9c0\ub9c9 \uac31\uc2e0: ' + new Date().toLocaleString('ko-KR') + ' | \uc790\ub3d9 \uac31\uc2e0 60\ucd08</div>';
-    document.getElementById('overviewContent').innerHTML = h;
-    setTimeout(function() { drawGauge(totalScore, sc.target || 3); }, 50);
+    if (autoClose && autoClose.success) {
+      html += card('CSAT 대기', autoClose.csatPending, '건', autoClose.csatPending > 10 ? 'yellow' : 'green', '24h 후 자동종료', '📋 CSAT 설문이 발송되었지만 아직 응답하지 않은 상담 건수입니다. 48시간 후 종료 예고 메시지가 발송됩니다.');
+    }
+    html += '</div>';
+
+    html += '<div class="charts">';
+    html += categoryChart(r.categories);
+    html += keywordChart(r.topKeywords);
+    html += hourChart(r.hourlyDistribution);
+    html += messageBreakdown(r);
+    html += '</div>';
+
+    html += '<div class="insights">' + insightsCard(r) + '</div>';
+    document.getElementById('overviewContent').innerHTML = html;
   }).catch(function(e) {
-    document.getElementById('overviewContent').innerHTML = '<div class="loading" style="color:#ef4444;">\uc624\ub958: ' + e.message + '</div>';
+    document.getElementById('overviewContent').innerHTML = '<div class="loading" style="color:#ef4444;">오류: ' + e.message + '</div>';
   });
 }
 
-function drawGauge(score, target) {
-  var canvas = document.getElementById('gaugeCanvas');
-  if (!canvas) return;
-  var ctx = canvas.getContext('2d');
-  var cx = 90, cy = 100, r = 70;
-  var startAngle = 0.75 * Math.PI;
-  var endAngle = 2.25 * Math.PI;
-  var totalArc = endAngle - startAngle;
-  ctx.beginPath();
-  ctx.arc(cx, cy, r, startAngle, endAngle);
-  ctx.lineWidth = 14;
-  ctx.strokeStyle = '#334155';
-  ctx.lineCap = 'round';
-  ctx.stroke();
-  var scoreAngle = startAngle + (score / 5) * totalArc;
-  var gradient = ctx.createLinearGradient(0, 0, 180, 0);
-  if (score < 2.5) { gradient.addColorStop(0, '#ef4444'); gradient.addColorStop(1, '#f97316'); }
-  else if (score < 3.5) { gradient.addColorStop(0, '#f97316'); gradient.addColorStop(1, '#eab308'); }
-  else { gradient.addColorStop(0, '#22c55e'); gradient.addColorStop(1, '#10b981'); }
-  ctx.beginPath();
-  ctx.arc(cx, cy, r, startAngle, scoreAngle);
-  ctx.lineWidth = 14;
-  ctx.strokeStyle = gradient;
-  ctx.lineCap = 'round';
-  ctx.stroke();
-  var targetAngle = startAngle + (target / 5) * totalArc;
-  var tx = cx + (r + 12) * Math.cos(targetAngle);
-  var ty = cy + (r + 12) * Math.sin(targetAngle);
-  ctx.beginPath();
-  ctx.arc(tx, ty, 4, 0, 2 * Math.PI);
-  ctx.fillStyle = '#f8fafc';
-  ctx.fill();
-  ctx.font = '9px sans-serif';
-  ctx.fillStyle = '#64748b';
-  ctx.textAlign = 'center';
-  ctx.fillText('\ubaa9\ud45c', tx, ty + 14);
-}
-
+// ===== MANAGER TAB =====
 function loadManagerData() {
   var days = document.getElementById('days').value;
   document.getElementById('managersContent').innerHTML = '<div class="loading">매니저 성과 분석 중...</div>';
