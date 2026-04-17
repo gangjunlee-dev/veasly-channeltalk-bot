@@ -64,7 +64,7 @@ router.get('/csat', async function(req, res) {
     }
     var days = parseInt(req.query.days) || 30;
     var cutoff = Date.now() - (days * 24 * 60 * 60 * 1000);
-    var filtered = results.filter(function(r) { return r.timestamp >= cutoff; });
+    var filtered = results.filter(function(r) { var ts = typeof r.timestamp === 'string' ? new Date(r.timestamp).getTime() : r.timestamp; return ts >= cutoff; });
 
     var total = filtered.length;
     var avgScore = 0;
