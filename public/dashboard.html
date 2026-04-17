@@ -744,9 +744,9 @@ function loadCSScoreData() {
       // Manager Performance Table
       if (d.managerResponseTime && d.managerResponseTime.length > 0) {
         html += '<div style="background:#1e293b;border-radius:12px;padding:20px;margin-bottom:16px">';
-        html += '<div style="font-size:14px;font-weight:600;color:white;margin-bottom:12px">Manager Response Performance</div>';
+        html += '<div style="font-size:14px;font-weight:600;color:white;margin-bottom:12px">매니저 응답 성과</div>';
         html += '<table style="width:100%;border-collapse:collapse;font-size:12px">';
-        html += '<tr style="color:#64748b;border-bottom:1px solid #334155"><th style="padding:8px;text-align:left">Manager</th><th>Avg FRT</th><th>Within 30min</th><th>Samples</th><th>Status</th></tr>';
+        html += '<tr style="color:#64748b;border-bottom:1px solid #334155"><th style="padding:8px;text-align:left">매니저</th><th>평균 응답시간</th><th>30분 내 응답률</th><th>샘플 수</th><th>상태</th></tr>';
         d.managerResponseTime.forEach(function(m) {
           var si = m.within30Rate >= 80 ? '&#128994;' : m.within30Rate >= 50 ? '&#128993;' : '&#128308;';
           html += '<tr style="color:white;border-bottom:1px solid #1e293b"><td style="padding:8px">' + (mgrNameMap[m.managerId] || m.managerId) + '</td>';
@@ -761,17 +761,17 @@ function loadCSScoreData() {
       // FCR Detail
       if (d.fcr) {
         html += '<div style="background:#1e293b;border-radius:12px;padding:20px;margin-bottom:16px">';
-        html += '<div style="font-size:14px;font-weight:600;color:white;margin-bottom:12px">First Contact Resolution (FCR)</div>';
+        html += '<div style="font-size:14px;font-weight:600;color:white;margin-bottom:12px">첫 접촉 해결률 (FCR)</div>';
         html += '<div style="display:flex;gap:20px">';
-        html += '<div style="flex:1;text-align:center"><div style="font-size:36px;font-weight:700;color:' + (d.fcr.rate >= 70 ? '#10b981' : '#ef4444') + '">' + d.fcr.rate + '%</div><div style="font-size:11px;color:#94a3b8">FCR Rate</div></div>';
-        html += '<div style="flex:1;text-align:center"><div style="font-size:36px;font-weight:700;color:#22d3ee">' + d.fcr.resolved + '</div><div style="font-size:11px;color:#94a3b8">Resolved</div></div>';
-        html += '<div style="flex:1;text-align:center"><div style="font-size:36px;font-weight:700;color:#f59e0b">' + d.fcr.reopened + '</div><div style="font-size:11px;color:#94a3b8">Reopened (72h)</div></div>';
+        html += '<div style="flex:1;text-align:center"><div style="font-size:36px;font-weight:700;color:' + (d.fcr.rate >= 70 ? '#10b981' : '#ef4444') + '">' + d.fcr.rate + '%</div><div style="font-size:11px;color:#94a3b8">해결률</div></div>';
+        html += '<div style="flex:1;text-align:center"><div style="font-size:36px;font-weight:700;color:#22d3ee">' + d.fcr.resolved + '</div><div style="font-size:11px;color:#94a3b8">해결 건수</div></div>';
+        html += '<div style="flex:1;text-align:center"><div style="font-size:36px;font-weight:700;color:#f59e0b">' + d.fcr.reopened + '</div><div style="font-size:11px;color:#94a3b8">재문의 (72시간)</div></div>';
         html += '</div></div>';
       }
 
       // CES Detail
       html += '<div style="background:#1e293b;border-radius:12px;padding:20px;margin-bottom:16px">';
-      html += '<div style="font-size:14px;font-weight:600;color:white;margin-bottom:12px">Customer Effort Score (CES)</div>';
+      html += '<div style="font-size:14px;font-weight:600;color:white;margin-bottom:12px">고객 노력 점수 (CES)</div>';
       if (d.ces && d.ces.totalResponses > 0) {
         var cesColor = d.ces.avgScore >= 3.5 ? '#10b981' : d.ces.avgScore >= 2.5 ? '#f59e0b' : '#ef4444';
         html += '<div style="display:flex;gap:20px">';
@@ -782,16 +782,16 @@ function loadCSScoreData() {
       } else {
         html += '<div style="text-align:center;padding:20px;color:#64748b">';
         html += '<div style="font-size:36px;margin-bottom:8px">&#128202;</div>';
-        html += '<div style="font-size:14px">CES data collection started</div>';
+        html += '<div style="font-size:14px">고객 노력 점수 수집이 시작되었습니다</div>';
         html += '<div style="font-size:12px;margin-top:4px">After CSAT survey, customers will be asked: "How easy was it to resolve your issue?"</div>';
-        html += '<div style="font-size:11px;margin-top:8px;color:#f59e0b">Data will appear here as responses come in</div>';
+        html += '<div style="font-size:11px;margin-top:8px;color:#f59e0b">응답이 들어오면 여기에 데이터가 표시됩니다</div>';
         html += '</div>';
       }
       html += '</div>';
 
       // Improvement Suggestions
       html += '<div style="background:#1e293b;border-radius:12px;padding:20px">';
-      html += '<div style="font-size:14px;font-weight:600;color:white;margin-bottom:12px">Priority Improvements</div>';
+      html += '<div style="font-size:14px;font-weight:600;color:white;margin-bottom:12px">우선 개선 사항</div>';
       var suggestions = [];
       if (bd.noReply && bd.noReply.score < 3) suggestions.push({ p: 'HIGH', t: '미응답 종료율 ' + (d.noReplyClose ? d.noReplyClose.rate : '?') + '% (목표 10% 이하). 15분 자동 재배정 + 30분 대기 메시지 가동 중.' });
       if (bd.frt && bd.frt.score < 3) suggestions.push({ p: 'HIGH', t: '첫 응답 속도: ' + (d.responseTime ? d.responseTime.within30MinRate : '?') + '% 30분 내 응답 (목표 80% 이상). 매니저 근무시간 조정 필요.' });
