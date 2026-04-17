@@ -653,6 +653,153 @@ function submitReview(encoded, rating) {
 
 // Initial load
 loadAllData();
+
+function loadCSScoreData() {
+  fetch('/api/analytics/cs-score-metrics?days=' + currentDays, { headers: authHeaders })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (!d.success) return;
+      var container = document.getElementById('csscoreContent');
+      if (!container) return;
+      cachedData.csscore = d;
+
+      var is = d.integratedScore || {};
+      var bd = is.breakdown || {};
+      var score = is.score || 0;
+      var target = is.target || 3.0;
+      var scoreColor = score >= 3.5 ? '#10b981' : score >= 3.0 ? '#f59e0b' : '#ef4444';
+      var targetStatus = score >= target ? '&#10003; Target Achieved' : '&#9888; Below Target (gap: ' + (target - score).toFixed(2) + ')';
+
+      var html = '';
+
+      // Main Score Card
+      html += '<div style="text-align:center;padding:30px;background:linear-gradient(135deg,#1e293b,#334155);border-radius:16px;margin-bottom:24px;color:white">';
+      html += '<div style="font-size:14px;opacity:0.7">Integrated CS Quality Score</div>';
+      html += '<div style="font-size:72px;font-weight:800;color:' + scoreColor + ';margin:10px 0">' + score.toFixed(2) + '</div>';
+      html += '<div style="font-size:18px;opacity:0.9">/ 5.00</div>';
+      html += '<div style="margin-top:12px;font-size:16px;font-weight:600">' + targetStatus + '</div>';
+      html += '<div style="margin-top:8px;font-size:12px;opacity:0.5">Target: ' + target.toFixed(1) + ' | Period: ' + d.period + '</div>';
+      html += '</div>';
+
+      // 5 Metric Breakdown
+      html += '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:24px">';
+      var metrics = [
+        { label: 'First Response', icon: '&#9889;', value: (d.responseTime ? d.responseTime.within30MinRate + '%' : 'N/A'), detail: 'within 30min (avg ' + (d.responseTime ? d.responseTime.avgMinutes + 'min' : '?') + ')', target: '>=80%', score: bd.frt ? bd.frt.score : 0 },
+        { label: 'FCR', icon: '&#127919;', value: (d.fcr ? d.fcr.rate + '%' : 'N/A'), detail: d.fcr ? d.fcr.resolved + ' resolved / ' + d.fcr.reopened + ' reopened' : '', target: '>=70%', score: bd.fcr ? bd.fcr.score : 0 },
+        { label: 'CSAT', icon: '&#11088;', value: (bd.csat ? bd.csat.score.toFixed(1) : 'N/A'), detail: '/5.0', target: '>=3.5', score: bd.csat ? bd.csat.score : 0 },
+        { label: 'CES (Customer Effort)', icon: '&#128170;', value: (d.ces && d.ces.totalResponses > 0 ? d.ces.avgScore.toFixed(1) : 'Collecting...'), detail: d.ces ? d.ces.totalResponses + ' responses' : 'No data yet', target: '>=3.5', score: bd.ces ? bd.ces.score : 0 },
+        { label: 'No-Reply Close', icon: '&#128277;', value: (d.noReplyClose ? d.noReplyClose.rate + '%' : 'N/A'), detail: d.noReplyClose ? d.noReplyClose.count + '/' + d.noReplyClose.total + ' chats' : '', target: '<=10%', score: bd.noReply ? bd.noReply.score : 0 }
+      ];
+      metrics.forEach(function(m) {
+        var mColor = m.score >= 4 ? '#10b981' : m.score >= 3 ? '#f59e0b' : '#ef4444';
+        html += '<div style="background:#1e293b;border-radius:12px;padding:16px;text-align:center;border-left:4px solid ' + mColor + '">';
+        html += '<div style="font-size:24px;margin-bottom:4px">' + m.icon + '</div>';
+        html += '<div style="font-size:11px;color:#94a3b8;margin-bottom:8px">' + m.label + '</div>';
+        html += '<div style="font-size:28px;font-weight:700;color:white">' + m.value + '</div>';
+        html += '<div style="font-size:10px;color:#64748b">' + m.detail + '</div>';
+        html += '<div style="margin-top:8px;font-size:11px;color:' + mColor + ';font-weight:600">Score: ' + m.score.toFixed(1) + '/5 (target ' + m.target + ')</div>';
+        html += '</div>';
+      });
+      html += '</div>';
+
+      // Response Time Distribution
+      if (d.responseTime && d.responseTime.distribution) {
+        var dist = d.responseTime.distribution;
+        var total = d.responseTime.totalSamples || 1;
+        html += '<div style="background:#1e293b;border-radius:12px;padding:20px;margin-bottom:16px">';
+        html += '<div style="font-size:14px;font-weight:600;color:white;margin-bottom:16px">Response Time Distribution</div>';
+        var bars = [
+          { label: '<5min', count: dist.under5 || 0, color: '#10b981' },
+          { label: '5-15min', count: dist.under15 || 0, color: '#22d3ee' },
+          { label: '15-30min', count: dist.under30 || 0, color: '#f59e0b' },
+          { label: '30-60min', count: dist.under60 || 0, color: '#f97316' },
+          { label: '>60min', count: dist.over60 || 0, color: '#ef4444' }
+        ];
+        bars.forEach(function(b) {
+          var pct = Math.round(b.count / total * 100);
+          html += '<div style="display:flex;align-items:center;margin-bottom:8px">';
+          html += '<span style="width:70px;font-size:11px;color:#94a3b8">' + b.label + '</span>';
+          html += '<div style="flex:1;background:#0f172a;border-radius:4px;height:24px;margin:0 8px;overflow:hidden">';
+          html += '<div style="width:' + pct + '%;height:100%;background:' + b.color + ';border-radius:4px"></div>';
+          html += '</div>';
+          html += '<span style="width:60px;font-size:12px;color:white;text-align:right">' + b.count + ' (' + pct + '%)</span>';
+          html += '</div>';
+        });
+        html += '</div>';
+      }
+
+      // Manager Performance Table
+      if (d.managerResponseTime && d.managerResponseTime.length > 0) {
+        html += '<div style="background:#1e293b;border-radius:12px;padding:20px;margin-bottom:16px">';
+        html += '<div style="font-size:14px;font-weight:600;color:white;margin-bottom:12px">Manager Response Performance</div>';
+        html += '<table style="width:100%;border-collapse:collapse;font-size:12px">';
+        html += '<tr style="color:#64748b;border-bottom:1px solid #334155"><th style="padding:8px;text-align:left">Manager</th><th>Avg FRT</th><th>Within 30min</th><th>Samples</th><th>Status</th></tr>';
+        d.managerResponseTime.forEach(function(m) {
+          var si = m.within30Rate >= 80 ? '&#128994;' : m.within30Rate >= 50 ? '&#128993;' : '&#128308;';
+          html += '<tr style="color:white;border-bottom:1px solid #1e293b"><td style="padding:8px">' + m.managerId + '</td>';
+          html += '<td style="text-align:center">' + m.avgMin + 'min</td>';
+          html += '<td style="text-align:center">' + m.within30Rate + '%</td>';
+          html += '<td style="text-align:center">' + m.samples + '</td>';
+          html += '<td style="text-align:center">' + si + '</td></tr>';
+        });
+        html += '</table></div>';
+      }
+
+      // FCR Detail
+      if (d.fcr) {
+        html += '<div style="background:#1e293b;border-radius:12px;padding:20px;margin-bottom:16px">';
+        html += '<div style="font-size:14px;font-weight:600;color:white;margin-bottom:12px">First Contact Resolution (FCR)</div>';
+        html += '<div style="display:flex;gap:20px">';
+        html += '<div style="flex:1;text-align:center"><div style="font-size:36px;font-weight:700;color:' + (d.fcr.rate >= 70 ? '#10b981' : '#ef4444') + '">' + d.fcr.rate + '%</div><div style="font-size:11px;color:#94a3b8">FCR Rate</div></div>';
+        html += '<div style="flex:1;text-align:center"><div style="font-size:36px;font-weight:700;color:#22d3ee">' + d.fcr.resolved + '</div><div style="font-size:11px;color:#94a3b8">Resolved</div></div>';
+        html += '<div style="flex:1;text-align:center"><div style="font-size:36px;font-weight:700;color:#f59e0b">' + d.fcr.reopened + '</div><div style="font-size:11px;color:#94a3b8">Reopened (72h)</div></div>';
+        html += '</div></div>';
+      }
+
+      // CES Detail
+      html += '<div style="background:#1e293b;border-radius:12px;padding:20px;margin-bottom:16px">';
+      html += '<div style="font-size:14px;font-weight:600;color:white;margin-bottom:12px">Customer Effort Score (CES)</div>';
+      if (d.ces && d.ces.totalResponses > 0) {
+        var cesColor = d.ces.avgScore >= 3.5 ? '#10b981' : d.ces.avgScore >= 2.5 ? '#f59e0b' : '#ef4444';
+        html += '<div style="display:flex;gap:20px">';
+        html += '<div style="flex:1;text-align:center"><div style="font-size:36px;font-weight:700;color:' + cesColor + '">' + d.ces.avgScore.toFixed(1) + '</div><div style="font-size:11px;color:#94a3b8">Average Score (1-5)</div></div>';
+        html += '<div style="flex:1;text-align:center"><div style="font-size:36px;font-weight:700;color:#22d3ee">' + d.ces.totalResponses + '</div><div style="font-size:11px;color:#94a3b8">Total Responses</div></div>';
+        html += '</div>';
+        html += '<div style="margin-top:12px;font-size:12px;color:#94a3b8">1=Very Difficult ~ 5=Very Easy | Target: >= 3.5</div>';
+      } else {
+        html += '<div style="text-align:center;padding:20px;color:#64748b">';
+        html += '<div style="font-size:36px;margin-bottom:8px">&#128202;</div>';
+        html += '<div style="font-size:14px">CES data collection started</div>';
+        html += '<div style="font-size:12px;margin-top:4px">After CSAT survey, customers will be asked: "How easy was it to resolve your issue?"</div>';
+        html += '<div style="font-size:11px;margin-top:8px;color:#f59e0b">Data will appear here as responses come in</div>';
+        html += '</div>';
+      }
+      html += '</div>';
+
+      // Improvement Suggestions
+      html += '<div style="background:#1e293b;border-radius:12px;padding:20px">';
+      html += '<div style="font-size:14px;font-weight:600;color:white;margin-bottom:12px">Priority Improvements</div>';
+      var suggestions = [];
+      if (bd.noReply && bd.noReply.score < 3) suggestions.push({ p: 'HIGH', t: 'No-Reply rate ' + (d.noReplyClose ? d.noReplyClose.rate : '?') + '% (target <=10%). 15min auto-reassign + 30min waiting msg active.' });
+      if (bd.frt && bd.frt.score < 3) suggestions.push({ p: 'HIGH', t: 'FRT: ' + (d.responseTime ? d.responseTime.within30MinRate : '?') + '% within 30min (target >=80%). Manager shift alignment needed.' });
+      if (bd.fcr && bd.fcr.score < 3) suggestions.push({ p: 'MED', t: 'FCR: ' + (d.fcr ? d.fcr.rate : '?') + '% (target >=70%). Expand AI direct-answer coverage.' });
+      if (bd.csat && bd.csat.score < 3) suggestions.push({ p: 'MED', t: 'CSAT data insufficient. Survey collection active, awaiting responses.' });
+      if (bd.ces && bd.ces.score < 3) suggestions.push({ p: 'LOW', t: 'CES collection started. Expect meaningful data in ~2 weeks.' });
+      if (suggestions.length === 0) suggestions.push({ p: 'OK', t: 'All metrics meeting targets!' });
+      suggestions.forEach(function(s) {
+        var pc = s.p === 'HIGH' ? '#ef4444' : s.p === 'MED' ? '#f59e0b' : '#10b981';
+        html += '<div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:10px;padding:10px;background:#0f172a;border-radius:8px;border-left:3px solid ' + pc + '">';
+        html += '<span style="font-size:10px;font-weight:700;color:' + pc + ';white-space:nowrap">[' + s.p + ']</span>';
+        html += '<span style="font-size:12px;color:#e2e8f0">' + s.t + '</span>';
+        html += '</div>';
+      });
+      html += '</div>';
+
+      container.innerHTML = html;
+    })
+    .catch(function(e) { console.log('CS Score load error:', e); });
+}
+
 </script>
 </body>
 </html>
