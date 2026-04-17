@@ -466,6 +466,20 @@ router.post('/channeltalk', async function(req, res) {
     try { var srcData = JSON.parse(req.body.entity || "{}"); if (srcData.source && srcData.source.medium && srcData.source.medium.mediumType === "app") chatSource = "LINE"; } catch(se) {}
     try { var lf = require("path").join(__dirname, "..", "data", "chat-languages.json"); var ld = {}; try { ld = JSON.parse(fs.readFileSync(lf, "utf8")); } catch(e) {} ld[chatId] = detectedLang; fs.writeFileSync(lf, JSON.stringify(ld), "utf8"); } catch(e) {}
 
+    // Restore previous language for CSAT/CES numeric responses
+    if (/^[1-5]$/.test(userText.trim())) {
+      if (chatLanguage[chatId] && chatLanguage[chatId] !== detectedLang) {
+        // Keep previous chat language for numeric input
+      } else {
+        try {
+          var clFile = require("path").join(__dirname, "..", "data", "chat-languages.json");
+          var clData = JSON.parse(fs.readFileSync(clFile, "utf8"));
+          if (clData[chatId]) detectedLang = clData[chatId];
+        } catch(e) {}
+      }
+      if (chatLanguage[chatId]) detectedLang = chatLanguage[chatId];
+    }
+    
     // CSAT response handler
     if (scheduler.isCSATPending(chatId)) {
       var csatScore = scheduler.parseCSATResponse(userText);
@@ -478,11 +492,12 @@ router.post('/channeltalk', async function(req, res) {
           userId: memberId || ""
         }) : null;
 
+        var csatSatisfied = csatScore <= 2; // 1=非常滿意, 2=滿意 → satisfied
         var csatThanks = {
-          "zh-TW": "感謝您的回饋！您的評分：" + csatScore + "/5 ⭐\n我們會持續改善服務品質！",
-          "ko": "피드백 감사합니다! 평점: " + csatScore + "/5 ⭐\n더 나은 서비스를 위해 노력하겠습니다!",
-          "en": "Thank you for your feedback! Rating: " + csatScore + "/5 ⭐\nWe'll keep improving!",
-          "ja": "フィードバックありがとうございます！評価：" + csatScore + "/5 ⭐\nサービス改善に努めます！"
+          "zh-TW": csatSatisfied ? "太好了，感謝您的滿意回饋！我們會繼續努力提供更好的服務 😊" : "感謝您的回饋！我們會認真改善，讓您有更好的體驗 🙏",
+          "ko": csatSatisfied ? "만족하셨다니 정말 감사합니다! 더 좋은 서비스로 보답하겠습니다 😊" : "소중한 피드백 감사합니다! 개선하도록 노력하겠습니다 🙏",
+          "en": csatSatisfied ? "So glad you're satisfied! We'll keep up the great work 😊" : "Thank you for your feedback! We'll work hard to improve 🙏",
+          "ja": csatSatisfied ? "ご満足いただけて嬉しいです！これからも頑張ります 😊" : "フィードバックありがとうございます！改善に努めます 🙏"
         };
 
         var thankMsg = csatThanks[detectedLang] || csatThanks["zh-TW"];
