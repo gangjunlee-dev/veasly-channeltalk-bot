@@ -1,3 +1,4 @@
+var fs = require('fs');
 var path = require('path');
 var express = require('express');
 
@@ -80,7 +81,7 @@ var pendingEscalations = {};
 var chatContext = {};
 var _chatHistoryCache = {};
 var _managerCache = { data: null, ts: 0 };
-async function getCachedManagers() { var now = Date.now(); if (_managerCache.data && (now - _managerCache.ts) < 600000) return _managerCache.data; var r = await getCachedManagers(); _managerCache.data = r; _managerCache.ts = now; return r; }
+async function getCachedManagers() { var now = Date.now(); if (_managerCache.data && (now - _managerCache.ts) < 600000) return _managerCache.data; try { var r = await channeltalk.listManagers(); _managerCache.data = r; _managerCache.ts = now; return r; } catch(e) { console.error("[getCachedManagers] Error:", e.message); return _managerCache.data || { managers: [] }; } }
 
 
 
