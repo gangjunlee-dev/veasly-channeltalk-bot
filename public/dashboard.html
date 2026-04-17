@@ -1109,7 +1109,7 @@ function loadCSScoreData() {
 <script>
 // CS Score 트렌드 로딩
 async function loadCSScoreTrend() {
-  try {
+  if (!document.getElementById("csScoreTrendPanel")) return;
   try {
     const res = await fetch('/api/analytics/cs-score-trend?days=30');
     const data = await res.json();
@@ -1156,7 +1156,7 @@ async function loadCSScoreTrend() {
 
 // FAQ 추천 로딩
 async function loadFAQRecommendations() {
-  try {
+  if (!document.getElementById("faqRecPanel")) return;
   try {
     const res = await fetch('/api/analytics/faq-recommendations?days=7');
     const data = await res.json();
@@ -1183,7 +1183,7 @@ async function loadFAQRecommendations() {
 
 // 사업 지표 로딩
 async function loadBusinessMetrics() {
-  try {
+  if (!document.getElementById("bizMetricsPanel")) return;
   try {
     const res = await fetch('/api/analytics/business-metrics?weeks=12');
     const data = await res.json();
@@ -1246,7 +1246,7 @@ async function loadBusinessMetrics() {
 
 <script>
 async function loadDataHealth() {
-  try {
+  if (!document.getElementById("health-content")) return;
   try {
     var res = await fetch('/api/analytics/data-health');
     var data = await res.json();
