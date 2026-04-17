@@ -610,4 +610,34 @@ router.get('/csat-feedback', function(req, res) {
   } catch(e) { res.json({ success: false, error: e.message }); }
 });
 
+
+// === Escalation Analysis API ===
+router.get('/escalation-analysis', function(req, res) {
+  try {
+    var aiLog2 = require('../lib/ai-log');
+    var days = parseInt(req.query.days) || 7;
+    var cutoff = new Date(Date.now() - days * 86400000).toISOString();
+    var all = aiLog2.getConversations(500, { escalated: true });
+    var recent = all.filter(function(c) { return c.timestamp >= cutoff; });
+    var categories = {};
+    var examples = {};
+    recent.forEach(function(c) {
+      var msg = (c.userMessage || '').toLowerCase();
+      var cat = 'other';
+      if (msg.indexOf('배송') > -1 || msg.indexOf('物流') > -1 || msg.indexOf('寄') > -1 || msg.indexOf('到') > -1 || msg.indexOf('出貨') > -1) cat = 'shipping';
+      else if (msg.indexOf('취소') > -1 || msg.indexOf('取消') > -1 || msg.indexOf('退') > -1 || msg.indexOf('不要') > -1) cat = 'cancel';
+      else if (msg.indexOf('결제') > -1 || msg.indexOf('付款') > -1 || msg.indexOf('刷卡') > -1) cat = 'payment';
+      else if (msg.indexOf('가격') > -1 || msg.indexOf('價格') > -1 || msg.indexOf('運費') > -1 || msg.indexOf('多少') > -1) cat = 'pricing';
+      else if (msg.indexOf('찾') > -1 || msg.indexOf('找') > -1 || msg.indexOf('有賣') > -1 || msg.indexOf('幫我') > -1) cat = 'product';
+      else if (msg.indexOf('客服') > -1 || msg.indexOf('真人') > -1 || msg.indexOf('상담') > -1) cat = 'agent_request';
+      categories[cat] = (categories[cat] || 0) + 1;
+      if (!examples[cat]) examples[cat] = [];
+      if (examples[cat].length < 3) examples[cat].push((c.userMessage || '').substring(0, 80));
+    });
+    var sorted = Object.keys(categories).sort(function(a,b) { return categories[b] - categories[a]; });
+    var result = sorted.map(function(cat) { return { category: cat, count: categories[cat], examples: examples[cat] }; });
+    res.json({ success: true, period: days + ' days', total: recent.length, categories: result });
+  } catch(e) { res.json({ success: false, error: e.message }); }
+});
+
 module.exports = router;

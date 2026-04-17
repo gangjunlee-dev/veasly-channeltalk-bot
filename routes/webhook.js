@@ -181,6 +181,8 @@ async function connectManager(chatId, lang) {
       if (managers[i].operator) {
         await channeltalk.inviteManager(chatId, managers[i].id);
         managerActive[chatId] = Date.now();
+        // MANAGER_DIRECT_ALERT: 매니저에게 직접 알림
+        console.log('[ESCALATION] Manager invited:', managers[i].id, 'for chat:', chatId);
         pendingEscalations[chatId] = { time: Date.now(), managerId: managers[i].id, lang: lang || "zh-TW" };
         break;
       }
@@ -378,6 +380,13 @@ router.post('/channeltalk', async function(req, res) {
           })(chatId0, stats_managerId);
           }
         }
+        // Record FCR resolved
+        try {
+          var _closeUserId = '';
+          if (closedChat.userId) _closeUserId = closedChat.userId;
+          else if (closedChat.memberId) _closeUserId = closedChat.memberId;
+          if (_closeUserId) recordFCRResolved(_closeUserId, chatId0, 'closed');
+        } catch(fcrErr) { console.log('[FCR] Record error:', fcrErr.message); }
         delete managerActive[chatId0];
         delete chatContext[chatId0];
       }
