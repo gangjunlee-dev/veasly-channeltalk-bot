@@ -45,6 +45,15 @@ function recordFCRResolved(userId, chatId, issueType) {
   saveFCRData(fcr);
 }
 var router = express.Router();
+var pendingCES = {};
+var cesDataPath = path.join(__dirname, '..', 'data', 'ces-results.json');
+function loadCESData() {
+  try { return JSON.parse(fs.readFileSync(cesDataPath, 'utf8')); } catch(e) { return []; }
+}
+function saveCESData(data) {
+  if (data.length > 1000) data = data.slice(-1000);
+  fs.writeFileSync(cesDataPath, JSON.stringify(data, null, 2));
+}
 var channeltalk = require('../lib/channeltalk');
 var matcher = require('../lib/matcher');
 var aiEngine = require('../lib/ai-engine');
@@ -481,6 +490,38 @@ router.post('/channeltalk', async function(req, res) {
     try { var srcData = JSON.parse(req.body.entity || "{}"); if (srcData.source && srcData.source.medium && srcData.source.medium.mediumType === "app") chatSource = "LINE"; } catch(se) {}
     try { var lf = require("path").join(__dirname, "..", "data", "chat-languages.json"); var ld = {}; try { ld = JSON.parse(fs.readFileSync(lf, "utf8")); } catch(e) {} ld[chatId] = detectedLang; fs.writeFileSync(lf, JSON.stringify(ld), "utf8"); } catch(e) {}
 
+    // CES response handler
+    if (pendingCES[chatId]) {
+      var cesText = (userText || '').trim();
+      var cesNum = parseInt(cesText);
+      if (cesNum >= 1 && cesNum <= 5) {
+        var cesData = loadCESData();
+        cesData.push({
+          timestamp: new Date().toISOString(),
+          chatId: chatId,
+          userId: pendingCES[chatId].userId,
+          score: cesNum,
+          managerId: pendingCES[chatId].managerId || ''
+        });
+        saveCESData(cesData);
+        delete pendingCES[chatId];
+        var cesThanks = {
+          "zh-TW": "感謝您的回饋！祝您購物愉快 😊",
+          "ko": "소중한 의견 감사합니다! 즐거운 쇼핑 되세요 😊",
+          "en": "Thank you for your feedback! Happy shopping 😊",
+          "ja": "フィードバックありがとうございます！お買い物をお楽しみください 😊"
+        };
+        await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: cesThanks[detectedLang] || cesThanks["zh-TW"] }] });
+        console.log("[CES] Score recorded:", cesNum, "for chat:", chatId);
+        aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || '', userName: '', lang: detectedLang, type: 'ces_response', userMessage: cesText, aiResponse: 'CES score: ' + cesNum, escalated: false });
+        return res.status(200).send('OK');
+      }
+      // 10분 지나면 만료
+      if (Date.now() - pendingCES[chatId].timestamp > 600000) {
+        delete pendingCES[chatId];
+      }
+    }
+
     // Restore previous language for CSAT/CES numeric responses
     if (/^[1-5]$/.test(userText.trim())) {
       if (chatLanguage[chatId] && chatLanguage[chatId] !== detectedLang) {
@@ -523,6 +564,19 @@ router.post('/channeltalk', async function(req, res) {
         // Clear CSAT pending
         // Clear CSAT pending from file
         try { var csatFile = require("path").join(__dirname, "..", "data", "csat-sent.json"); var csatData = JSON.parse(require("fs").readFileSync(csatFile, "utf8")); delete csatData[chatId]; require("fs").writeFileSync(csatFile, JSON.stringify(csatData), "utf8"); } catch(ce) {}
+
+        // Send CES follow-up question
+        pendingCES[chatId] = { timestamp: Date.now(), chatId: chatId, userId: memberId || personId || "", managerId: "", csatScore: csatScore };
+        var cesQ = {
+          "zh-TW": "最後一個問題！今天解決問題容易嗎？\n1=非常困難 2=困難 3=普通 4=容易 5=非常容易",
+          "ko": "마지막 질문! 오늘 문제 해결이 쉬웠나요?\n1=매우 어려움 2=어려움 3=보통 4=쉬움 5=매우 쉬움",
+          "en": "One last question! How easy was it to resolve your issue?\n1=Very difficult 2=Difficult 3=Neutral 4=Easy 5=Very easy",
+          "ja": "最後の質問です！今日の問題解決は簡単でしたか？\n1=非常に難しい 2=難しい 3=普通 4=簡単 5=非常に簡単"
+        };
+        try {
+          await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: cesQ[detectedLang] || cesQ["zh-TW"] }] });
+          console.log("[CES] Question sent to chat:", chatId);
+        } catch(cesErr) { console.log("[CES] Send error:", cesErr.message); }
         return res.status(200).send("OK");
       }
     }
