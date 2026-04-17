@@ -997,8 +997,37 @@ router.post('/channeltalk', async function(req, res) {
           var confidence = aiResult.confidence || 0;
           console.log("[AI] Confidence:", confidence.toFixed(3));
           if (confidence < 0.3) {
-            console.log("[AI] Low confidence - skipping AI answer");
+            console.log("[AI] Very low confidence (" + confidence.toFixed(3) + ") - skipping AI answer, auto-escalate");
             aiAnswer = null;
+            // Auto-escalate on very low confidence
+            try {
+              var lowConfMsgs = {
+                "zh-TW": "您的問題需要客服人員協助，正在為您轉接，請稍候 🙏",
+                "ko": "해당 질문은 상담사의 도움이 필요합니다. 연결 중이니 잠시만 기다려주세요 🙏",
+                "en": "Your question needs agent assistance. Connecting you now, please wait 🙏",
+                "ja": "担当者におつなぎいたします。少々お待ちください 🙏"
+              };
+              await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: lowConfMsgs[detectedLang] || lowConfMsgs["zh-TW"] }] });
+              var mgrList0 = await getCachedManagers();
+              var mgrs0 = (mgrList0 && mgrList0.managers) || [];
+              for (var m0 = 0; m0 < mgrs0.length; m0++) {
+                if (mgrs0[m0].operator) { await channeltalk.inviteManager(chatId, mgrs0[m0].id); break; }
+              }
+              pendingEscalations[chatId] = { time: Date.now(), timestamp: Date.now(), lang: detectedLang };
+              managerActive[chatId] = Date.now();
+              console.log("[AI] Very low confidence auto-escalation for:", chatId);
+              aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", lang: detectedLang, type: "escalation", userMessage: userText.substring(0, 200), aiResponse: "confidence " + confidence.toFixed(3) + " < 0.3 → 자동 에스컬레이션", escalated: true });
+            } catch(lcErr) { console.error("[AI] Low confidence escalation error:", lcErr.message); }
+          } else if (confidence < 0.6) {
+            console.log("[AI] Medium confidence (" + confidence.toFixed(3) + ") - answer + auto-escalate");
+            // 답변은 보내되, 에스컬레이션도 함께 진행
+            var medConfNote = {
+              "zh-TW": "\n\n⚠️ 以上為AI初步回覆，客服人員會再為您確認，請稍候！",
+              "ko": "\n\n⚠️ 위 답변은 AI 초기 응답입니다. 상담사가 확인 후 정확한 안내를 드리겠습니다!",
+              "en": "\n\n⚠️ This is an AI preliminary answer. An agent will confirm shortly!",
+              "ja": "\n\n⚠️ 上記はAIの初期回答です。担当者が確認後、正確にご案内いたします！"
+            };
+            aiAnswer += medConfNote[detectedLang] || medConfNote["zh-TW"];
           }
         } else {
           aiAnswer = aiResult;
@@ -1024,10 +1053,23 @@ router.post('/channeltalk', async function(req, res) {
       var aiEscalated = false;
       var escalateKeywords = ["轉接客服", "轉接", "客服確認", "客服人員", "為您確認", "幫您確認", "담당자를 연결", "담당자에게", "상담사", "connect you with", "support team", "担当者におつなぎ", "担当者に"];
       var needEscalate = false;
+      var mediumConfidenceEsc = (confidence > 0 && confidence < 0.6);
       for (var ek = 0; ek < escalateKeywords.length; ek++) {
         if (aiAnswer.indexOf(escalateKeywords[ek]) !== -1) { needEscalate = true; break; }
       }
-      aiEscalated = needEscalate;
+      aiEscalated = needEscalate || mediumConfidenceEsc;
+      if (mediumConfidenceEsc && !needEscalate) {
+        console.log("[AI] Medium confidence (" + (confidence || 0).toFixed(3) + ") - triggering escalation after AI answer");
+        try {
+          var mgrListMed = await getCachedManagers();
+          var mgrsMed = (mgrListMed && mgrListMed.managers) || [];
+          for (var mm = 0; mm < mgrsMed.length; mm++) {
+            if (mgrsMed[mm].operator) { await channeltalk.inviteManager(chatId, mgrsMed[mm].id); break; }
+          }
+          pendingEscalations[chatId] = { time: Date.now(), timestamp: Date.now(), lang: detectedLang };
+          managerActive[chatId] = Date.now();
+        } catch(medErr) { console.error("[AI] Med confidence escalation error:", medErr.message); }
+      }
       aiLog.saveConversation({
         timestamp: new Date().toISOString(),
         chatId: chatId,
