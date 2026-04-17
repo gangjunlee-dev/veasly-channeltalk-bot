@@ -640,4 +640,156 @@ router.get('/escalation-analysis', function(req, res) {
   } catch(e) { res.json({ success: false, error: e.message }); }
 });
 
+
+// CS Score 일일 트렌드 API
+router.get('/cs-score-trend', (req, res) => {
+  try {
+    const days = parseInt(req.query.days) || 30;
+    const historyFile = path.join(__dirname, '../data/cs-score-history.json');
+    let history = [];
+    if (fs.existsSync(historyFile)) {
+      history = JSON.parse(fs.readFileSync(historyFile, 'utf8'));
+    }
+    
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - days);
+    const filtered = history.filter(h => new Date(h.date) >= cutoff);
+    
+    // 트렌드 분석
+    let trend = 'stable';
+    if (filtered.length >= 3) {
+      const recent3 = filtered.slice(-3);
+      const first = recent3[0].score;
+      const last = recent3[recent3.length - 1].score;
+      if (last - first > 0.2) trend = 'improving';
+      else if (first - last > 0.2) trend = 'declining';
+    }
+    
+    // 목표 도달 예측
+    const target = 3.0;
+    let estimatedDaysToTarget = null;
+    if (filtered.length >= 2) {
+      const oldest = filtered[0];
+      const newest = filtered[filtered.length - 1];
+      const daysDiff = (new Date(newest.date) - new Date(oldest.date)) / (1000 * 60 * 60 * 24);
+      const scoreDiff = newest.score - oldest.score;
+      if (daysDiff > 0 && scoreDiff > 0) {
+        const dailyRate = scoreDiff / daysDiff;
+        const remaining = target - newest.score;
+        if (remaining > 0) {
+          estimatedDaysToTarget = Math.ceil(remaining / dailyRate);
+        } else {
+          estimatedDaysToTarget = 0;
+        }
+      }
+    }
+    
+    res.json({
+      success: true,
+      trend,
+      target,
+      estimatedDaysToTarget,
+      currentScore: filtered.length > 0 ? filtered[filtered.length - 1].score : null,
+      dataPoints: filtered.length,
+      history: filtered
+    });
+  } catch(e) {
+    res.json({ success: false, error: e.message });
+  }
+});
+
+// 주간 사업 지표 API  
+router.get('/business-metrics', (req, res) => {
+  try {
+    const weeks = parseInt(req.query.weeks) || 12;
+    const bizFile = path.join(__dirname, '../data/business-metrics.json');
+    let bizData = [];
+    if (fs.existsSync(bizFile)) {
+      bizData = JSON.parse(fs.readFileSync(bizFile, 'utf8'));
+    }
+    
+    const filtered = bizData.slice(-weeks);
+    
+    res.json({
+      success: true,
+      totalWeeks: filtered.length,
+      metrics: filtered
+    });
+  } catch(e) {
+    res.json({ success: false, error: e.message });
+  }
+});
+
+// 에스컬레이션 기반 FAQ 추천 API
+router.get('/faq-recommendations', (req, res) => {
+  try {
+    const days = parseInt(req.query.days) || 7;
+    const logFile = path.join(__dirname, '../data/ai-conversations.json');
+    let logs = [];
+    if (fs.existsSync(logFile)) {
+      logs = JSON.parse(fs.readFileSync(logFile, 'utf8'));
+    }
+    
+    const cutoff = Date.now() - (days * 24 * 60 * 60 * 1000);
+    const recent = logs.filter(l => l.timestamp > cutoff && l.escalated);
+    
+    // 에스컬레이션 질문을 카테고리별로 분류
+    const categories = {};
+    const keywords = {
+      shipping: ['배송', '운송', '택배', '寄', '到貨', '물류', 'delivery', 'ship', '發貨'],
+      payment: ['결제', '카드', 'PayPal', '付款', '支付', 'payment', '입금'],
+      refund: ['환불', '취소', '退款', '取消', 'refund', 'cancel'],
+      product: ['상품', '사이즈', '色', '商品', 'product', 'size', '品質'],
+      customs: ['통관', '관세', '세관', '報關', 'EZ', 'customs', '稅'],
+      tracking: ['추적', '조회', '查詢', '物流', 'tracking', 'status']
+    };
+    
+    recent.forEach(log => {
+      const q = (log.question || '').toLowerCase();
+      let matched = false;
+      for (const [cat, kws] of Object.entries(keywords)) {
+        if (kws.some(kw => q.includes(kw.toLowerCase()))) {
+          if (!categories[cat]) categories[cat] = { count: 0, examples: [] };
+          categories[cat].count++;
+          if (categories[cat].examples.length < 3) {
+            categories[cat].examples.push(log.question);
+          }
+          matched = true;
+          break;
+        }
+      }
+      if (!matched) {
+        if (!categories['other']) categories['other'] = { count: 0, examples: [] };
+        categories['other'].count++;
+        if (categories['other'].examples.length < 3) {
+          categories['other'].examples.push(log.question);
+        }
+      }
+    });
+    
+    // 우선순위 정렬
+    const sorted = Object.entries(categories)
+      .sort((a, b) => b[1].count - a[1].count)
+      .map(([cat, data]) => ({ category: cat, ...data }));
+    
+    // FAQ 추천 생성
+    const recommendations = sorted.slice(0, 5).map(cat => ({
+      category: cat.category,
+      escalationCount: cat.count,
+      sampleQuestions: cat.examples,
+      recommendation: `${cat.category} 관련 FAQ ${cat.count}건 에스컬레이션 발생. 구어체 변형 추가 권장.`
+    }));
+    
+    res.json({
+      success: true,
+      period: days + ' days',
+      totalEscalations: recent.length,
+      recommendations
+    });
+  } catch(e) {
+    res.json({ success: false, error: e.message });
+  }
+});
+
+
 module.exports = router;
