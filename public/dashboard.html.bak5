@@ -262,183 +262,166 @@ function loadAllData() {
 // ===== OVERVIEW TAB =====
 function loadOverview() {
   var days = document.getElementById('days').value;
-  document.getElementById('overviewContent').innerHTML = '<div class="loading">분석 중...</div>';
-
-  // === PHASE 1: v2 운영 카드 + 차트 (기본) ===
+  document.getElementById('overviewContent').innerHTML = '<div class="loading">\uc804\ub7b5 \ubd84\uc11d \ub85c\ub529 \uc911...</div>';
   Promise.all([
-    fetch(API_BASE + '/api/analytics/report?days=' + days).then(function(r) { return r.json(); }),
-    fetch('/api/analytics/auto-close').then(function(r) { return r.json(); }).catch(function() { return null; })
+    fetch('/api/analytics/cs-score-metrics?days=' + days).then(function(r){ return r.json(); }),
+    fetch('/api/analytics/manager-performance?days=' + days).then(function(r){ return r.json(); }),
+    fetch('/api/analytics/report?days=' + days).then(function(r){ return r.json(); }),
+    fetch('/api/analytics/escalation-analysis?days=' + days).then(function(r){ return r.json(); }).catch(function(){ return null; }),
+    fetch('/api/analytics/data-health').then(function(r){ return r.json(); }).catch(function(){ return null; }),
+    fetch('/api/analytics/csat?days=30').then(function(r){ return r.json(); }).catch(function(){ return null; })
   ]).then(function(results) {
-    var data = results[0];
-    var autoClose = results[1];
-    if (!data.success) throw new Error(data.error);
-    var r = data.raw;
-    cachedData.overview = r;
-
-    var botRate = r.totalMessages > 0 ? Math.round((r.botMessages / r.totalMessages) * 100) : 0;
-    var aiResolveRate = (r.botMessages + r.managerMessages) > 0 ? Math.round((r.botMessages / (r.botMessages + r.managerMessages)) * 100) : 0;
-    var escalationCount = r.categories.escalation ? r.categories.escalation.count : 0;
-    var escalationRate = r.userMessages > 0 ? Math.round((escalationCount / r.userMessages) * 100) : 0;
-
-    var html = '<div class="grid">';
-    html += card('총 상담', r.totalChats, '건', 'blue', r.period, '📊 선택한 기간 동안 접수된 전체 상담 건수입니다.');
-    html += card('AI 봇 응답', r.botMessages, '건', 'green', '응답률 ' + botRate + '%', '🤖 AI가 자동으로 처리한 메시지 수입니다.');
-    html += card('매니저 응답', r.managerMessages, '건', 'yellow', 'AI 해결률 ' + aiResolveRate + '%', '👨‍💼 매니저가 직접 응답한 건수입니다.');
-    html += card('에스컬레이션', escalationCount, '건', escalationRate > 20 ? 'red' : 'yellow', '비율 ' + escalationRate + '%', '🔺 AI가 처리하지 못해 매니저에게 전달된 건수입니다.');
-    html += card('미해결 상담', r.unresolvedChats, '건', r.unresolvedChats > 10 ? 'red' : 'green', r.unresolvedChats > 10 ? '우선 처리 필요' : '양호', '⏳ 아직 종료되지 않은 열린 상담입니다.');
-    if (r.channelStats) {
-      var cs = r.channelStats;
-      var total = cs.line + cs.web + cs.other;
-      html += card('LINE', cs.line, '건 (' + (total > 0 ? (cs.line/total*100).toFixed(0) : 0) + '%)', 'green', 'LINE 메신저', '💚 LINE 메신저를 통해 접수된 상담입니다.');
-      html += card('웹사이트', cs.web, '건 (' + (total > 0 ? (cs.web/total*100).toFixed(0) : 0) + '%)', 'blue', 'veasly.com', '🌐 웹사이트 채팅을 통해 접수된 상담입니다.');
-    }
-    if (autoClose && autoClose.success) {
-      html += card('CSAT 대기', autoClose.csatPending, '건', autoClose.csatPending > 10 ? 'yellow' : 'green', '24h 후 자동종료', '📋 CSAT 설문 발송 후 미응답 건수입니다.');
-    }
-    html += '</div>';
-
-    html += '<div class="charts">';
-    html += categoryChart(r.categories);
-    html += keywordChart(r.topKeywords);
-    html += hourChart(r.hourlyDistribution);
-    html += messageBreakdown(r);
-    html += '</div>';
-
-    html += '<div class="insights">' + insightsCard(r) + '</div>';
-
-    // 전략 섹션 placeholder
-    html += '<div id="strategySection"><div class="loading">전략 분석 로딩 중...</div></div>';
-
-    document.getElementById('overviewContent').innerHTML = html;
-
-    // === PHASE 2: v3 전략 대시보드 (비동기 append) ===
-    loadStrategySection(days);
-
-  }).catch(function(e) {
-    document.getElementById('overviewContent').innerHTML = '<div class="loading" style="color:#ef4444;">오류: ' + e.message + '</div>';
-  });
-}
-
-function loadStrategySection(days) {
-  Promise.all([
-    fetch('/api/analytics/cs-score-metrics?days=' + days).then(function(r){return r.json();}).catch(function(){return null;}),
-    fetch('/api/analytics/manager-performance?days=' + days).then(function(r){return r.json();}).catch(function(){return null;}),
-    fetch('/api/analytics/escalation-analysis?days=' + days).then(function(r){return r.json();}).catch(function(){return null;}),
-    fetch('/api/analytics/data-health').then(function(r){return r.json();}).catch(function(){return null;}),
-    fetch('/api/analytics/csat?days=' + days).then(function(r){return r.json();}).catch(function(){return null;})
-  ]).then(function(res) {
-    var el = document.getElementById('strategySection');
-    if (!el) return;
-    var m = res[0], mgr = res[1], esc = res[2], dh = res[3], csat = res[4];
-    if (!m || !m.success) { el.innerHTML = '<div class="loading" style="color:#eab308;">전략 데이터 로딩 실패 - 기본 대시보드만 표시됩니다.</div>'; return; }
-
+    var m = results[0];
+    var mgr = results[1];
+    var rpt = results[2];
+    var esc = results[3];
+    var hlth = results[4];
+    var csat = results[5];
+    if (!m || !m.success) { document.getElementById('overviewContent').innerHTML = '<div class="loading" style="color:#ef4444;">CS Score \ub370\uc774\ud130\ub97c \ubd88\ub7ec\uc62c \uc218 \uc5c6\uc2b5\ub2c8\ub2e4.</div>'; return; }
     var sc = m.integratedScore || {};
     var bd = sc.breakdown || {};
+    var nr = m.noReplyClose || {};
+    var rt = m.responseTime || {};
+    var ai = m.aiResolution || {};
+    var bh = m.businessHours || {};
+    var fcr = m.fcr || {};
+    var ces = m.ces || {};
+    function scoreColor(s) { return s >= 3.5 ? '#22c55e' : s >= 2.5 ? '#eab308' : '#ef4444'; }
+    function sevClass(s) { return s >= 3.5 ? 'sev-green' : s >= 2.5 ? 'sev-yellow' : 'sev-red'; }
+    function sevIcon(s) { return s >= 3.5 ? '\ud83d\udfe2' : s >= 2.5 ? '\ud83d\udfe1' : '\ud83d\udd34'; }
     var totalScore = sc.score || 0;
     var h = '';
-
-    // 구분선
-    h += '<div style="margin:30px 0 20px;padding:20px 0 0;border-top:2px solid #334155;">';
-    h += '<h2 style="color:#e2e8f0;margin:0 0 15px;font-size:20px;">📊 CS 전략 대시보드</h2>';
-    h += '</div>';
-
-    // CS Score 게이지
     h += '<div class="strat-hero">';
-    h += '<canvas id="csGauge" width="200" height="120" style="display:block;margin:0 auto;"></canvas>';
-    h += '<div style="text-align:center;margin-top:8px;"><span style="font-size:32px;font-weight:800;color:' + (totalScore>=3?'#22c55e':totalScore>=2.5?'#eab308':'#ef4444') + ';">' + totalScore.toFixed(2) + '</span>';
-    h += '<span style="color:#64748b;font-size:14px;"> / 5.0 (목표: ' + (sc.target||3) + ')</span></div></div>';
-
-    // 5 서브 메트릭
-    function sevClass(s) { return s >= 3 ? 'sev-green' : s >= 2.5 ? 'sev-yellow' : 'sev-red'; }
-    var metrics = [
-      {name:'NoReply', score:(bd.noReply||{}).score||0, weight:0.20, detail:'미응답 '+((m.noReplyClose||{}).rate||0)+'% ('+((m.noReplyClose||{}).count||0)+'/'+((m.noReplyClose||{}).total||0)+')'},
-      {name:'FRT', score:(bd.frt||{}).score||0, weight:0.20, detail:'30분내 '+((m.responseTime||{}).within30MinRate||0)+'% | 평균 '+((m.responseTime||{}).avgMinutes||0)+'분'},
-      {name:'FCR', score:(bd.fcr||{}).score||0, weight:0.25, detail:'해결 '+((m.fcr||{}).resolved||0)+'건 | 재문의 '+((m.fcr||{}).reopened||0)+'건'},
-      {name:'CSAT', score:(bd.csat||{}).score||0, weight:0.20, detail:'평균 '+(csat&&csat.average?csat.average.toFixed(1):'N/A')+' | 응답 '+(csat&&csat.total?csat.total:0)+'건'},
-      {name:'CES', score:(bd.ces||{}).score||0, weight:0.15, detail:'평균 '+((m.ces||{}).avgScore||0)+' | 응답 '+((m.ces||{}).count||0)+'건'}
-    ];
+    h += '<div class="strat-gauge"><canvas id="gaugeCanvas" width="180" height="180"></canvas>';
+    h += '<div class="gauge-center"><div class="gauge-score" style="color:' + scoreColor(totalScore) + '">' + totalScore.toFixed(2) + '</div>';
+    h += '<div class="gauge-target">\ubaa9\ud45c ' + (sc.target || 3) + '.0</div></div></div>';
     h += '<div class="strat-subs">';
-    for (var i=0; i<metrics.length; i++) {
-      var met = metrics[i];
-      var icon = met.score >= 3 ? '🟢' : met.score >= 2.5 ? '🟡' : '🔴';
-      h += '<div class="strat-sub ' + sevClass(met.score) + '" onclick="this.classList.toggle('expanded')">';
-      h += '<div class="sub-title">' + icon + ' ' + met.name + ' <span style="float:right;">' + met.score.toFixed(1) + '/5</span></div>';
-      h += '<div class="sub-detail">' + met.detail + ' | 가중치 ' + (met.weight*100) + '%</div></div>';
-    }
-    h += '</div>';
-
-    // Top 5 문제점
+    var metrics = [
+      {name:'NoReply',score:bd.noReply?bd.noReply.score:0,actual:(nr.rate||0)+'% ('+(nr.count||0)+'/'+(nr.total||0)+')',detail:'\ubbf8\uc751\ub2f5 \uc885\ub8cc\uc728. \ubaa9\ud45c: 15% \uc774\ud558.<br>\uac00\uc911\uce58: '+((bd.noReply?bd.noReply.weight:0)*100)+'%<br>\uc624\ud504\uc2dc\uac04: '+(bh.offHourRate||0)+'%'},
+      {name:'FRT',score:bd.frt?bd.frt.score:0,actual:'30\ubd84\uc774\ub0b4 '+(rt.within30MinRate||0)+'% (\ud3c9\uade0 '+(rt.avgMinutes||0)+'\ubd84)',detail:'\uccab \uc751\ub2f5. \ubaa9\ud45c: 80%.<br>\uac00\uc911\uce58: '+((bd.frt?bd.frt.weight:0)*100)+'%<br>\uc0d8\ud50c: '+(rt.totalSamples||0)+'\uac74'},
+      {name:'FCR',score:bd.fcr?bd.fcr.score:0,actual:'\ud574\uacb0 '+(fcr.resolved||0)+'\uac74 / \uc7ac\uc624\ud508 '+(fcr.reopened||0)+'\uac74',detail:'1\ud68c \ud574\uacb0\uc728. \ub370\uc774\ud130 \ucd95\uc801 \ud544\uc694.<br>\uac00\uc911\uce58: '+((bd.fcr?bd.fcr.weight:0)*100)+'%'},
+      {name:'CSAT',score:bd.csat?bd.csat.score:0,actual:'\ud3c9\uade0 '+((csat&&csat.avgScore)?csat.avgScore.toFixed(1):'0')+'/5 ('+((csat&&csat.totalResponses)?csat.totalResponses:0)+'\uac74)',detail:'\uace0\uac1d \ub9cc\uc871\ub3c4. \ubaa9\ud45c: 3.5+<br>\uac00\uc911\uce58: '+((bd.csat?bd.csat.weight:0)*100)+'%'},
+      {name:'CES',score:bd.ces?bd.ces.score:0,actual:'\uc218\uc9d1 '+(ces.totalResponses||0)+'\uac74',detail:'\uace0\uac1d \ub178\ub825 \uc810\uc218.<br>\uac00\uc911\uce58: '+((bd.ces?bd.ces.weight:0)*100)+'%'}
+    ];
+    metrics.forEach(function(met) {
+      h += '<div class="strat-sub ' + sevClass(met.score) + '" onclick="this.classList.toggle(\'expanded\')">';
+      h += '<span class="sub-icon">' + sevIcon(met.score) + '</span>';
+      h += '<div class="sub-name">' + met.name + '</div>';
+      h += '<div class="sub-score">' + met.score.toFixed(1) + '<small>/5</small></div>';
+      h += '<div class="sub-actual">' + met.actual + '</div>';
+      h += '<div class="sub-detail">' + met.detail + '</div></div>';
+    });
+    h += '</div></div>';
+    h += '<div class="strat-problems"><h2>\ud83d\udd0d \ud575\uc2ec \ubb38\uc81c\uc810 Top 5</h2><div class="prob-cards">';
     var problems = [
-      {rank:1, sev:'CRITICAL', title:'에스컬레이션 47%', cause:'other 46건 AI 분류 불가', impact:'매니저 부하 → FRT 악화', icon:'🔺'},
-      {rank:2, sev:'CRITICAL', title:'NoReply 미응답 33%', cause:'오프시간 50%, 피크 10-12시', impact:'고객 이탈, CS Score 하락', icon:'⏰'},
-      {rank:3, sev:'WARNING', title:'CSAT 평균 2.3/5', cause:'응답 10건, 70% ≤ 2점', impact:'불만족 집중, 재구매율 영향', icon:'📉'},
-      {rank:4, sev:'WARNING', title:'CES/FCR 데이터 부족', cause:'CES '+((m.ces||{}).count||0)+'건, FCR '+((m.fcr||{}).resolved||0)+'건', impact:'CS Score 정확도 낮음', icon:'📊'},
-      {rank:5, sev:'INFO', title:'매니저 업무 편중', cause:'vida 77채팅/152응답, 나머지 최소', impact:'번아웃 위험, 품질 저하', icon:'👥'}
+      {rank:1,sev:'critical',title:'NoReply \ubbf8\uc751\ub2f5 '+(nr.rate||0)+'%',data:'\ubbf8\uc751\ub2f5 <b>'+(nr.count||0)+'/'+(nr.total||0)+'</b>\uac74<br>\uc624\ud504\uc2dc\uac04 <b>'+(bh.offHourRate||0)+'%</b><br>\ud3c9\uade0\uc751\ub2f5 <b>'+(rt.avgMinutes||0)+'\ubd84</b>',why:'<b>\uc6d0\uc778:</b> \uc624\ud504\uc2dc\uac04(50%) \ubb38\uc758\uc5d0 \ub9e4\ub2c8\uc800 \ubd80\uc7ac.<br><b>\uc601\ud5a5:</b> CS Score \uac00\uc911\uce58 20%, \ud604\uc7ac 1.5/5'},
+      {rank:2,sev:'critical',title:'\uc5d0\uc2a4\uceec\ub808\uc774\uc158 '+(100-(ai.rate||0))+'%',data:'AI\ucc98\ub9ac <b>'+(ai.resolved||0)+'/'+(ai.total||0)+'</b>\uac74<br>\uc5d0\uc2a4\uceec\ub808\uc774\uc158 <b>'+((ai.total||0)-(ai.resolved||0))+'</b>\uac74',why:'<b>\uc6d0\uc778:</b> \ubcf5\ud569 \uc9c8\ubb38 AI \ubd84\ub958 \ubd88\uac00.<br><b>\uc601\ud5a5:</b> \ub9e4\ub2c8\uc800 \ubd80\ud558 \u2192 FRT \uc545\ud654'},
+      {rank:3,sev:'critical',title:'CSAT '+((csat&&csat.avgScore)?csat.avgScore.toFixed(1):'0')+'/5',data:'\uc751\ub2f5 <b>'+((csat&&csat.totalResponses)?csat.totalResponses:0)+'</b>\uac74, 70% \u2264 2\uc810',why:'<b>\uc6d0\uc778:</b> \uc751\ub2f5\uc2dc\uac04 \uacfc\ub2e4, \ub2f5\ubcc0 \uad6c\uccb4\uc131 \ubd80\uc871.<br><b>\uc601\ud5a5:</b> CS Score \uac00\uc911\uce58 20%'},
+      {rank:4,sev:'warning',title:'CES\u00b7FCR \ub370\uc774\ud130 \ubd80\uc7ac',data:'CES <b>'+(ces.totalResponses||0)+'/20</b>\uac74<br>FCR <b>'+(fcr.resolved||0)+'/10</b>\uac74<br>\uac00\uc911\uce58 <b>40%</b>',why:'<b>\uc6d0\uc778:</b> \uc124\ubb38 \uc751\ub2f5 0\uac74. \uae30\ubcf8\uac12 \uc801\uc6a9 \uc911.<br><b>\uc601\ud5a5:</b> \uc810\uc218 \uacfc\ub300/\uacfc\uc18c \ud3c9\uac00'},
+      {rank:5,sev:'warning',title:'\ub9e4\ub2c8\uc800 \uc5c5\ubb34 \ud3b8\uc911',data:'',why:'<b>\uc6d0\uc778:</b> vida 85%+ \ucc98\ub9ac, mia 408\ubd84.<br><b>\uc601\ud5a5:</b> vida \uacfc\ubd80\ud558 \u2192 CSAT \ud558\ub77d'}
     ];
-    h += '<div class="strat-problems"><h2>🔍 핵심 문제점 Top 5</h2><div class="prob-cards">';
-    for (var p=0; p<problems.length; p++) {
-      var pr = problems[p];
-      h += '<div class="prob-card" onclick="this.classList.toggle('expanded')">';
-      h += '<div class="prob-header"><span class="prob-sev prob-'+pr.sev.toLowerCase()+'">'+pr.sev+'</span> '+pr.icon+' #'+pr.rank+' '+pr.title+'</div>';
-      h += '<div class="prob-body"><b>원인:</b> '+pr.cause+'<br><b>영향:</b> '+pr.impact+'</div></div>';
-    }
+    var mgrPerf = m.managerResponseTime || [];
+    var md = '';
+    mgrPerf.forEach(function(mp) {
+      var n = mp.managerId==='622148'?'vida':mp.managerId==='609410'?'mia':mp.managerId==='357940'?'andy':mp.managerId;
+      md += n+': <b>'+mp.avgMin+'\ubd84</b>, 30\ubd84\ub0b4 <b>'+mp.within30Rate+'%</b> ('+mp.samples+'\uac74)<br>';
+    });
+    problems[4].data = md;
+    problems.forEach(function(p) {
+      h += '<div class="prob-card" onclick="this.classList.toggle(\'expanded\')">';
+      h += '<div class="prob-rank">#'+p.rank+'</div>';
+      h += '<div class="prob-sev '+p.sev+'">'+p.sev.toUpperCase()+'</div>';
+      h += '<div class="prob-title">'+p.title+'</div>';
+      h += '<div class="prob-data">'+p.data+'</div>';
+      h += '<div class="prob-why">'+p.why+'</div></div>';
+    });
     h += '</div></div>';
-
-    // 액션 플랜
+    h += '<div class="strat-actions"><h2>\ud83c\udfaf \uc561\uc158 \ud50c\ub79c</h2><div class="action-timeline">';
     var actions = [
-      {step:1, status:'s-active', title:'AI 에스컬레이션 ↓ 47%→30%', desc:'주문상태 AI해석, 필터 간결화, FAQ 8건', target:'AI처리 <b>70%→85%</b>'},
-      {step:2, status:'s-active', title:'FRT 42%→80% | NoReply 33%→15%', desc:'오프시간 AI선응답, 대기 20분, 주말제외, 알림', target:'NoReply 1.5→3.0 | FRT 2.5→3.0'},
-      {step:3, status:'s-active', title:'CSAT 2.3→3.5', desc:'응답 템플릿 150자, 설문 응답률 15-20%', target:'CSAT <b>2.5→3.5</b>'},
-      {step:4, status:'s-wait', title:'CES/FCR 데이터 수집', desc:'CES 20건+, FCR 10건+ 확보', target:'CS Score 정확도 향상'},
-      {step:5, status:'s-wait', title:'비즈니스 KPI 연동', desc:'재구매율, 환불율, 인건비 연동', target:'CS→매출 상관분석'}
+      {st:'done',num:'p1',label:'1\uc21c\uc704',status:'s-done',stxt:'\u2705 \uc644\ub8cc',title:'AI \uc5d0\uc2a4\uceec\ub808\uc774\uc158 \u2193 47%\u219230%',desc:'\uc8fc\ubb38\uc0c1\ud0dc AI\ud574\uc11d, \ud544\ud130 \uac04\uacb0\ud654, FAQ 8\uac74',impact:'NoReply 1.5\u21923.0 | FRT 2.5\u21923.0'},
+      {st:'done',num:'p2',label:'2\uc21c\uc704',status:'s-done',stxt:'\u2705 \uc644\ub8cc',title:'FRT 42%\u219280%',desc:'\uc624\ud504\uc2dc\uac04 AI\uc120\uc751\ub2f5, \ub300\uae30 20\ubd84, \uc8fc\ub9d0\uc81c\uc678, \uc54c\ub9bc',impact:'FRT 42%\u219280% | NoReply 33%\u219215%'},
+      {st:'done',num:'p3',label:'3\uc21c\uc704',status:'s-done',stxt:'\u2705 \uc644\ub8cc',title:'CSAT 2.3\u21923.5',desc:'\uc774\ubaa8\uc9c0 \uc124\ubb38, \uc9e7\uc740\ub2f5\ubcc0 \uacbd\uace0',impact:'CSAT 2.3\u21923.5 | \uc124\ubb38 10\u219230\uac74+'},
+      {st:'active',num:'p4',label:'4\uc21c\uc704',status:'s-active',stxt:'\ud83d\udcca \ucd95\uc801\uc911',title:'CES\u00b7FCR \ub370\uc774\ud130 \uc218\uc9d1',desc:'CES 20\uac74+, FCR 10\uac74+, data-health \uccb4\ud06c',impact:'\ub370\uc774\ud130 \uae30\ubc18 CS Score \uc815\ud655\ud654'},
+      {st:'waiting',num:'p5',label:'5\uc21c\uc704',status:'s-wait',stxt:'\u23f3 \ub300\uae30',title:'CS \u2194 KPI \uc5f0\ub3d9',desc:'\uc7ac\uad6c\ub9e4\uc728/\ud658\ubd88\uc728/\uac1d\ub2e8\uac00 \uc0c1\uad00\ubd84\uc11d',impact:'CS 3.0 \u2192 \uc7ac\uad6c\ub9e4 +15%'}
     ];
-    h += '<div class="strat-actions"><h2>🎯 액션 플랜</h2><div class="action-timeline">';
-    for (var a=0; a<actions.length; a++) {
-      var act = actions[a];
-      h += '<div class="action-step '+act.status+'"><div class="step-num">'+act.step+'</div>';
-      h += '<div class="step-body"><div class="step-title">'+act.title+'</div>';
-      h += '<div class="step-desc">'+act.desc+'</div>';
-      h += '<div class="step-target">→ '+act.target+'</div></div></div>';
-    }
+    actions.forEach(function(a) {
+      h += '<div class="action-item '+a.st+'"><div class="action-dot"></div><div class="action-inner">';
+      h += '<div class="action-head"><span class="action-num '+a.num+'">'+a.label+'</span><span class="action-status '+a.status+'">'+a.stxt+'</span></div>';
+      h += '<div class="action-title">'+a.title+'</div>';
+      h += '<div class="action-desc">'+a.desc+'</div>';
+      h += '<div class="action-impact">'+a.impact+'</div></div></div>';
+    });
     h += '</div></div>';
-
-    // 매니저 현황
-    var mgrData = (mgr && mgr.success && mgr.managers) ? mgr.managers : [];
-    if (mgrData.length > 0) {
-      h += '<div class="strat-mgr"><h2>👥 매니저 현황</h2><div class="mgr-grid">';
-      for (var mi=0; mi<mgrData.length; mi++) {
-        var mg = mgrData[mi];
-        var n = mg.name || ('Manager '+mg.managerId);
-        var avg = mg.avgResponseMin || 0;
-        var w30 = mg.within30Rate || 0;
-        var replies = mg.totalReplies || 0;
-        var col = avg <= 30 ? '#22c55e' : avg <= 60 ? '#eab308' : '#ef4444';
-        h += '<div class="mgr-card"><div class="mgr-name">'+n+'</div>';
-        h += '<div style="color:'+col+';font-size:20px;font-weight:bold;">'+avg+'분</div>';
-        h += '<div style="font-size:11px;color:#94a3b8;">평균응답 | 30분내 '+w30+'% | '+replies+'건</div></div>';
-      }
-      h += '</div></div>';
-    }
-
-    // 목표 예측
-    h += '<div class="strat-forecast"><h2>📈 목표 예측</h2><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:12px;">';
-    h += '<div style="text-align:center;padding:12px;background:rgba(239,68,68,0.1);border-radius:8px;"><div style="font-size:11px;color:#94a3b8;">현재</div><div style="font-size:28px;font-weight:800;color:#ef4444;">'+totalScore.toFixed(2)+'</div></div>';
-    h += '<div style="text-align:center;padding:12px;background:rgba(234,179,8,0.1);border-radius:8px;"><div style="font-size:11px;color:#94a3b8;">2주후</div><div style="font-size:28px;font-weight:800;color:#eab308;">2.72</div><div style="font-size:10px;color:#64748b;">AI개선</div></div>';
-    h += '<div style="text-align:center;padding:12px;background:rgba(34,197,94,0.1);border-radius:8px;"><div style="font-size:11px;color:#94a3b8;">4주후</div><div style="font-size:28px;font-weight:800;color:#22c55e;">3.12</div><div style="font-size:10px;color:#64748b;">데이터확보</div></div>';
-    h += '<div style="text-align:center;padding:12px;background:rgba(56,189,248,0.1);border-radius:8px;"><div style="font-size:11px;color:#94a3b8;">목표</div><div style="font-size:28px;font-weight:800;color:#38bdf8;">'+(sc.target||3).toFixed(1)+'</div></div>';
+    h += '<div class="strat-mgr"><h2>\ud83d\udc65 \ub9e4\ub2c8\uc800 \ud604\ud669</h2><div class="mgr-grid">';
+    mgrPerf.forEach(function(mp) {
+      var n = mp.managerId==='622148'?'vida (\uc8fc\ub2f4\ub2f9)':mp.managerId==='609410'?'mia':mp.managerId==='357940'?'andy (\ub9ac\ub354)':'Mgr '+mp.managerId;
+      var bc = mp.within30Rate>=80?'#22c55e':mp.within30Rate>=50?'#eab308':'#ef4444';
+      var ac = mp.avgMin<=30?'#22c55e':mp.avgMin<=120?'#eab308':'#ef4444';
+      h += '<div class="mgr-card"><div class="mgr-name">'+n+'</div>';
+      h += '<div class="mgr-stat"><span>\ud3c9\uade0\uc751\ub2f5</span><b style="color:'+ac+'">'+mp.avgMin+'\ubd84</b></div>';
+      h += '<div class="mgr-stat"><span>30\ubd84\uc774\ub0b4</span><b style="color:'+bc+'">'+mp.within30Rate+'%</b></div>';
+      h += '<div class="mgr-bar"><div class="mgr-bar-fill" style="width:'+mp.within30Rate+'%;background:'+bc+'"></div></div>';
+      h += '<div class="mgr-stat"><span>\ucc98\ub9ac</span><b>'+mp.samples+'\uac74</b></div></div>';
+    });
     h += '</div></div>';
-
-    el.innerHTML = h;
-
-    // 게이지 그리기
+    h += '<div style="padding:0 32px 16px;"><div style="background:linear-gradient(135deg,#1e293b,#0f2027);border-radius:12px;padding:20px;">';
+    h += '<h2 style="font-size:16px;color:#f8fafc;margin:0 0 12px;">\ud83d\udcc8 CS Score 3.0 \uc608\uce21</h2>';
+    h += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;">';
+    h += '<div style="text-align:center;padding:12px;background:rgba(239,68,68,0.1);border-radius:8px;"><div style="font-size:11px;color:#94a3b8;">\ud604\uc7ac</div><div style="font-size:28px;font-weight:800;color:#ef4444;">'+totalScore.toFixed(2)+'</div><div style="font-size:10px;color:#64748b;">2026-04-17</div></div>';
+    h += '<div style="text-align:center;padding:12px;background:rgba(234,179,8,0.1);border-radius:8px;"><div style="font-size:11px;color:#94a3b8;">2\uc8fc\ud6c4</div><div style="font-size:28px;font-weight:800;color:#eab308;">2.72</div><div style="font-size:10px;color:#64748b;">AI\uac1c\uc120</div></div>';
+    h += '<div style="text-align:center;padding:12px;background:rgba(34,197,94,0.1);border-radius:8px;"><div style="font-size:11px;color:#94a3b8;">4\uc8fc\ud6c4</div><div style="font-size:28px;font-weight:800;color:#22c55e;">3.12</div><div style="font-size:10px;color:#64748b;">\ub9e4\ub2c8\uc800+\ub370\uc774\ud130</div></div>';
+    h += '<div style="text-align:center;padding:12px;background:rgba(59,130,246,0.1);border-radius:8px;"><div style="font-size:11px;color:#94a3b8;">\ubaa9\ud45c</div><div style="font-size:28px;font-weight:800;color:#3b82f6;">3.00</div><div style="font-size:10px;color:#64748b;">Target</div></div>';
+    h += '</div>';
+    var pct = Math.min(100, (totalScore/5)*100);
+    h += '<div style="margin-top:16px;"><div style="display:flex;justify-content:space-between;font-size:11px;color:#64748b;margin-bottom:4px;"><span>1.0</span><span>\ubaa9\ud45c 3.0</span><span>5.0</span></div>';
+    h += '<div style="height:10px;background:#334155;border-radius:5px;position:relative;">';
+    h += '<div style="height:100%;width:'+pct+'%;background:linear-gradient(90deg,'+scoreColor(totalScore)+',#3b82f6);border-radius:5px;"></div>';
+    h += '<div style="position:absolute;left:60%;top:-3px;width:2px;height:16px;background:#f8fafc;border-radius:1px;"></div>';
+    h += '</div></div></div></div>';
+    if (hlth && hlth.overallStatus) {
+      h += '<div style="padding:0 32px 16px;"><div style="background:#1e293b;border-radius:12px;padding:16px;">';
+      h += '<h2 style="font-size:14px;color:#f8fafc;margin:0 0 10px;">\ud83c\udfe5 \ub370\uc774\ud130 \ud604\ud669 ('+hlth.overallStatus+')</h2>';
+      h += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;">';
+      var hk = ['csat','ces','fcr','scoreHistory','csatFeedback'];
+      var hl = {csat:'CSAT',ces:'CES',fcr:'FCR',scoreHistory:'Score\uc774\ub825',csatFeedback:'\ubd88\ub9cc\uc0ac\uc720'};
+      hk.forEach(function(k) {
+        var it = hlth[k]; if (!it) return;
+        var sc2 = it.status==='OK'?'#22c55e':it.status==='INSUFFICIENT'?'#ef4444':'#eab308';
+        h += '<div style="background:#0f172a;border-radius:8px;padding:10px;text-align:center;">';
+        h += '<div style="font-size:10px;color:#64748b;">'+(hl[k]||k)+'</div>';
+        h += '<div style="font-size:16px;font-weight:700;color:'+sc2+';">'+it.status+'</div>';
+        if (it.total!==undefined) h += '<div style="font-size:10px;color:#94a3b8;">'+it.total+'\uac74</div>';
+        if (it.dataPoints!==undefined) h += '<div style="font-size:10px;color:#94a3b8;">'+it.dataPoints+'\uc77c</div>';
+        h += '</div>';
+      });
+      h += '</div></div></div>';
+    }
+    h += '<div class="strat-refresh-time">\uac31\uc2e0: '+new Date().toLocaleString('ko-KR')+' | 60\ucd08</div>';
+    document.getElementById('overviewContent').innerHTML = h;
     setTimeout(function() { drawGauge(totalScore, sc.target||3); }, 50);
-
   }).catch(function(e) {
-    var el = document.getElementById('strategySection');
-    if (el) el.innerHTML = '<div class="loading" style="color:#eab308;">전략 섹션 로딩 실패: ' + e.message + '</div>';
+    document.getElementById('overviewContent').innerHTML = '<div class="loading" style="color:#ef4444;">\uc624\ub958: '+e.message+'</div>';
   });
 }
 
+function drawGauge(score, target) {
+  var canvas = document.getElementById('gaugeCanvas');
+  if (!canvas) return;
+  var ctx = canvas.getContext('2d');
+  var cx=90,cy=100,r=70;
+  var sa=0.75*Math.PI, ea=2.25*Math.PI, ta=ea-sa;
+  ctx.beginPath(); ctx.arc(cx,cy,r,sa,ea); ctx.lineWidth=14; ctx.strokeStyle='#334155'; ctx.lineCap='round'; ctx.stroke();
+  var sAngle=sa+(score/5)*ta;
+  var g=ctx.createLinearGradient(0,0,180,0);
+  if(score<2.5){g.addColorStop(0,'#ef4444');g.addColorStop(1,'#f97316');}
+  else if(score<3.5){g.addColorStop(0,'#f97316');g.addColorStop(1,'#eab308');}
+  else{g.addColorStop(0,'#22c55e');g.addColorStop(1,'#10b981');}
+  ctx.beginPath(); ctx.arc(cx,cy,r,sa,sAngle); ctx.lineWidth=14; ctx.strokeStyle=g; ctx.lineCap='round'; ctx.stroke();
+  var tAngle=sa+(target/5)*ta;
+  var tx=cx+(r+12)*Math.cos(tAngle), ty=cy+(r+12)*Math.sin(tAngle);
+  ctx.beginPath(); ctx.arc(tx,ty,4,0,2*Math.PI); ctx.fillStyle='#f8fafc'; ctx.fill();
+  ctx.font='9px sans-serif'; ctx.fillStyle='#64748b'; ctx.textAlign='center'; ctx.fillText('\ubaa9\ud45c',tx,ty+14);
+}
 
 function loadManagerData() {
   var days = document.getElementById('days').value;
