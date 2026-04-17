@@ -1137,33 +1137,31 @@ router.post('/channeltalk', async function(req, res) {
 // === 15-min auto-reassign checker ===
 setInterval(async function() {
   var now = Date.now();
-  var REASSIGN_TIMEOUT = 15 * 60 * 1000
-
-        // === STAGED ALERTS ===
-        var elapsed = now - esc.timestamp;
-        var elapsedMin = Math.round(elapsed / 60000);
-        // 5min warning (log only)
-        if (elapsedMin >= 5 && !esc.warned5) {
-          console.log('[ESCALATION-WARN] 5min no reply - chatId:', cid);
-          esc.warned5 = true;
-        }
-        // 10min warning (log only)
-        if (elapsedMin >= 10 && !esc.warned10) {
-          console.log('[ESCALATION-WARN] 10min no reply - chatId:', cid);
-          esc.warned10 = true;
-        }
-        // 30min: send waiting message to customer
-        if (elapsedMin >= 30 && !esc.waitingSent) {
-          sendWaitingMessage(cid, esc.lang || 'zh-TW');
-          esc.waitingSent = true;
-        }
-
-        // original 15min check: ;
+  var REASSIGN_TIMEOUT = 15 * 60 * 1000;
   var chatIds = Object.keys(pendingEscalations);
   for (var i = 0; i < chatIds.length; i++) {
     var cid = chatIds[i];
     var esc = pendingEscalations[cid];
-    if (now - esc.time >= REASSIGN_TIMEOUT) {
+    if (!esc) { delete pendingEscalations[cid]; continue; }
+
+    // === STAGED ALERTS ===
+    var elapsed = now - (esc.timestamp || esc.time || now);
+    var elapsedMin = Math.round(elapsed / 60000);
+    if (elapsedMin >= 5 && !esc.warned5) {
+      console.log('[ESCALATION-WARN] 5min no reply - chatId:', cid);
+      esc.warned5 = true;
+    }
+    if (elapsedMin >= 10 && !esc.warned10) {
+      console.log('[ESCALATION-WARN] 10min no reply - chatId:', cid);
+      esc.warned10 = true;
+    }
+    if (elapsedMin >= 30 && !esc.waitingSent) {
+      sendWaitingMessage(cid, esc.lang || 'zh-TW');
+      esc.waitingSent = true;
+    }
+
+    // 15min auto-reassign
+    if (now - (esc.time || esc.timestamp || 0) >= REASSIGN_TIMEOUT) {
       try {
         var msgData = await channeltalk.getChatMessages(cid, 5);
         var msgs = msgData.messages || [];
