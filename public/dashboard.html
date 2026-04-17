@@ -442,29 +442,82 @@ function loadAIData() {
       // AI Conversation table
       html += '<div class="section-title">AI 대화 로그</div>';
       html += '<div style="padding:0 32px 16px;"><div class="chart-card">';
-      html += '<div style="max-height:600px;overflow-y:auto;">';
-      html += '<table><tr><th>시간</th><th>유형</th><th>고객 질문</th><th>AI 답변</th><th>상태</th></tr>';
-
-      var typeColors = { ai_answer: '#22c55e', order_lookup: '#3b82f6', greeting: '#94a3b8', escalation: '#eab308', thank_you: '#a855f7', order_list: '#06b6d4', file_message: '#64748b' };
-      var typeNames = { ai_answer: 'AI답변', order_lookup: '주문조회', greeting: '인사', escalation: '에스컬레이션', thank_you: '감사', order_list: '주문목록', file_message: '파일' };
-
+      // chatId별로 대화 그룹화
+      var chatGroups = {};
+      var chatOrder = [];
       (aiConv.conversations || []).forEach(function(c) {
-        var time = c.timestamp ? c.timestamp.substring(5, 16).replace('T', ' ') : '-';
-        var tc = typeColors[c.type] || '#94a3b8';
-        var tn = typeNames[c.type] || c.type;
-        var userMsg = (c.userMessage || '').substring(0, 60) + ((c.userMessage || '').length > 60 ? '...' : '');
-        var aiResp = (c.aiResponse || '').substring(0, 80) + ((c.aiResponse || '').length > 80 ? '...' : '');
-        var statusIcon = c.escalated ? '<span class="pill" style="background:rgba(239,68,68,0.15);color:#ef4444;">에스컬</span>' : '<span class="pill" style="background:rgba(34,197,94,0.15);color:#22c55e;">완료</span>';
-
-        html += '<tr style="cursor:pointer;" onclick="showReview(\'' + encodeURIComponent(JSON.stringify(c)) + '\')">';
-        html += '<td style="color:#64748b;white-space:nowrap;">' + time + '</td>';
-        html += '<td><span style="color:' + tc + ';font-weight:600;">' + tn + '</span></td>';
-        html += '<td style="color:#e2e8f0;">' + userMsg + '</td>';
-        html += '<td style="color:#94a3b8;">' + aiResp + '</td>';
-        html += '<td>' + statusIcon + '</td>';
-        html += '</tr>';
+        if (!chatGroups[c.chatId]) { chatGroups[c.chatId] = []; chatOrder.push(c.chatId); }
+        chatGroups[c.chatId].push(c);
       });
-      html += '</table></div></div></div>';
+
+      var typeColors = { ai_answer: '#22c55e', order_lookup: '#3b82f6', greeting: '#94a3b8', escalation: '#eab308', thank_you: '#a855f7', order_list: '#06b6d4', file_message: '#64748b', ces_response: '#8b5cf6' };
+      var typeNames = { ai_answer: 'AI답변', order_lookup: '주문조회', greeting: '인사', escalation: '에스컬레이션', thank_you: '감사', order_list: '주문목록', file_message: '파일', ces_response: 'CES' };
+
+      html += '<div style="max-height:700px;overflow-y:auto;">';
+      chatOrder.forEach(function(chatId, gi) {
+        var msgs = chatGroups[chatId];
+        var firstTime = msgs[0].timestamp ? msgs[0].timestamp.substring(5, 16).replace('T', ' ') : '-';
+        var lastMsg = msgs[msgs.length - 1];
+        var hasEsc = msgs.some(function(m) { return m.escalated; });
+        var userName = '';
+        for (var ui = 0; ui < msgs.length; ui++) { if (msgs[ui].userName) { userName = msgs[ui].userName; break; } }
+        var langBadge = msgs[0].lang || '?';
+        var escBadge = hasEsc ? '<span class="pill" style="background:rgba(239,68,68,0.15);color:#ef4444;">에스컬</span>' : '<span class="pill" style="background:rgba(34,197,94,0.15);color:#22c55e;">완료</span>';
+
+        html += '<div style="background:#1e293b;border-radius:12px;padding:16px;margin-bottom:12px;border:1px solid #334155;cursor:pointer" onclick="this.querySelector(\'.conv-detail\').style.display=this.querySelector(\'.conv-detail\').style.display===\'none\'?\'block\':\'none\'">';
+        html += '<div style="display:flex;justify-content:space-between;align-items:center">';
+        html += '<div><span style="color:#64748b;font-size:12px">' + firstTime + '</span> ';
+        html += '<span style="color:#e2e8f0;font-weight:600;margin-left:8px">' + (userName || chatId.substring(0,8) + '...') + '</span> ';
+        html += '<span class="pill" style="background:rgba(59,130,246,0.15);color:#3b82f6;margin-left:4px">' + langBadge + '</span> ';
+        html += '<span style="color:#94a3b8;font-size:12px;margin-left:8px">' + msgs.length + '건 대화</span></div>';
+        html += '<div>' + escBadge + ' <span style="color:#475569;font-size:10px;margin-left:4px">▼</span></div></div>';
+
+        // 첫 번째 메시지 미리보기
+        var previewMsg = '';
+        for (var pi = 0; pi < msgs.length; pi++) {
+          if (msgs[pi].type === 'ai_answer' || msgs[pi].type === 'escalation' || msgs[pi].type === 'order_lookup') {
+            previewMsg = (msgs[pi].userMessage || '').substring(0, 80);
+            break;
+          }
+        }
+        if (previewMsg) html += '<div style="color:#94a3b8;font-size:12px;margin-top:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">💬 ' + previewMsg + '</div>';
+
+        // 상세 대화 내용 (접었다 펼치기)
+        html += '<div class="conv-detail" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid #334155">';
+        msgs.forEach(function(m) {
+          var mTime = m.timestamp ? m.timestamp.substring(11, 16) : '';
+          var tc = typeColors[m.type] || '#94a3b8';
+          var tn = typeNames[m.type] || m.type;
+          // 고객 메시지
+          if (m.userMessage) {
+            html += '<div style="margin-bottom:8px">';
+            html += '<div style="display:flex;align-items:center;margin-bottom:4px"><span style="color:#3b82f6;font-size:11px;font-weight:600">👤 고객</span><span style="color:#475569;font-size:10px;margin-left:8px">' + mTime + '</span></div>';
+            html += '<div style="background:#0f172a;border-radius:8px;padding:10px;color:#e2e8f0;font-size:13px;line-height:1.5;margin-left:20px;white-space:pre-wrap">' + m.userMessage + '</div>';
+            html += '</div>';
+          }
+          // AI/봇 응답
+          if (m.aiResponse) {
+            html += '<div style="margin-bottom:8px">';
+            html += '<div style="display:flex;align-items:center;margin-bottom:4px"><span style="color:' + tc + ';font-size:11px;font-weight:600">🤖 ' + tn + '</span><span style="color:#475569;font-size:10px;margin-left:8px">' + mTime + '</span>';
+            if (m.escalated) html += '<span class="pill" style="background:rgba(239,68,68,0.15);color:#ef4444;margin-left:8px;font-size:10px">에스컬</span>';
+            html += '</div>';
+            html += '<div style="background:#1a2332;border-radius:8px;padding:10px;color:#94a3b8;font-size:13px;line-height:1.5;margin-left:20px;border-left:3px solid ' + tc + ';white-space:pre-wrap">' + m.aiResponse + '</div>';
+            html += '</div>';
+          }
+        });
+
+        // 평가 버튼 (마지막 AI답변에 대해)
+        var lastAi = null;
+        for (var li = msgs.length - 1; li >= 0; li--) { if (msgs[li].type === 'ai_answer') { lastAi = msgs[li]; break; } }
+        if (lastAi) {
+          html += '<div style="margin-top:8px;padding-top:8px;border-top:1px solid #334155;text-align:right">';
+          html += '<button style="padding:4px 12px;border-radius:6px;border:1px solid #334155;background:#0f172a;color:#94a3b8;cursor:pointer;font-size:11px;margin-left:4px" onclick="event.stopPropagation();showReview(\'' + encodeURIComponent(JSON.stringify(lastAi)) + '\')">📝 평가하기</button>';
+          html += '</div>';
+        }
+
+        html += '</div></div>';
+      });
+      html += '</div></div></div>';
     }
 
     document.getElementById('aiContent').innerHTML = html;
