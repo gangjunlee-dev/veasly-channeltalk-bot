@@ -152,6 +152,28 @@ var NUMBER_TO_QUERY = {
   '9': '點數折扣'
 };
 
+
+// 주문 상태를 AI가 해석할 수 있는 컨텍스트로 변환
+function buildOrderContext(orderItems, orderNum, lang) {
+  if (!orderItems || orderItems.length === 0) return '';
+  var mainStatus = (orderItems[0] && orderItems[0].status) || '';
+  var statusGuide = {
+    'PAYMENT_WAITING': { 'zh-TW': '此訂單尚未付款。請提醒客戶盡快完成付款，否則訂單可能被取消', 'ko': '미결제 상태. 빠른 결제 안내 필요' },
+    'PAYMENT_COMPLETED': { 'zh-TW': '已收到付款，正在準備處理訂單。通常1-2個工作天開始處理', 'ko': '결제 완료, 처리 시작 예정' },
+    'ORDER_PROCESSING': { 'zh-TW': '商品正在韓國境內配送到VEASLY倉庫。通常需要1-3個工作天。此階段無法取消訂單', 'ko': '한국 내 배송 중 (1-3 영업일)' },
+    'SHIPPING_TO_BDJ': { 'zh-TW': '商品已到達VEASLY倉庫，正在準備國際包裹。即將寄出', 'ko': 'VEASLY 창고 도착, 국제배송 준비 중' },
+    'SHIPPING_TO_HOME': { 'zh-TW': '包裹已從韓國寄出！國際配送約7-14天。客戶需要在EZ WAY APP上按「申報相符」才能通關。如果EZ WAY已申報但很久沒收到，可能是海關或國內物流延遲，建議等待或聯繫客服確認', 'ko': '한국 출발 완료. 7-14일 소요. EZ WAY 신고 필요' },
+    'COMPLETED': { 'zh-TW': '訂單已完成配送', 'ko': '배송 완료' },
+    'CANCEL_COMPLETED': { 'zh-TW': '訂單已取消。退款通常3-5個工作天內處理', 'ko': '취소 완료. 환불 3-5 영업일' },
+    'CANCEL_REQUESTED': { 'zh-TW': '客戶已申請取消，正在處理中', 'ko': '취소 요청 처리 중' }
+  };
+  var guide = (statusGuide[mainStatus] && statusGuide[mainStatus][lang]) || (statusGuide[mainStatus] && statusGuide[mainStatus]['zh-TW']) || '';
+  var itemNames = orderItems.map(function(item) {
+    return (item.product && item.product.name) || '商品';
+  }).join(', ');
+  return '[訂單 ' + orderNum + ' 的狀態資訊] 狀態: ' + mainStatus + ' | 商品: ' + itemNames + ' | AI回答指南: ' + guide;
+}
+
 function isBusinessHours() {
   var now = new Date();
   var kst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
@@ -829,7 +851,7 @@ router.post('/channeltalk', async function(req, res) {
       if (step === 0) {
         // Step 1: Ask what they need help with
         var step1Msgs = {
-          'zh-TW': '💡 在轉接客服前，也許我可以幫到您！\n\n請簡單描述您的問題，例如：\n・「我要查訂單進度」\n・「運費怎麼計算」\n・「怎麼申請退款」\n・「免運活動的規則」\n\n或者直接輸入數字查詢：\n' + getMenuText('zh-TW') + '\n\n🔸 仍需真人客服？請再輸入一次「客服」',
+          'zh-TW': '💡 轉接前，試試看我能不能幫到您！\n\n請直接告訴我：\n1️⃣ 輸入「訂單號碼」→ 馬上查進度\n2️⃣ 輸入您的問題 → AI即時回答\n\n例如：\n・貼上訂單號碼（如 20260415TW...）\n・「我的包裹到哪了」\n・「運費怎麼算」\n\n🔸 還是需要真人？請再輸入「客服」',
           'ko': '💡 상담사 연결 전에 제가 도움드릴 수 있을지 확인해볼게요!\n\n질문을 간단히 설명해주세요:\n・「주문 진행 상태 확인」\n・「운임 계산 방법」\n・「환불 신청 방법」\n\n또는 번호를 입력하세요:\n' + getMenuText('ko') + '\n\n🔸 그래도 상담사가 필요하시면 「상담사」를 한 번 더 입력해주세요',
           'en': '💡 Before connecting to an agent, maybe I can help!\n\nDescribe your issue briefly, or enter a number:\n' + getMenuText('en') + '\n\n🔸 Still need a human? Type "agent" again',
           'ja': '💡 オペレーターに接続する前に、お手伝いできるかもしれません！\n\n質問を簡単に説明するか、番号を入力してください：\n' + getMenuText('ja') + '\n\n🔸 それでも必要な場合は「オペレーター」をもう一度入力'
@@ -851,7 +873,7 @@ router.post('/channeltalk', async function(req, res) {
           };
         } else {
           escMsgs = {
-            'zh-TW': '👨‍💼 目前非客服時間（平日 10:00~19:00 韓國時間）\n\n📝 請留下您的問題，我們會在上班後優先回覆！\n・訂單問題請附上訂單號碼\n・其他問題請簡單描述\n\n我們一定會回覆您！😊',
+            'zh-TW': '👨‍💼 目前非客服時間（平日 10:00~19:00 韓國時間 = 台灣 09:00~18:00）\n\n📝 請留下您的問題，我們會在上班後優先回覆！\n・訂單問題請附上訂單號碼\n・其他問題請簡單描述\n\n我們一定會回覆您！😊',
             'ko': '👨‍💼 현재 상담 시간이 아닙니다 (평일 10:00~19:00 한국시간)\n\n📝 메시지를 남겨주시면 업무 시작 후 우선 답변드리겠습니다!',
             'en': '👨‍💼 Outside business hours (Weekdays 10:00~19:00 KST)\n\n📝 Leave your message and we\'ll reply first thing!',
             'ja': '👨‍💼 現在営業時間外です（平日 10:00~19:00 韓国時間）\n\n📝 メッセージを残してください。営業開始後すぐにご返信します！'
@@ -1007,6 +1029,7 @@ router.post('/channeltalk', async function(req, res) {
           await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: orderReply }] });
           if (!chatContext[chatId]) chatContext[chatId] = {};
           chatContext[chatId].lastOrder = orderReply;
+          chatContext[chatId].lastOrderContext = buildOrderContext(orderItems, orderNum, detectedLang);
           chatContext[chatId].lastOrderTime = Date.now();
           console.log("[Order] Replied with", orderItems.length, "items for", orderNum);
           aiLog.saveConversation({
@@ -1121,8 +1144,13 @@ router.post('/channeltalk', async function(req, res) {
               aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", lang: detectedLang, type: "escalation", userMessage: userText.substring(0, 200), aiResponse: "confidence " + confidence.toFixed(3) + " < 0.3 → 자동 에스컬레이션", escalated: true });
             } catch(lcErr) { console.error("[AI] Low confidence escalation error:", lcErr.message); }
           } else if (confidence < 0.6) {
-            console.log("[AI] Medium confidence (" + confidence.toFixed(3) + ") - answer + auto-escalate");
+            var hasOrderCtx = chatContext[chatId] && chatContext[chatId].lastOrderContext && (Date.now() - chatContext[chatId].lastOrderTime) < 60 * 60 * 1000;
+            if (hasOrderCtx) {
+              console.log("[AI] Medium confidence but order context exists - answer only, skip escalation");
+            } else {
+              console.log("[AI] Medium confidence (" + confidence.toFixed(3) + ") - answer + auto-escalate");
             // 답변은 보내되, 에스컬레이션도 함께 진행
+            } // close else for medium confidence order context check
             var medConfNote = {
               "zh-TW": "\n\n⚠️ 以上為AI初步回覆，客服人員會再為您確認，請稍候！",
               "ko": "\n\n⚠️ 위 답변은 AI 초기 응답입니다. 상담사가 확인 후 정확한 안내를 드리겠습니다!",
