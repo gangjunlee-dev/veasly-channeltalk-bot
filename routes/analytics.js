@@ -2,6 +2,7 @@ var express = require('express');
 var path = require('path');
 var fs = require('fs');
 var mgrStats = require('../lib/manager-stats');
+var bizHours = require('../lib/business-hours');
 var aiLog = require('../lib/ai-log');
 var router = express.Router();
 var analytics = require('../lib/analytics');
@@ -389,12 +390,21 @@ router.get('/cs-score-metrics', async function(req, res) {
     chatKeys.forEach(function(cid) {
       var chat = stats.chats[cid];
       if (chat.firstUserMsg && chat.firstUserMsg >= cutoffMs) {
-        totalMgrChats++;
+        // 영업시간 기준 경과 시간 계산
+        var bizElapsed = bizHours.getBusinessHoursElapsedInHours(chat.firstUserMsg, Date.now());
+        
         if (chat.firstMgrReply) {
+          totalMgrChats++;
           var rt = chat.firstMgrReply - chat.firstUserMsg;
           if (rt > 0 && rt < 86400000) responseTimes.push(rt);
         } else {
-          noReplyChats++;
+          // 영업시간 1시간 이상 경과한 경우만 미응답으로 집계
+          // (오프시간/주말에 들어온 문의는 다음 영업일까지 대기)
+          if (bizElapsed >= 1) {
+            totalMgrChats++;
+            noReplyChats++;
+          }
+          // else: 아직 영업시간 기준 1시간 미만 → 집계 제외
         }
       }
     });

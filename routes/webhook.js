@@ -73,6 +73,7 @@ var mgrStats = require('../lib/manager-stats');
 var aiReview = require('../lib/ai-review');
 var aiLog = require('../lib/ai-log');
 var errorAlert = require('../lib/error-alert');
+var bizHoursUtil = require('../lib/business-hours');
 var analytics = require('../lib/analytics');
 
 var processedMessages = {};
@@ -179,11 +180,7 @@ function buildOrderContext(orderItems, orderNum, lang) {
 }
 
 function isBusinessHours() {
-  var now = new Date();
-  var kst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
-  var day = kst.getUTCDay();
-  var hour = kst.getUTCHours();
-  return day >= 1 && day <= 5 && hour >= 10 && hour < 19;
+  return bizHoursUtil.isBusinessHours();
 }
 
 
