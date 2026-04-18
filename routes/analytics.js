@@ -549,17 +549,6 @@ router.get('/cs-score-metrics', async function(req, res) {
       csatAvg = recentCSAT.reduce(function(sum, c) { return sum + c.score; }, 0) / recentCSAT.length;
     }
   } catch(e) {}
-  var csatScore = csatAvg > 0 ? csatAvg : 2.5; // default if no CSAT data
-  if (csatAvg === 0) console.log('[CS Score] CSAT no data - using default 2.5');
-
-  var cesScoreVal = cesAvg > 0 ? cesAvg : 2.5; // default if no data
-
-  var noReplyScore = 0;
-  if (noReplyRate <= 10) noReplyScore = 5;
-  else if (noReplyRate <= 20) noReplyScore = 4;
-  else if (noReplyRate <= 30) noReplyScore = 3;
-  else noReplyScore = 1.5;
-
 
     // CSAT 데이터 로드
     var csatFile2 = require('path').join(__dirname, '..', 'data', 'csat-results.json');
@@ -572,6 +561,18 @@ router.get('/cs-score-metrics', async function(req, res) {
       csatResults2.forEach(function(r) { csatSum2 += (typeof r.score === 'number' ? r.score : 0); });
       csatAvg2 = Math.round((csatSum2 / csatCount2) * 10) / 10;
     }
+
+  var csatScore = csatAvg2 > 0 ? csatAvg2 : (csatAvg > 0 ? csatAvg : 2.5); // csatAvg2 from csat-results.json
+  if (csatAvg === 0) console.log('[CS Score] CSAT no data - using default 2.5');
+
+  var cesScoreVal = cesAvg > 0 ? cesAvg : 2.5; // default if no data
+
+  var noReplyScore = 0;
+  if (noReplyRate <= 10) noReplyScore = 5;
+  else if (noReplyRate <= 20) noReplyScore = 4;
+  else if (noReplyRate <= 30) noReplyScore = 3;
+  else noReplyScore = 1.5;
+
 
   var integratedScore = (frtScore * 0.20) + (fcrScore * 0.25) + (csatScore * 0.20) + (cesScoreVal * 0.15) + (noReplyScore * 0.20);
   integratedScore = Math.round(integratedScore * 100) / 100;
