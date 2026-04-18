@@ -7,97 +7,85 @@ var channeltalk = require('./channeltalk');
 
 // 문의 카테고리 분류 키워드
 var CATEGORIES = {
-  agent_direct: {
-    name: '客服(單字)',
-    nameKo: '상담사 직접요청',
-    keywords: [],
-    regex: /^客服$|^상담사$|^상담원$|^真人$|^人工$/i,
-    priority: 1
-  },
-  order_status: {
-    name: '訂單查詢',
-    nameKo: '주문 상태/조회',
-    keywords: ['訂單', '주문', '進度', '狀態', '多久', '等了', '天了', '幾天', 'update', '一個禮拜'],
-    regex: /\d{10,}/,
-    priority: 2
-  },
   shipping: {
     name: '配送相關',
-    nameKo: '배송/물류',
-    keywords: ['배송', '物流', '配送', '出貨', '發貨', '寄出', '到貨', '快遞', '順豐', '택배', '도착', '집운', '集運'],
-    priority: 3
+    nameKo: '배송 관련',
+    keywords: ['配送', '到貨', '物流', '追蹤', '包裹', '寄到', '沒收到', '超商', '全家', '取貨', 'EZ WAY', '海關', '報關', '實名']
   },
-  shipping_fee: {
-    name: '國際運費',
-    nameKo: '국제배송비/운임',
-    keywords: ['國際運費', '운비', '배송비', '運費', '관세', '稅', '報關', '海關', '관부가세'],
-    priority: 4
-  },
-  cancel_refund: {
-    name: '取消/退款',
-    nameKo: '취소/환불/반품',
-    keywords: ['취소', '取消', '退款', '退貨', '환불', '반품', '不要了', '先不要發貨'],
-    priority: 5
+  fee: {
+    name: '費用相關',
+    nameKo: '비용 관련',
+    keywords: ['運費', '費用', '多少錢', '怎麼算', '價格', '太貴', '關稅', '手續費']
   },
   payment: {
     name: '付款相關',
-    nameKo: '결제/금액',
-    keywords: ['결제', '付款', '刷卡', '金額', '價', '元', '費用', '報價', '얼마', '多少'],
-    priority: 6
+    nameKo: '결제 관련',
+    keywords: ['付款', '支付', '信用卡', '刷卡', 'PayPal', 'ATM', '付款失敗', '刷不過', '無法付款']
   },
-  product: {
-    name: '商品諮詢',
-    nameKo: '상품문의/불량/교환',
-    keywords: ['商品', '상품', '壞', '不能用', '損', '瑕疵', '品質', '색상', '色差', '換貨', '교환', '包包', '사이즈', '찾', '找', '有賣'],
-    priority: 7
+  cancel: {
+    name: '取消/退款',
+    nameKo: '취소/환불',
+    keywords: ['取消', '退款', '退貨', '取消訂單', '退錢']
   },
-  account: {
-    name: '帳號問題',
-    nameKo: '계정/로그인',
-    keywords: ['登', '帳號', '會員', '계정', '密碼', '信箱', 'email', '이메일', '修改'],
-    priority: 8
+  order: {
+    name: '訂單查詢',
+    nameKo: '주문 조회',
+    keywords: ['訂單', '查詢', '狀態', '進度', '沒有更新', '報價', '到哪了']
   },
   howto: {
     name: '使用方式',
-    nameKo: '사이트이용/주문방법',
-    keywords: ['下訂', '無法', '怎麼', '如何', '방법', '使用', '操作', '어떻게'],
-    priority: 9
-  },
-  agent_request: {
-    name: '轉接客服',
-    nameKo: '상담사 전환요청',
-    keywords: ['客服', '真人', '상담', '人工', '幫我', '轉接', '연결'],
-    priority: 10
-  },
-  greeting: {
-    name: '問候/感謝',
-    nameKo: '인사/감사',
-    keywords: ['你好', '妳好', '您好', '안녕', 'hello', 'hi', '嗨', '哈囉', '감사', '谢谢', '謝謝', '감사합니다', '고마워'],
-    priority: 11
+    nameKo: '사용 방법',
+    keywords: ['怎麼用', '怎麼買', '教學', '如何', '步驟', '代購', '新手', '閃電拍賣', 'BUNJANG']
   },
   points: {
     name: '點數/優惠',
     nameKo: '포인트/쿠폰',
-    keywords: ['포인트', '점수', '優惠', '折扣', '쿠폰', '優惠碼', '點數', 'credit'],
-    priority: 12
+    keywords: ['點數', '折扣', '優惠', '折扣碼', '點數不見', '消失', '團購']
+  },
+  account: {
+    name: '帳號問題',
+    nameKo: '계정 문제',
+    keywords: ['密碼', '登入', '忘記密碼', '帳號', '無法登入']
+  },
+  product: {
+    name: '商品諮詢',
+    nameKo: '상품 문의',
+    keywords: ['商品', '產品', '尺寸', '顏色', '款式', '版本', '真假', '正品', '全新', '二手', '小卡', '專輯', '價錢', '價格', '多少', '幾錢', '賣家', '有貨', '有沒有', '可以買', '怎麼買', '想買', '想問', '請問']
+  },
+  greeting: {
+    name: '問候/感謝',
+    nameKo: '인사/감사',
+    keywords: ['謝謝', '感謝', '好的', '收到', 'ok', 'OK', '了解', '沒關係', '沒事', '不用了', '掰掰', '再見', '謝謝您', '感恩', '감사', '고마워', '알겠습', 'ㅋㅋ']
   },
   sticker: {
     name: '貼圖/表情',
     nameKo: '스티커/이모지',
-    keywords: ['sticker', '貼圖', '表情', '스티커'],
-    priority: 13
+    keywords: ['스티커를 전송했습니다', '스티커를 보냈습니다', '사진을 전송했습니다', '파일을 전송했습니다']
   },
   address: {
     name: '地址/收件',
     nameKo: '주소/수령',
-    keywords: ['地址', '주소', '收件', '수령', '배달', '寄送地', '수령지'],
-    priority: 14
+    keywords: ['地址', '收件', '門市', '超商', '全家', '7-11', '統一', '香港', '住址', '修改地址', '改地址', '寄到哪']
+  },
+  business: {
+    name: '營業時間',
+    nameKo: '영업시간',
+    keywords: ['上班', '營業', '幾點', '工作時間', '客服時間', '休息', '假日', '週末']
+  },
+  refund: {
+    name: '退款/入帳',
+    nameKo: '환불/입금',
+    keywords: ['收到款', '入帳', '退款到', '沒收到錢', '匯款', '退回', '帳戶', '明細', '退款進度']
+  },
+    escalation: {
+    name: '客服轉接',
+    nameKo: '상담사 연결',
+    keywords: ['客服', '聯繫', '真人', '人工']
   },
   other: {
     name: '其他',
     nameKo: '기타',
-    keywords: [],
-    priority: 99
+    keywords: []
   }
 };
 
@@ -106,14 +94,6 @@ var CATEGORIES = {
  */
 function classifyMessage(text) {
   if (!text) return 'other';
-  var msg = text.toLowerCase();
-  
-  // 1순위: regex 매칭 (agent_direct 등)
-  var catKeys2 = Object.keys(CATEGORIES);
-  for (var p = 0; p < catKeys2.length; p++) {
-    var c2 = CATEGORIES[catKeys2[p]];
-    if (c2.regex && c2.regex.test(msg.trim())) return catKeys2[p];
-  }
   var lowerText = text.toLowerCase();
   var bestCategory = 'other';
   var highestScore = 0;
