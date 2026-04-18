@@ -366,10 +366,10 @@ router.post('/channeltalk', async function(req, res) {
         try { var _ms = require("../lib/manager-stats"); var _st = JSON.parse(require("fs").readFileSync(require("path").join(__dirname, "..", "data", "manager-stats.json"), "utf8")); if (_st.chats && _st.chats[chatId0]) stats_managerId = _st.chats[chatId0].managerId; } catch(e) {}
         if (managerActive[chatId0]) {
           var csSurveys = {
-            'zh-TW': '💬 感謝您的諮詢！\n\n請用1~5分評價這次體驗：\n5 = 😍 超讚\n4 = 😊 不錯\n3 = 😐 普通\n2 = 😕 不太好\n1 = 😞 很差\n\n直接輸入數字就好囉！',
-            'ko': '💬 상담이 종료되었습니다. 평가해주세요：\n\n⭐⭐⭐⭐⭐ 매우 만족 → 5\n⭐⭐⭐⭐ 만족 → 4\n⭐⭐⭐ 보통 → 3\n⭐⭐ 불만족 → 2\n⭐ 매우 불만족 → 1',
-            'en': '💬 Please rate your experience:\n\n⭐⭐⭐⭐⭐ Excellent → 5\n⭐⭐⭐⭐ Good → 4\n⭐⭐⭐ Average → 3\n⭐⭐ Poor → 2\n⭐ Very Poor → 1',
-            'ja': '💬 今回の対応を評価してください：\n\n⭐⭐⭐⭐⭐ 大満足 → 5\n⭐⭐⭐⭐ 満足 → 4\n⭐⭐⭐ 普通 → 3\n⭐⭐ 不満 → 2\n⭐ 大不満 → 1'
+            'zh-TW': '💬 感謝您的諮詢！\n\n請幫我們評個分吧：\n1 = 😍 非常滿意\n2 = 😊 滿意\n3 = 😐 普通\n4 = 😕 不太滿意\n5 = 😞 很不滿意\n\n直接輸入數字 1~5 就好囉！',
+            'ko': '💬 상담이 종료되었습니다. 평가 부탁드려요！\n\n1 = 😍 매우 만족\n2 = 😊 만족\n3 = 😐 보통\n4 = 😕 불만족\n5 = 😞 매우 불만족\n\n숫자를 입력해주세요 1~5',
+            'en': '💬 Please rate your experience:\n\n1 = 😍 Excellent\n2 = 😊 Good\n3 = 😐 Average\n4 = 😕 Poor\n5 = 😞 Very Poor\n\nPlease enter 1~5',
+            'ja': '💬 今回の対応を評価してください：\n\n1 = 😍 大満足\n2 = 😊 満足\n3 = 😐 普通\n4 = 😕 不満\n5 = 😞 大不満\n\n数字を入力してください 1~5'
           };
           surveyMsg = csSurveys[surveyLang] || csSurveys['zh-TW'];
         } else {
@@ -745,6 +745,28 @@ router.post('/channeltalk', async function(req, res) {
       };
       await channeltalk.sendMessage(chatId, { blocks: [{ type: 'text', value: thankReply[detectedLang] || thankReply['zh-TW'] }] });
       aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "thank_you", userMessage: userText, aiResponse: "감사 응답", escalated: false });
+      // thank_you 후 3초 뒤 간단 CSAT 발송 (중복 방지)
+      if (!satisfactionPending[chatId]) {
+        var csatSentFile = require('path').join(__dirname, '..', 'data', 'csat-sent.json');
+        var csatSentCheck = {};
+        try { csatSentCheck = JSON.parse(require('fs').readFileSync(csatSentFile, 'utf8')); } catch(cse) {}
+        if (!csatSentCheck[chatId]) {
+          satisfactionPending[chatId] = Date.now();
+          try { csatSentCheck[chatId] = { sentAt: Date.now(), source: 'thank_you' }; require('fs').writeFileSync(csatSentFile, JSON.stringify(csatSentCheck), 'utf8'); } catch(cse2) {}
+          setTimeout(async function() {
+            try {
+              var tyCSAT = {
+                'zh-TW': '😊 很高興能幫到您！方便花5秒幫我們評個分嗎？\n\n1 = 😍 非常滿意\n2 = 😊 滿意\n3 = 😐 普通\n4 = 😕 不太滿意\n5 = 😞 很不滿意\n\n輸入數字就好！',
+                'ko': '😊 도움이 되셨다니 기뻐요! 5초만 평가해주실 수 있나요?\n\n1 = 😍 매우 만족\n2 = 😊 만족\n3 = 😐 보통\n4 = 😕 불만족\n5 = 😞 매우 불만족\n\n숫자만 입력해주세요!',
+                'en': '😊 Glad I could help! Could you take 5 seconds to rate us?\n\n1 = 😍 Excellent  2 = 😊 Good  3 = 😐 Average  4 = 😕 Poor  5 = 😞 Very Poor',
+                'ja': '😊 お役に立てて嬉しいです！5秒で評価していただけますか？\n\n1 = 😍 大満足  2 = 😊 満足  3 = 😐 普通  4 = 😕 不満  5 = 😞 大不満'
+              };
+              await channeltalk.sendMessage(chatId, { blocks: [{ type: 'text', value: tyCSAT[detectedLang] || tyCSAT['zh-TW'] }] });
+              console.log('[CSAT] Thank-you CSAT sent to:', chatId);
+            } catch(tyCsatErr) { console.log('[CSAT] Thank-you send error:', tyCsatErr.message); }
+          }, 3000);
+        }
+      }
       return res.status(200).send('OK');
     }
 
