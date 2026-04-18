@@ -752,7 +752,7 @@ router.get('/escalation-analysis', function(req, res) {
         complaint: '클레임/불만',
         other: '기타'
       };
-      reasonCounts[nameMap[cat] || cat] = categories[cat];
+      if (cat !== 'greeting') reasonCounts[nameMap[cat] || cat] = categories[cat];
     });
     var escalationRate = 0;
     try {
