@@ -175,12 +175,21 @@ router.get('/auto-close', async function(req, res) {
     if (fs.existsSync(csatSentFile)) {
       csatSent = JSON.parse(fs.readFileSync(csatSentFile, 'utf8'));
     }
+    var pendingChats = [];
+    Object.keys(csatSent).forEach(function(k) {
+      try {
+        var val = csatSent[k];
+        var ts = typeof val === 'object' ? (val.sentAt || val.timestamp || JSON.stringify(val)) : val;
+        var d = new Date(ts);
+        pendingChats.push({ chatId: k, sentAt: isNaN(d.getTime()) ? String(ts) : d.toISOString() });
+      } catch(e2) {
+        pendingChats.push({ chatId: k, sentAt: String(csatSent[k]) });
+      }
+    });
     res.json({
       success: true,
-      csatPending: Object.keys(csatSent).length,
-      pendingChats: Object.keys(csatSent).map(function(k) {
-        return { chatId: k, sentAt: new Date(csatSent[k]).toISOString() };
-      })
+      csatPending: pendingChats.length,
+      pendingChats: pendingChats
     });
   } catch(e) {
     res.status(500).json({ success: false, error: e.message });
