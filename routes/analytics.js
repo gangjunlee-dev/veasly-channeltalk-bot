@@ -22,7 +22,19 @@ router.get('/report', async function(req, res) {
       success: true,
       reportKo: reportKo,
       reportTw: reportTw,
-      raw: results
+      raw: results,
+      totalChats: results.totalChats,
+      totalMessages: results.totalMessages,
+      userMessages: results.userMessages,
+      botMessages: results.botMessages,
+      managerMessages: results.managerMessages,
+      categories: results.categories,
+      topKeywords: results.topKeywords,
+      channelStats: results.channelStats,
+      channels: results.channelStats,
+      hourlyDistribution: results.hourlyDistribution,
+      unresolvedChats: results.unresolvedChats,
+      period: results.period
     });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
@@ -665,7 +677,21 @@ router.get('/escalation-analysis', function(req, res) {
     });
     var sorted = Object.keys(categories).sort(function(a,b) { return categories[b] - categories[a]; });
     var result = sorted.map(function(cat) { return { category: cat, count: categories[cat], examples: examples[cat] }; });
-    res.json({ success: true, period: days + ' days', total: recent.length, categories: result });
+    // 에스컬레이션 사유별 집계
+    var reasonCounts = {};
+    recent.forEach(function(c) {
+      var reason = c.escalationReason || 'unknown';
+      if (!reasonCounts[reason]) reasonCounts[reason] = 0;
+      reasonCounts[reason]++;
+    });
+    var escalationRate = 0;
+    try {
+      var aiLog3 = require('../lib/ai-log');
+      var allConvs = aiLog3.getConversations(500);
+      var recentAll = allConvs.filter(function(c) { return c.timestamp >= cutoff; });
+      if (recentAll.length > 0) escalationRate = Math.round((recent.length / recentAll.length) * 100);
+    } catch(er) {}
+    res.json({ success: true, period: days + ' days', total: recent.length, totalEscalated: recent.length, totalEscalations: recent.length, escalatedRate: escalationRate, escalationRate: escalationRate, reasons: reasonCounts, categories: result });
   } catch(e) { res.json({ success: false, error: e.message }); }
 });
 
