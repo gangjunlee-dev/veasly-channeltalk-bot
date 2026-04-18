@@ -369,8 +369,8 @@ function loadOverview() {
 
     var botRate = r.totalMessages > 0 ? Math.round((r.botMessages / r.totalMessages) * 100) : 0;
     var aiResolveRate = (r.botMessages + r.managerMessages) > 0 ? Math.round((r.botMessages / (r.botMessages + r.managerMessages)) * 100) : 0;
-    var escalationCount = (r.categories.agent_direct ? r.categories.agent_direct.count : 0) + (r.categories.agent_request ? r.categories.agent_request.count : 0);
-    var escalationRate = r.userMessages > 0 ? Math.round((escalationCount / r.userMessages) * 100) : 0;
+    var escalationCount = cachedData.escalationTotal || ((r.categories.agent_direct ? r.categories.agent_direct.count : 0) + (r.categories.agent_request ? r.categories.agent_request.count : 0));
+    var escalationRate = cachedData.escalationRate || (r.userMessages > 0 ? Math.round((escalationCount / r.userMessages) * 100) : 0);
 
     var html = '<div class="grid">';
     html += card('총 상담', r.totalChats, '건', 'blue', r.period, '📊 선택한 기간 동안 접수된 전체 상담 건수입니다.');
