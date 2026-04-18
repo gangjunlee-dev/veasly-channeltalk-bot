@@ -957,4 +957,66 @@ router.get('/data-health', (req, res) => {
 });
 
 
+
+// FAQ 강화 후보 조회
+router.get('/faq-candidates', function(req, res) {
+  try {
+    var faqQueue = require('../lib/faq-queue');
+    faqQueue.updateCandidates();
+    var queue = faqQueue.loadQueue();
+    var pending = queue.candidates.filter(function(c) { return c.status === 'pending'; });
+    
+    // 사유별 그룹핑
+    var byReason = {};
+    pending.forEach(function(c) {
+      var r = c.escalationReason || 'unclassified';
+      if (!byReason[r]) byReason[r] = { count: 0, samples: [] };
+      byReason[r].count++;
+      if (byReason[r].samples.length < 3) {
+        byReason[r].samples.push({ message: c.userMessage, lang: c.lang, keywords: c.keywords });
+      }
+    });
+
+    // 키워드 빈도
+    var kwFreq = {};
+    pending.forEach(function(c) {
+      (c.keywords || []).forEach(function(kw) { kwFreq[kw] = (kwFreq[kw] || 0) + 1; });
+    });
+
+    res.json({
+      success: true,
+      totalPending: pending.length,
+      lastUpdated: queue.lastUpdated,
+      byReason: byReason,
+      topKeywords: Object.entries(kwFreq).sort(function(a, b) { return b[1] - a[1]; }).slice(0, 20),
+      candidates: pending.slice(0, 50)
+    });
+  } catch(e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// 일일 리포트 수동 실행
+router.get('/daily-report', async function(req, res) {
+  try {
+    var dailyReport = require('../lib/daily-report');
+    var result = dailyReport.generateDailyReport();
+    res.json({ success: true, report: result.report, stats: result.stats });
+  } catch(e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// 일일 리포트 발송 (수동)
+router.post('/send-daily-report', async function(req, res) {
+  try {
+    var dailyReport = require('../lib/daily-report');
+    var result = await dailyReport.sendDailyReport();
+    res.json({ success: true, stats: result ? result.stats : null });
+  } catch(e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+
 module.exports = router;
