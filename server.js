@@ -17,7 +17,7 @@ process.on('unhandledRejection', function(reason) {
 var app = express();
 app.use(express.json());
 // Dashboard password protection
-app.use("/dashboard", function(req, res, next) {
+app.get("/dashboard", function(req, res) {
   var auth = req.headers.authorization;
   if (!auth || auth.indexOf("Basic ") !== 0) {
     res.setHeader("WWW-Authenticate", 'Basic realm="VEASLY Dashboard"');
@@ -28,11 +28,11 @@ app.use("/dashboard", function(req, res, next) {
   var user = parts[0];
   var pass = parts.slice(1).join(":");
   if (user === (process.env.DASHBOARD_USER || "admin") && pass === (process.env.DASHBOARD_PASS || "veasly2026!")) {
-    return next();
+    return res.sendFile(require('path').join(__dirname, 'public', 'dashboard.html'));
   }
   res.setHeader("WWW-Authenticate", 'Basic realm="VEASLY Dashboard"');
   return res.status(401).send("Invalid credentials");
-}, express.static("public"));
+});
 
 var webhookRouter = require('./routes/webhook');
 var botRouter = require('./routes/bot');
@@ -42,10 +42,7 @@ var scheduler = require('./lib/scheduler');
 var aiEngine = require('./lib/ai-engine');
 
 // dashboard.html 직접 접근 지원
-app.get('/dashboard', function(req, res) {
-  // Basic Auth는 위 미들웨어에서 처리됨
-  res.sendFile(require('path').join(__dirname, 'public', 'dashboard.html'));
-});
+// /dashboard는 위에서 직접 처리
 
 app.get('/dashboard.html', function(req, res) { res.sendFile(require('path').join(__dirname, 'public', 'dashboard.html')); });
 
