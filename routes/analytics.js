@@ -629,12 +629,26 @@ router.get('/escalation-analysis', function(req, res) {
     recent.forEach(function(c) {
       var msg = (c.userMessage || '').toLowerCase();
       var cat = 'other';
-      if (msg.indexOf('배송') > -1 || msg.indexOf('物流') > -1 || msg.indexOf('寄') > -1 || msg.indexOf('到') > -1 || msg.indexOf('出貨') > -1) cat = 'shipping';
-      else if (msg.indexOf('취소') > -1 || msg.indexOf('取消') > -1 || msg.indexOf('退') > -1 || msg.indexOf('不要') > -1) cat = 'cancel';
-      else if (msg.indexOf('결제') > -1 || msg.indexOf('付款') > -1 || msg.indexOf('刷卡') > -1) cat = 'payment';
-      else if (msg.indexOf('가격') > -1 || msg.indexOf('價格') > -1 || msg.indexOf('運費') > -1 || msg.indexOf('多少') > -1) cat = 'pricing';
-      else if (msg.indexOf('찾') > -1 || msg.indexOf('找') > -1 || msg.indexOf('有賣') > -1 || msg.indexOf('幫我') > -1) cat = 'product';
-      else if (msg.indexOf('客服') > -1 || msg.indexOf('真人') > -1 || msg.indexOf('상담') > -1) cat = 'agent_request';
+      // 1. 상담사 직접 요청 (가장 먼저 - 단순 "客服" 한마디)
+      if (/^客服$|^상담사$|^상담원$|^真人$|^人工$/i.test(msg.trim())) cat = 'agent_direct';
+      // 2. 주문 상태/추적 (번호 입력 포함)
+      else if (msg.indexOf('訂單') > -1 || msg.indexOf('주문') > -1 || msg.indexOf('進度') > -1 || msg.indexOf('狀態') > -1 || /\d{10,}/.test(msg) || msg.indexOf('多久') > -1 || msg.indexOf('等了') > -1 || msg.indexOf('天了') > -1 || msg.indexOf('幾天') > -1 || msg.indexOf('update') > -1 || msg.indexOf('一個禮拜') > -1) cat = 'order_status';
+      // 3. 배송/물류
+      else if (msg.indexOf('배송') > -1 || msg.indexOf('物流') > -1 || msg.indexOf('配送') > -1 || msg.indexOf('出貨') > -1 || msg.indexOf('發貨') > -1 || msg.indexOf('寄出') > -1 || msg.indexOf('到貨') > -1 || msg.indexOf('快遞') > -1 || msg.indexOf('順豐') > -1 || msg.indexOf('택배') > -1 || msg.indexOf('도착') > -1 || msg.indexOf('집운') > -1 || msg.indexOf('集運') > -1) cat = 'shipping';
+      // 4. 국제배송비/운임
+      else if (msg.indexOf('國際運費') > -1 || msg.indexOf('운비') > -1 || msg.indexOf('배송비') > -1 || msg.indexOf('運費') > -1 || msg.indexOf('관세') > -1 || msg.indexOf('稅') > -1 || msg.indexOf('報關') > -1 || msg.indexOf('海關') > -1 || msg.indexOf('관부가세') > -1) cat = 'shipping_fee';
+      // 5. 취소/환불/반품
+      else if (msg.indexOf('취소') > -1 || msg.indexOf('取消') > -1 || msg.indexOf('退款') > -1 || msg.indexOf('退貨') > -1 || msg.indexOf('환불') > -1 || msg.indexOf('반품') > -1 || msg.indexOf('不要了') > -1 || msg.indexOf('先不要發貨') > -1) cat = 'cancel_refund';
+      // 6. 결제/금액
+      else if (msg.indexOf('결제') > -1 || msg.indexOf('付款') > -1 || msg.indexOf('刷卡') > -1 || msg.indexOf('金額') > -1 || msg.indexOf('價') > -1 || msg.indexOf('元') > -1 || msg.indexOf('費用') > -1 || msg.indexOf('報價') > -1 || msg.indexOf('얼마') > -1 || msg.indexOf('多少') > -1) cat = 'payment';
+      // 7. 상품문의/불량/교환
+      else if (msg.indexOf('商品') > -1 || msg.indexOf('상품') > -1 || msg.indexOf('壞') > -1 || msg.indexOf('不能用') > -1 || msg.indexOf('損') > -1 || msg.indexOf('瑕疵') > -1 || msg.indexOf('品質') > -1 || msg.indexOf('색상') > -1 || msg.indexOf('色差') > -1 || msg.indexOf('換貨') > -1 || msg.indexOf('교환') > -1 || msg.indexOf('包包') > -1 || msg.indexOf('사이즈') > -1 || msg.indexOf('찾') > -1 || msg.indexOf('找') > -1 || msg.indexOf('有賣') > -1) cat = 'product';
+      // 8. 계정/로그인/회원정보
+      else if (msg.indexOf('登') > -1 || msg.indexOf('帳號') > -1 || msg.indexOf('會員') > -1 || msg.indexOf('계정') > -1 || msg.indexOf('密碼') > -1 || msg.indexOf('信箱') > -1 || msg.indexOf('email') > -1 || msg.indexOf('이메일') > -1 || msg.indexOf('修改') > -1) cat = 'account';
+      // 9. 사이트 이용/주문방법
+      else if (msg.indexOf('下訂') > -1 || msg.indexOf('無法') > -1 || msg.indexOf('怎麼') > -1 || msg.indexOf('如何') > -1 || msg.indexOf('방법') > -1 || msg.indexOf('使用') > -1 || msg.indexOf('操作') > -1 || msg.indexOf('어떻게') > -1) cat = 'how_to';
+      // 10. 상담사 연결 요청 (문장 속 客服)
+      else if (msg.indexOf('客服') > -1 || msg.indexOf('真人') > -1 || msg.indexOf('상담') > -1 || msg.indexOf('人工') > -1 || msg.indexOf('幫我') > -1) cat = 'agent_request';
       categories[cat] = (categories[cat] || 0) + 1;
       if (!examples[cat]) examples[cat] = [];
       if (examples[cat].length < 3) examples[cat].push((c.userMessage || '').substring(0, 80));
@@ -741,12 +755,16 @@ router.get('/faq-recommendations', (req, res) => {
     // 에스컬레이션 질문을 카테고리별로 분류
     const categories = {};
     const keywords = {
-      shipping: ['배송', '운송', '택배', '寄', '到貨', '물류', 'delivery', 'ship', '發貨'],
-      payment: ['결제', '카드', 'PayPal', '付款', '支付', 'payment', '입금'],
-      refund: ['환불', '취소', '退款', '取消', 'refund', 'cancel'],
-      product: ['상품', '사이즈', '色', '商品', 'product', 'size', '品質'],
-      customs: ['통관', '관세', '세관', '報關', 'EZ', 'customs', '稅'],
-      tracking: ['추적', '조회', '查詢', '物流', 'tracking', 'status']
+      order_status: ['訂單', '주문', '進度', '狀態', '多久', '等了', '天了', '幾天', 'update', 'order', '조회'],
+      shipping: ['배송', '운송', '택배', '寄', '到貨', '물류', 'delivery', 'ship', '發貨', '出貨', '配送', '快遞', '集運', '집운'],
+      shipping_fee: ['國際運費', '운비', '배송비', '運費', '관세', '稅', '報關', '海關', '관부가세'],
+      cancel_refund: ['환불', '취소', '退款', '取消', 'refund', 'cancel', '退貨', '반품', '不要了'],
+      payment: ['결제', '카드', 'PayPal', '付款', '支付', 'payment', '입금', '刷卡', '金額', '報價', '얼마', '多少'],
+      product: ['상품', '사이즈', '色', '商品', 'product', 'size', '品質', '壞', '不能用', '瑕疵', '교환', '換貨', '包包', '찾'],
+      account: ['帳號', '會員', '계정', '密碼', '信箱', 'email', '이메일', '登', '修改'],
+      how_to: ['下訂', '無法', '怎麼', '如何', '방법', '使用', '操作', '어떻게'],
+      customs: ['통관', '관세', '세관', '報關', 'EZ', 'customs'],
+      agent_request: ['客服', '真人', '상담', '人工', '幫我']
     };
     
     recent.forEach(log => {
