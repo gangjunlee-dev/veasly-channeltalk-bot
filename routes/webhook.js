@@ -216,14 +216,7 @@ async function connectManager(chatId, lang) {
     for (var i = 0; i < managers.length; i++) {
       if (managers[i].operator) {
         await channeltalk.inviteManager(chatId, managers[i].id);
-        
-      // shortReplyWarning: 매니저 답변이 너무 짧으면 로그
-      // QA check removed - plainText not in scope
-      // [removed] replyLen check
-        // [removed] QA plainText check
-      }
-managerActive[chatId] = Date.now();
-        // MANAGER_DIRECT_ALERT: 매니저에게 직접 알림
+        managerActive[chatId] = Date.now();
         console.log('[ESCALATION] Manager invited:', managers[i].id, 'for chat:', chatId);
         pendingEscalations[chatId] = { time: Date.now(), managerId: managers[i].id, lang: lang || "zh-TW" };
         break;
