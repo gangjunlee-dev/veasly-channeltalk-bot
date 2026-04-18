@@ -272,4 +272,62 @@ module.exports = [
     answer: '📱 VEASLY 聯絡方式\n\n📌 客服管道：\n1️⃣ 網站內建聊天（現在使用中）→ 24小時自動回覆 + 客服時間真人服務\n2️⃣ LINE 官方帳號 → https://lin.ee/tXSMVvV\n\n📌 客服時間：\n・平日 10:00~19:00（韓國時間）\n・台灣時間 09:00~18:00\n\n💡 一般問題建議使用網站聊天，自動回覆可即時解答！',
     escalate: false
   }
+,
+
+  {
+    id: 'FAQ_EZWAY_001',
+    category: 'EZ WAY',
+    keywords: ['EZ WAY','ez way','이지웨이','易利委','實名','실명','報關','통관','海關','customs','ezway','EZWAY','實名認證','实名认证'],
+    answer: 'EZ WAY 實名認證說明：\n\n1️⃣ 下載「EZ WAY 易利委」APP\n2️⃣ 註冊並完成身份驗證\n3️⃣ 包裹到台灣海關時APP會通知\n4️⃣ 點擊「申報相符」即可\n\n⚠️ 第一次需要1~3個工作天審核\n💡 建議下單前先完成認證！',
+    escalate: false
+  },
+  {
+    id: 'FAQ_MERGE_SHIP_001',
+    category: '合併寄送',
+    keywords: ['合併','合并','합배송','merge','combine','一起寄','併寄','合寄','合單','合併寄送'],
+    answer: '合併寄送說明：\n\n📌 條件：所有商品已到VEASLY倉庫、30天保管期限內、總重不超過25kg\n📌 申請：請提供所有要合併的訂單號碼\n📌 處理時間：1~2個工作天\n\n💡 同一賣場多件商品通常自動合併！',
+    escalate: true
+  },
+  {
+    id: 'FAQ_POINTS_001',
+    category: '點數優惠',
+    keywords: ['點數','포인트','points','쿠폰','coupon','優惠券','折扣','할인','紅利','bonus'],
+    answer: '點數/優惠券說明：\n\n📌 點數：註冊送500點，消費1~3%回饋，1點=TWD 1，180天有效\n📌 優惠券：「我的頁面」→「優惠券」查看\n📌 使用：結帳時「折扣/點數」區域選擇\n\n💡 點數和優惠券可以同時使用！',
+    escalate: false
+  },
+  {
+    id: 'FAQ_HOW_TO_ORDER_001',
+    category: '下單方法',
+    keywords: ['怎麼買','如何買','如何購買','怎麼下單','怎麼訂','주문방법','how to order','how to buy','怎麼用','購買方式','下單方式','買東西'],
+    answer: '下單步驟：\n\n1️⃣ 在veasly.com/tw貼上商品URL或上傳截圖\n2️⃣ 選規格後「申請報價」\n3️⃣ 收到報價後付款\n4️⃣ VEASLY代購→韓國倉庫驗貨→國際配送\n\n💡 支援Musinsa、Olive Young、Coupang等50+韓國平台！',
+    escalate: false
+  },
+  {
+    id: 'FAQ_PRODUCT_INQUIRY_001',
+    category: '商品諮詢',
+    keywords: ['尺寸','사이즈','size','顏色','색상','color','庫存','재고','stock','缺貨','품절','sold out','有貨嗎','有L號','有S號','幾號','碼數'],
+    answer: '商品諮詢：\n\n📌 尺寸：韓國標示 S=44 M=55 L=66 XL=77\n📌 庫存：報價時即時確認，缺貨會通知\n📌 顏色：以商品頁面為準，螢幕可能有色差\n\n💡 提供商品URL或截圖，我們幫您確認詳細資訊！',
+    escalate: false
+  },
+  {
+    id: 'FAQ_SHIPPING_FEE_DETAIL_001',
+    category: '國際運費',
+    keywords: ['國際運費','국제배송비','international shipping','運費多少','幾公斤','kg','重量','材積','免運','free shipping'],
+    answer: '國際運費：0~1kg TWD 310（每+1kg加TWD 310）\n\n🎉 免運活動：TWD 4,999以上5kg免運、TWD 9,999以上10kg免運\n\n⚠️ 以實際重量和材積重量較大者計算，VEASLY不加收額外費用！',
+    escalate: false
+  },
+  {
+    id: 'FAQ_ACCOUNT_001',
+    category: '帳號',
+    keywords: ['帳號','계정','account','密碼','비밀번호','password','登入','로그인','login','註冊','회원가입','register','忘記密碼'],
+    answer: '帳號相關：\n\n📌 註冊：Email/Google/LINE快速登入\n📌 忘記密碼：登入頁面→「忘記密碼」→收重設信\n📌 修改資料：「我的頁面」→「個人資料」\n\n⚠️ 收件地址需與EZ WAY實名認證一致！',
+    escalate: false
+  },
+  {
+    id: 'FAQ_EXCHANGE_001',
+    category: '換貨',
+    keywords: ['換貨','교환','exchange','swap','交換','換尺寸','換顏色','更換'],
+    answer: '換貨說明：\n\n⚠️ VEASLY代購目前不支援直接換貨\n\n📌 瑕疵/破損/錯誤：收貨7天內聯繫客服+附照片→全額退款\n📌 尺寸不合/不喜歡：海外配送完成後無法退換\n📌 BUNJANG中古商品：一律不退換\n\n💡 下單前確認尺寸，有疑問歡迎提供商品連結！',
+    escalate: false
+  }
 ];
