@@ -427,8 +427,8 @@ function loadStrategySection(days) {
       {name:'NoReply', score:(bd.noReply||{}).score||0, icon:'⏰', detail:'미응답 '+((m.noReplyClose||{}).rate||0)+'% ('+((m.noReplyClose||{}).count||0)+'/'+((m.noReplyClose||{}).total||0)+')'},
       {name:'FRT', score:(bd.frt||{}).score||0, icon:'⚡', detail:'30분내 '+((m.responseTime||{}).within30MinRate||0)+'% | 평균 '+((m.responseTime||{}).avgMinutes||0)+'분'},
       {name:'FCR', score:(bd.fcr||{}).score||0, icon:'✅', detail:'해결 '+((m.fcr||{}).resolved||0)+'건 | 재문의 '+((m.fcr||{}).reopened||0)+'건'},
-      {name:'CSAT', score:(bd.csat||{}).score||0, icon:'⭐', detail:'평균 '+(csat&&csat.average?csat.average.toFixed(1):'N/A')+' | 응답 '+(csat&&csat.total?csat.total:0)+'건'},
-      {name:'CES', score:(bd.ces||{}).score||0, icon:'🎯', detail:'평균 '+((m.ces||{}).avgScore||0)+' | 응답 '+((m.ces||{}).count||0)+'건'}
+      {name:'CSAT', score:(bd.csat||{}).score||0, icon:'⭐', detail:'평균 '+(csat&&(csat.averageScore||csat.average)?((csat.averageScore||csat.average)).toFixed(1):'N/A')+' | 응답 '+(csat&&(csat.totalResponses||csat.total)?(csat.totalResponses||csat.total):0)+'건'},
+      {name:'CES', score:(bd.ces||{}).score||0, icon:'🎯', detail:'평균 '+((m.ces||{}).avgScore||0)+' | 응답 '+((m.ces||{}).totalResponses||(m.ces||{}).count||0)+'건'}
     ];
     h += '<div class="strat-subs">';
     for (var i=0; i<metrics.length; i++) {
@@ -451,7 +451,7 @@ function loadStrategySection(days) {
       {sev:'crit', title:'에스컬레이션 47%', sub:'other 46건 AI 분류 불가 → 매니저 부하'},
       {sev:'crit', title:'NoReply 미응답 33%', sub:'오프시간 50%, 피크 10-12시 80건+'},
       {sev:'warn', title:'CSAT 평균 2.3/5', sub:'응답 10건 중 70%가 2점 이하'},
-      {sev:'warn', title:'CES/FCR 데이터 부족', sub:'CES '+((m.ces||{}).count||0)+'건, FCR '+((m.fcr||{}).resolved||0)+'건'},
+      {sev:'warn', title:'CES/FCR 데이터 부족', sub:'CES '+((m.ces||{}).totalResponses||(m.ces||{}).count||0)+'건, FCR '+((m.fcr||{}).resolved||0)+'건'},
       {sev:'info', title:'매니저 업무 편중', sub:'vida 77채팅/152응답, 나머지 최소'}
     ];
     for (var p=0; p<problems.length; p++) {

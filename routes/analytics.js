@@ -560,6 +560,19 @@ router.get('/cs-score-metrics', async function(req, res) {
   else if (noReplyRate <= 30) noReplyScore = 3;
   else noReplyScore = 1.5;
 
+
+    // CSAT 데이터 로드
+    var csatFile2 = require('path').join(__dirname, '..', 'data', 'csat-results.json');
+    var csatResults2 = [];
+    try { csatResults2 = JSON.parse(fs.readFileSync(csatFile2, 'utf8')); } catch(e) {}
+    var csatAvg2 = 0;
+    var csatCount2 = csatResults2.length;
+    if (csatCount2 > 0) {
+      var csatSum2 = 0;
+      csatResults2.forEach(function(r) { csatSum2 += (typeof r.score === 'number' ? r.score : 0); });
+      csatAvg2 = Math.round((csatSum2 / csatCount2) * 10) / 10;
+    }
+
   var integratedScore = (frtScore * 0.20) + (fcrScore * 0.25) + (csatScore * 0.20) + (cesScoreVal * 0.15) + (noReplyScore * 0.20);
   integratedScore = Math.round(integratedScore * 100) / 100;
 
