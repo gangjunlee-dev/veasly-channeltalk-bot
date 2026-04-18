@@ -868,7 +868,7 @@ router.post('/channeltalk', async function(req, res) {
       if (step === 0) {
         // Step 1: Ask what they need help with
         var step1Msgs = {
-          'zh-TW': '💡 轉接前，試試看我能不能幫到您！\n\n請直接告訴我：\n1️⃣ 輸入「訂單號碼」→ 馬上查進度\n2️⃣ 輸入您的問題 → AI即時回答\n\n例如：\n・貼上訂單號碼（如 20260415TW...）\n・「我的包裹到哪了」\n・「運費怎麼算」\n\n🔸 還是需要真人？請再輸入「客服」',
+          'zh-TW': !isBusinessHours() ? '💡 目前非客服時間（台灣 09:00~18:00），但我可以馬上幫您！\n\n請直接告訴我：\n1️⃣ 輸入「訂單號碼」→ 馬上查進度\n2️⃣ 輸入您的問題 → AI即時回答\n\n例如：\n・貼上訂單號碼（如 20260415TW...）\n・「我的包裹到哪了」\n・「運費怎麼算」\n\n⏰ 客服人員上班後會優先處理需要人工協助的問題！\n🔸 還是需要真人？請再輸入「客服」，我會記錄下來' : '💡 轉接前，試試看我能不能幫到您！\n\n請直接告訴我：\n1️⃣ 輸入「訂單號碼」→ 馬上查進度\n2️⃣ 輸入您的問題 → AI即時回答\n\n例如：\n・貼上訂單號碼（如 20260415TW...）\n・「我的包裹到哪了」\n・「運費怎麼算」\n\n🔸 還是需要真人？請再輸入「客服」',
           'ko': '💡 상담사 연결 전에 제가 도움드릴 수 있을지 확인해볼게요!\n\n질문을 간단히 설명해주세요:\n・「주문 진행 상태 확인」\n・「운임 계산 방법」\n・「환불 신청 방법」\n\n또는 번호를 입력하세요:\n' + getMenuText('ko') + '\n\n🔸 그래도 상담사가 필요하시면 「상담사」를 한 번 더 입력해주세요',
           'en': '💡 Before connecting to an agent, maybe I can help!\n\nDescribe your issue briefly, or enter a number:\n' + getMenuText('en') + '\n\n🔸 Still need a human? Type "agent" again',
           'ja': '💡 オペレーターに接続する前に、お手伝いできるかもしれません！\n\n質問を簡単に説明するか、番号を入力してください：\n' + getMenuText('ja') + '\n\n🔸 それでも必要な場合は「オペレーター」をもう一度入力'
@@ -1139,41 +1139,70 @@ router.post('/channeltalk', async function(req, res) {
           var confidence = aiResult.confidence || 0;
           console.log("[AI] Confidence:", confidence.toFixed(3));
           if (confidence < 0.3) {
-            console.log("[AI] Very low confidence (" + confidence.toFixed(3) + ") - skipping AI answer, auto-escalate");
-            aiAnswer = null;
-            // Auto-escalate on very low confidence
-            try {
-              var lowConfMsgs = {
-                "zh-TW": isBusinessHours() ? "您的問題需要客服人員協助，正在為您轉接，請稍候 🙏" : "您的問題需要客服人員協助 🙏 目前非客服時間，請先留下詳細問題，客服人員會在明天上班後（台灣09:00）優先回覆您！",
-                "ko": "해당 질문은 상담사의 도움이 필요합니다. 연결 중이니 잠시만 기다려주세요 🙏",
-                "en": "Your question needs agent assistance. Connecting you now, please wait 🙏",
-                "ja": "担当者におつなぎいたします。少々お待ちください 🙏"
-              };
-              await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: lowConfMsgs[detectedLang] || lowConfMsgs["zh-TW"] }] });
-              var mgrList0 = await getCachedManagers();
-              var mgrs0 = (mgrList0 && mgrList0.managers) || [];
-              for (var m0 = 0; m0 < mgrs0.length; m0++) {
-                if (mgrs0[m0].operator) { await channeltalk.inviteManager(chatId, mgrs0[m0].id); break; }
-              }
-              pendingEscalations[chatId] = { time: Date.now(), timestamp: Date.now(), lang: detectedLang };
-              managerActive[chatId] = Date.now();
-              console.log("[AI] Very low confidence auto-escalation for:", chatId);
-              aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", lang: detectedLang, type: "escalation", userMessage: userText.substring(0, 200), aiResponse: "confidence " + confidence.toFixed(3) + " < 0.3 → 자동 에스컬레이션", escalated: true, escalationReason: "low_confidence", confidence: confidence });
-            } catch(lcErr) { console.error("[AI] Low confidence escalation error:", lcErr.message); }
+            console.log("[AI] Very low confidence (" + confidence.toFixed(3) + ") - " + (isBusinessHours() ? "auto-escalate" : "off-hour AI guide only"));
+            
+            if (!isBusinessHours()) {
+              // ★ 오프시간: 매니저 초대 없이 AI가 적극 안내
+              try {
+                var offHourLowMsgs = {
+                  "zh-TW": "感謝您的提問！🙏\n\n💡 目前非客服時間，但我可以馬上幫您：\n・請輸入「訂單號碼」→ 馬上查詢進度\n・描述您的問題 → AI為您解答\n\n例如：\n・貼上訂單號碼（如 20260415TW...）\n・「我的包裹到哪了」\n・「運費怎麼算」\n\n⏰ 客服時間：週一至週五 台灣09:00~18:00\n客服人員上班後會優先為您處理！😊",
+                  "ko": "질문 감사합니다! 🙏\n\n💡 현재 상담 시간 외이지만 제가 먼저 도와드릴게요:\n・주문번호 입력 → 바로 조회\n・궁금한 점을 말씀해주세요\n\n⏰ 상담시간: 평일 10:00~19:00 (한국시간)\n업무 시작 후 우선 답변드리겠습니다!",
+                  "en": "Thanks for your question! 🙏\n\n💡 We're currently outside business hours, but I can help right away:\n・Enter your order number for instant tracking\n・Describe your issue and I'll assist\n\n⏰ Business hours: Mon-Fri 10:00-19:00 KST\nOur team will prioritize your inquiry!",
+                  "ja": "ご質問ありがとうございます！🙏\n\n💡 現在営業時間外ですが、まずお手伝いします：\n・注文番号を入力 → すぐに確認\n・お問い合わせ内容をご記入ください\n\n⏰ 営業時間：月〜金 10:00〜19:00 KST\n営業開始後、優先的に対応いたします！"
+                };
+                await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: offHourLowMsgs[detectedLang] || offHourLowMsgs["zh-TW"] }] });
+                aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", lang: detectedLang, type: "ai_answer", userMessage: userText.substring(0, 200), aiResponse: "오프시간 low-confidence → AI 안내 (에스컬레이션 안 함)", escalated: false, escalationReason: "off_hour_low_confidence", confidence: confidence });
+              } catch(olcErr) { console.error("[AI] Off-hour low conf error:", olcErr.message); }
+            } else {
+              // 영업시간: 기존 로직 유지 - 매니저 연결
+              aiAnswer = null;
+              try {
+                var lowConfMsgs = {
+                  "zh-TW": "您的問題需要客服人員協助，正在為您轉接，請稍候 🙏",
+                  "ko": "해당 질문은 상담사의 도움이 필요합니다. 연결 중이니 잠시만 기다려주세요 🙏",
+                  "en": "Your question needs agent assistance. Connecting you now, please wait 🙏",
+                  "ja": "担当者におつなぎいたします。少々お待ちください 🙏"
+                };
+                await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: lowConfMsgs[detectedLang] || lowConfMsgs["zh-TW"] }] });
+                var mgrList0 = await getCachedManagers();
+                var mgrs0 = (mgrList0 && mgrList0.managers) || [];
+                for (var m0 = 0; m0 < mgrs0.length; m0++) {
+                  if (mgrs0[m0].operator) { await channeltalk.inviteManager(chatId, mgrs0[m0].id); break; }
+                }
+                pendingEscalations[chatId] = { time: Date.now(), timestamp: Date.now(), lang: detectedLang };
+                managerActive[chatId] = Date.now();
+                console.log("[AI] Very low confidence auto-escalation for:", chatId);
+                aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", lang: detectedLang, type: "escalation", userMessage: userText.substring(0, 200), aiResponse: "confidence " + confidence.toFixed(3) + " < 0.3 → 자동 에스컬레이션", escalated: true, escalationReason: "low_confidence", confidence: confidence });
+              } catch(lcErr) { console.error("[AI] Low confidence escalation error:", lcErr.message); }
+            }
           } else if (confidence < 0.6) {
             var hasOrderCtx = chatContext[chatId] && chatContext[chatId].lastOrderContext && (Date.now() - chatContext[chatId].lastOrderTime) < 60 * 60 * 1000;
             if (hasOrderCtx) {
               console.log("[AI] Medium confidence but order context exists - answer only, skip escalation");
               // 주문 맥락 존재 → 경고 문구 없이 AI 답변만 전송
             } else {
-              console.log("[AI] Medium confidence (" + confidence.toFixed(3) + ") - answer + auto-escalate");
-              // 답변은 보내되, 경고 문구 추가 + 에스컬레이션 진행
+              console.log("[AI] Medium confidence (" + confidence.toFixed(3) + ") - answer + " + (isBusinessHours() ? "auto-escalate" : "off-hour AI only"));
+              if (!isBusinessHours()) {
+                // 오프시간: AI 답변 + 안내만, 에스컬레이션 안 함
+                var offHourMedNote = {
+                  "zh-TW": "\n\n💡 以上為AI回覆，供您參考！若需進一步協助，客服人員會在上班後（台灣09:00~18:00）為您確認 😊",
+                  "ko": "\n\n💡 위 답변은 AI 응답입니다. 추가 확인이 필요하시면 영업시간(10:00~19:00)에 상담사가 확인해드리겠습니다 😊",
+                  "en": "\n\n💡 This is an AI response for your reference. For further assistance, our team will confirm during business hours (Mon-Fri 10:00-19:00 KST) 😊",
+                  "ja": "\n\n💡 上記はAI回答です。追加確認が必要な場合、営業時間内（月〜金 10:00〜19:00 KST）に担当者が確認いたします 😊"
+                };
+                aiAnswer += offHourMedNote[detectedLang] || offHourMedNote["zh-TW"];
+                // 오프시간은 에스컬레이션 스킵 - 아래 connectManager를 건너뜀
+                await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: aiAnswer }] });
+                aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "ai_answer", userMessage: userText.substring(0, 200), aiResponse: aiAnswer.substring(0, 300), escalated: false, escalationReason: "off_hour_medium_confidence", confidence: confidence });
+                return res.status(200).send("OK");
+              }
+              // 영업시간: 기존 로직 유지
               var medConfNote = {
-                "zh-TW": isBusinessHours() ? "\n\n⚠️ 以上為AI初步回覆，客服人員會再為您確認，請稍候！" : "\n\n⚠️ 以上為AI初步回覆。目前非客服時間，客服人員會在明天上班後（台灣09:00）優先為您確認！",
+                "zh-TW": "\n\n⚠️ 以上為AI初步回覆，客服人員會再為您確認，請稍候！",
                 "ko": "\n\n⚠️ 위 답변은 AI 초기 응답입니다. 상담사가 확인 후 정확한 안내를 드리겠습니다!",
                 "en": "\n\n⚠️ This is an AI preliminary answer. An agent will confirm shortly!",
                 "ja": "\n\n⚠️ 上記はAIの初期回答です。担当者が確認後、正確にご案内いたします！"
-            };
+              };
               aiAnswer += medConfNote[detectedLang] || medConfNote["zh-TW"];
             } // close else (no order context)
           }
