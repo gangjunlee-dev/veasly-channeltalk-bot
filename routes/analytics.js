@@ -1,4 +1,5 @@
 var express = require('express');
+var autoUpgrade = require('../lib/auto-upgrade');
 var path = require('path');
 var fs = require('fs');
 var mgrStats = require('../lib/manager-stats');
@@ -1070,5 +1071,38 @@ router.post('/send-daily-report', async function(req, res) {
   }
 });
 
+
+
+// === AI 자동 업그레이드 API ===
+router.get('/auto-upgrade/status', async function(req, res) {
+  try {
+    var analysis = autoUpgrade.analyzeConfidenceDistribution();
+    var faqQueue = require('../lib/faq-queue');
+    var queue = faqQueue.loadQueue();
+    var pending = (queue.candidates || []).filter(function(c) { return c.status === 'pending'; }).length;
+    var added = (queue.candidates || []).filter(function(c) { return c.status === 'added'; }).length;
+    res.json({ success: true, pendingCandidates: pending, processedCandidates: added, confidenceAnalysis: analysis });
+  } catch(e) {
+    res.json({ success: false, error: e.message });
+  }
+});
+
+router.post('/auto-upgrade/run', async function(req, res) {
+  try {
+    var result = await autoUpgrade.runAutoUpgrade();
+    res.json({ success: true, result: result });
+  } catch(e) {
+    res.json({ success: false, error: e.message });
+  }
+});
+
+router.get('/auto-upgrade/report', function(req, res) {
+  try {
+    var report = autoUpgrade.generateUpgradeReport();
+    res.json({ success: true, report: report });
+  } catch(e) {
+    res.json({ success: false, error: e.message });
+  }
+});
 
 module.exports = router;
