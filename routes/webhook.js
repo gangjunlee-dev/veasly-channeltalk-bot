@@ -810,7 +810,7 @@ router.post('/channeltalk', async function(req, res) {
       };
       await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: mergeMsg[detectedLang] || mergeMsg["zh-TW"] }] });
       await connectManager(chatId, detectedLang);
-      aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "escalation", userMessage: userText.substring(0, 200), aiResponse: "합배송 요청 → 즉시 에스컬레이션", escalated: true });
+      aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "escalation", userMessage: userText.substring(0, 200), aiResponse: "합배송 요청 → 즉시 에스컬레이션", escalated: true, escalationReason: 'merge_shipping', confidence: 0 });
       return res.status(200).send("OK");
     }
 
@@ -858,7 +858,7 @@ router.post('/channeltalk', async function(req, res) {
       var actionMsg = (actionMsgs[actionType] && actionMsgs[actionType][detectedLang]) || (actionMsgs[actionType] && actionMsgs[actionType]["zh-TW"]) || "正在為您轉接客服人員 🙋‍♀️";
       await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: actionMsg }] });
       await connectManager(chatId, detectedLang);
-      aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "escalation", userMessage: userText.substring(0, 200), aiResponse: "행동요청(" + actionType + ") → 안내 후 에스컬레이션", escalated: true });
+      aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "escalation", userMessage: userText.substring(0, 200), aiResponse: "행동요청(" + actionType + ") → 안내 후 에스컬레이션", escalated: true, escalationReason: 'action_request_' + actionType, confidence: 0 });
       return res.status(200).send("OK");
     }
 
@@ -909,7 +909,7 @@ router.post('/channeltalk', async function(req, res) {
             }
           }
         } catch(e) {}
-        aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || '', userName: veaslyUser ? veaslyUser.name : '', lang: detectedLang, type: 'escalation', userMessage: userText, aiResponse: '에스컬레이션 - 매니저 연결', escalated: true });
+        aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || '', userName: veaslyUser ? veaslyUser.name : '', lang: detectedLang, type: 'escalation', userMessage: userText, aiResponse: '에스컬레이션 - 매니저 연결', escalated: true, escalationReason: 'keyword_request', confidence: 0 });
         try { var scheduler2 = require('../lib/scheduler'); scheduler2.savePendingEscalation(chatId, memberId || personId || '', userText); } catch(pe) {}
         return res.status(200).send('OK');
       }
@@ -1346,9 +1346,43 @@ setInterval(async function() {
       console.log('[ESCALATION-WARN] 10min no reply - chatId:', cid);
       esc.warned10 = true;
     }
-    if (elapsedMin >= 20 && !esc.waitingSent) {
+    if (elapsedMin >= 15 && !esc.waitingSent) {
       sendWaitingMessage(cid, esc.lang || 'zh-TW');
       esc.waitingSent = true;
+    }
+    // 30분 후속 안내: 구체적 예상 시간 제공
+    if (elapsedMin >= 30 && !esc.followup30) {
+      var followup30Msgs = {
+        'zh-TW': '⏳ 已等待約30分鐘，非常抱歉！客服人員正在處理其他客戶的問題，預計15~30分鐘內回覆您。\n\n💡 小提醒：如果是訂單問題，您可以直接輸入訂單號碼，AI助手也許能幫您查詢喔！',
+        'ko': '⏳ 약 30분 대기 중이시네요, 정말 죄송합니다! 상담사가 다른 고객 응대 중이며 15~30분 내 답변드리겠습니다.\n\n💡 팁: 주문 관련이라면 주문번호를 입력해보세요, AI가 도와드릴 수 있어요!',
+        'en': '⏳ Sorry for the 30-minute wait! Our agent is helping other customers and will respond within 15~30 minutes.\n\n💡 Tip: For order inquiries, try entering your order number - our AI may be able to help!',
+        'ja': '⏳ 30分お待たせして申し訳ございません！スタッフは他のお客様対応中で、15～30分以内にご返信いたします。'
+      };
+      try {
+        await channeltalk.sendMessage(cid, { blocks: [{ type: 'text', value: followup30Msgs[esc.lang] || followup30Msgs['zh-TW'] }] });
+        console.log('[FOLLOWUP] 30min notice sent to:', cid);
+      } catch(e) { console.log('[FOLLOWUP] 30min error:', e.message); }
+      esc.followup30 = true;
+    }
+    // 60분 최종 안내: 사과 + 우선 처리 약속
+    if (elapsedMin >= 60 && !esc.followup60) {
+      var followup60Msgs = {
+        'zh-TW': '😔 非常抱歉讓您等這麼久！您的問題已被標記為「優先處理」，客服人員會儘快回覆。\n\n如果您需要離開，請放心留言，我們一定會回覆您！也可以留下Email，處理完畢後通知您。',
+        'ko': '😔 오래 기다리게 해서 정말 죄송합니다! 우선 처리로 표시되었으며, 상담사가 최대한 빨리 답변드리겠습니다.\n\n자리를 비우셔야 한다면 메시지를 남겨주세요. 반드시 답변드립니다!',
+        'en': '😔 So sorry for the long wait! Your inquiry has been marked as priority. Our agent will respond ASAP.\n\nIf you need to leave, please leave a message - we will definitely reply!',
+        'ja': '😔 長くお待たせして大変申し訳ございません！優先対応に変更しました。スタッフがすぐにご返信いたします。'
+      };
+      try {
+        await channeltalk.sendMessage(cid, { blocks: [{ type: 'text', value: followup60Msgs[esc.lang] || followup60Msgs['zh-TW'] }] });
+        console.log('[FOLLOWUP] 60min priority notice sent to:', cid);
+      } catch(e) { console.log('[FOLLOWUP] 60min error:', e.message); }
+      esc.followup60 = true;
+      // 매니저 그룹에 긴급 알림
+      try {
+        var urgentMsg = '🚨 긴급: 고객 60분 대기 중! chatId: ' + cid + ' - 즉시 응대 필요';
+        var channeltalk2 = require('../lib/channeltalk');
+        await channeltalk2.sendGroupMessage(urgentMsg);
+      } catch(ue) { console.log('[FOLLOWUP] urgent alert error:', ue.message); }
     }
 
     // 15min auto-reassign
