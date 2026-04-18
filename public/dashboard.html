@@ -908,6 +908,12 @@ function loadAIData() {
             if (m.escalated) html += '<span class="pill" style="background:rgba(239,68,68,0.15);color:#ef4444;margin-left:8px;font-size:10px">에스컬</span>';
             html += '</div>';
             html += '<div style="background:#1a2332;border-radius:8px;padding:10px;color:var(--text-secondary);font-size:13px;line-height:1.5;margin-left:20px;border-left:3px solid ' + tc + ';white-space:pre-wrap">' + m.aiResponse + '</div>';
+            // 각 AI 답변마다 개별 평가 버튼
+            if (m.type === 'ai_answer' || m.type === 'order_lookup') {
+              html += '<div style="margin:4px 0 8px 20px;text-align:right">';
+              html += '<button style="padding:3px 10px;border-radius:6px;border:1px solid var(--border-primary);background:var(--bg-secondary);color:var(--text-secondary);cursor:pointer;font-size:10px" onclick="event.stopPropagation();showReview(\'' + encodeURIComponent(JSON.stringify(m)) + '\')">✏️ 평가</button>';
+              html += '</div>';
+            }
             html += '</div>';
           }
         });
