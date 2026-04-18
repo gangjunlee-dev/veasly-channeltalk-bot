@@ -771,10 +771,12 @@ function loadAIData() {
   
   Promise.all([
     fetch('/api/analytics/ai-conversations?limit=50').then(function(r) { return r.json(); }),
-    fetch('/api/analytics/ai-reviews').then(function(r) { return r.json(); }).catch(function() { return null; })
+    fetch('/api/analytics/ai-reviews').then(function(r) { return r.json(); }).catch(function() { return null; }),
+    fetch('/api/analytics/escalation-analysis?days=30').then(function(r) { return r.json(); }).catch(function() { return null; })
   ]).then(function(results) {
     var aiConv = results[0];
     var aiReviews = results[1];
+    var escData = results[2];
     cachedData.ai = true;
 
     var html = '';
@@ -808,7 +810,7 @@ function loadAIData() {
       html += '</div>';
 
       // Escalation reason analysis (API reasons 사용)
-      var escReasons = (esc && esc.reasons) ? esc.reasons : {};
+      var escReasons = (escData && escData.reasons) ? escData.reasons : {};
 
       if (Object.keys(escReasons).length > 0) {
         html += '<div class="charts">';
