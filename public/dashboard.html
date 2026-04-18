@@ -402,6 +402,8 @@ function loadStrategySection(days) {
     var el = document.getElementById('strategySection');
     if (!el) return;
     var m = res[0], mgr = res[1], esc = res[2], csat = res[3];
+    var mgrData = (mgr && mgr.success && mgr.managers) ? mgr.managers : [];
+    var csatData = csat && csat.success ? csat : null;
     if (!m || !m.success) { el.innerHTML = '<div style="padding:20px;color:#eab308;text-align:center;">전략 데이터 로딩 실패</div>'; return; }
 
     var sc = m.integratedScore || {};
@@ -427,7 +429,7 @@ function loadStrategySection(days) {
       {name:'NoReply', score:(bd.noReply||{}).score||0, icon:'⏰', detail:'미응답 '+((m.noReplyClose||{}).rate||0)+'% ('+((m.noReplyClose||{}).count||0)+'/'+((m.noReplyClose||{}).total||0)+')'},
       {name:'FRT', score:(bd.frt||{}).score||0, icon:'⚡', detail:'30분내 '+((m.responseTime||{}).within30MinRate||0)+'% | 평균 '+((m.responseTime||{}).avgMinutes||0)+'분'},
       {name:'FCR', score:(bd.fcr||{}).score||0, icon:'✅', detail:'해결 '+((m.fcr||{}).resolved||0)+'건 | 재문의 '+((m.fcr||{}).reopened||0)+'건'},
-      {name:'CSAT', score:(bd.csat||{}).score||0, icon:'⭐', detail:'평균 '+(csat&&(csat.averageScore||csat.average)?((csat.averageScore||csat.average)).toFixed(1):'N/A')+' | 응답 '+(csat&&(csat.totalResponses||csat.total)?(csat.totalResponses||csat.total):0)+'건'},
+      {name:'CSAT', score:(bd.csat||{}).score||0, icon:'⭐', detail:'평균 '+(csatData&&(csatData.averageScore||csatData.average)?((csatData.averageScore||csatData.average)).toFixed(1):'N/A')+' | 응답 '+(csatData&&(csatData.totalResponses||csatData.total)?(csatData.totalResponses||csatData.total):0)+'건'},
       {name:'CES', score:(bd.ces||{}).score||0, icon:'🎯', detail:'평균 '+((m.ces||{}).avgScore||0)+' | 응답 '+((m.ces||{}).totalResponses||(m.ces||{}).count||0)+'건'}
     ];
     h += '<div class="strat-subs">';
@@ -450,8 +452,8 @@ function loadStrategySection(days) {
     // 실시간 데이터 기반 핵심 문제 생성
     var escRate = esc && esc.totalEscalated && m.aiResolution ? Math.round((esc.totalEscalated / (esc.totalEscalated + (m.aiResolution.resolved||0))) * 100) : 0;
     var noReplyR = (m.noReplyClose||{}).rate || 0;
-    var csatAvgD = csat && (csat.averageScore||csat.average) ? (csat.averageScore||csat.average) : 0;
-    var csatTotalD = csat && (csat.totalResponses||csat.total) ? (csat.totalResponses||csat.total) : 0;
+    var csatAvgD = csatData && (csatData.averageScore || csatData.average) ? (csatData.averageScore || csatData.average) : 0;
+    var csatTotalD = csatData && (csatData.totalResponses || csatData.total) ? (csatData.totalResponses || csatData.total) : 0;
     var cesCountD = (m.ces||{}).totalResponses || (m.ces||{}).count || 0;
     var fcrResolvedD = (m.fcr||{}).resolved || 0;
     var frtRateD = (m.responseTime||{}).within30MinRate || 0;
@@ -522,7 +524,7 @@ function loadStrategySection(days) {
     h += '</div></div>';
 
     // === Row 3: 매니저 테이블 + 목표 예측 ===
-    var mgrData = (mgr && mgr.success && mgr.managers) ? mgr.managers : [];
+    // mgrData already declared above
     h += '<div class="strat-bottom-row">';
     // 매니저 테이블
     h += '<div class="strat-panel"><h3>👥 매니저 성과</h3>';
