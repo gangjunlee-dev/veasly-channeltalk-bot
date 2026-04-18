@@ -380,10 +380,10 @@ function loadOverview() {
     html += card('미해결 상담', r.unresolvedChats, '건', r.unresolvedChats > 10 ? 'red' : 'green', r.unresolvedChats > 10 ? '우선 처리 필요' : '양호', '⏳ 아직 종료되지 않은 열린 상담입니다.');
     if (r.channelStats) {
       var cs = r.channelStats;
+      var chTotal = r.totalChats || (cs.line + cs.web + cs.other);
       var _linePct = chTotal > 0 ? Math.round(cs.line/chTotal*100) : 0;
       var _webPct = chTotal > 0 ? Math.round(cs.web/chTotal*100) : 0;
       var _otherPct = chTotal > 0 ? (100 - _linePct - _webPct) : 0;
-      var chTotal = r.totalChats || (cs.line + cs.web + cs.other);
       html += card('LINE', cs.line, '건 (' + _linePct + '%)', 'green', 'LINE 메신저', '💚 LINE 메신저를 통해 접수된 상담입니다.');
       html += card('웹사이트', cs.web, '건 (' + _webPct + '%)', 'blue', 'veasly.com', '🌐 웹사이트 채팅을 통해 접수된 상담입니다.');
       if (cs.other > 0) {
