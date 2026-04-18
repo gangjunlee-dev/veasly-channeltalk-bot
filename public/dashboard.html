@@ -248,9 +248,9 @@ td { padding: 10px 8px; border-bottom: 1px solid var(--border-secondary); font-s
 
 <!-- Review Modal -->
 <div id="reviewModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);z-index:9999;overflow-y:auto;" onclick="if(event.target===this)closeReview()">
-  <div style="max-width:700px;margin:40px auto;background:#ffffff;border-radius:16px;padding:24px;border:1px solid #e2e8f0;">
+  <div style="max-width:700px;margin:40px auto;background:var(--bg-secondary);border-radius:16px;padding:24px;border:1px solid var(--border-primary);">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-      <h3 style="color:#1e293b;margin:0;">AI 답변 상세 / 평가</h3>
+      <h3 style="color:var(--text-primary);margin:0;">AI 답변 상세 / 평가</h3>
       <span style="cursor:pointer;color:#94a3b8;font-size:24px;" onclick="closeReview()">&times;</span>
     </div>
     <div id="reviewContent"></div>
@@ -703,7 +703,7 @@ function loadManagerData() {
         html += radarItem('전문성 🎓', (avg.professionalism/n).toFixed(1));
         html += '</div></div>';
       } else {
-        html += '<div style="margin-top:12px;padding:12px;background:#f8fafc;border-radius:8px;color:#94a3b8;font-size:13px;text-align:center;">AI 품질 채점 데이터 수집 중...</div>';
+        html += '<div style="margin-top:12px;padding:12px;background:var(--bg-primary);border-radius:8px;color:var(--text-faint);font-size:13px;text-align:center;">AI 품질 채점 데이터 수집 중...</div>';
       }
 
       html += '</div></div>';
@@ -848,10 +848,10 @@ function loadAIData() {
         var langBadge = msgs[0].lang || '?';
         var escBadge = hasEsc ? '<span class="pill" style="background:rgba(239,68,68,0.15);color:#ef4444;">에스컬</span>' : '<span class="pill" style="background:rgba(34,197,94,0.15);color:#22c55e;">완료</span>';
 
-        html += '<div style="background:#ffffff;border-radius:12px;padding:16px;margin-bottom:12px;border:1px solid #e2e8f0;cursor:pointer" onclick="this.querySelector(\'.conv-detail\').style.display=this.querySelector(\'.conv-detail\').style.display===\'none\'?\'block\':\'none\'">';
+        html += '<div style="background:var(--bg-secondary);border-radius:12px;padding:16px;margin-bottom:12px;border:1px solid var(--border-primary);cursor:pointer" onclick="this.querySelector(\'.conv-detail\').style.display=this.querySelector(\'.conv-detail\').style.display===\'none\'?\'block\':\'none\'">';
         html += '<div style="display:flex;justify-content:space-between;align-items:center">';
         html += '<div><span style="color:#94a3b8;font-size:12px">' + firstTime + '</span> ';
-        html += '<span style="color:#1e293b;font-weight:600;margin-left:8px">' + (userName || chatId.substring(0,8) + '...') + '</span> ';
+        html += '<span style="color:var(--text-primary);font-weight:600;margin-left:8px">' + (userName || chatId.substring(0,8) + '...') + '</span> ';
         html += '<span class="pill" style="background:rgba(59,130,246,0.15);color:#3b82f6;margin-left:4px">' + langBadge + '</span> ';
         html += '<span style="color:#94a3b8;font-size:12px;margin-left:8px">' + msgs.length + '건 대화</span></div>';
         html += '<div>' + escBadge + ' <span style="color:#94a3b8;font-size:10px;margin-left:4px">▼</span></div></div>';
@@ -876,7 +876,7 @@ function loadAIData() {
           if (m.userMessage) {
             html += '<div style="margin-bottom:8px">';
             html += '<div style="display:flex;align-items:center;margin-bottom:4px"><span style="color:#3b82f6;font-size:11px;font-weight:600">👤 고객</span><span style="color:#94a3b8;font-size:10px;margin-left:8px">' + mTime + '</span></div>';
-            html += '<div style="background:#f8fafc;border-radius:8px;padding:10px;color:#1e293b;font-size:13px;line-height:1.5;margin-left:20px;white-space:pre-wrap">' + m.userMessage + '</div>';
+            html += '<div style="background:var(--bg-primary);border-radius:8px;padding:10px;color:var(--text-secondary);font-size:13px;line-height:1.5;margin-left:20px;white-space:pre-wrap">' + m.userMessage + '</div>';
             html += '</div>';
           }
           // AI/봇 응답
@@ -1070,12 +1070,12 @@ function insightsCard(r) {
 function showReview(encoded) {
   var c = JSON.parse(decodeURIComponent(encoded));
   var html = '';
-  html += '<div style="margin-bottom:16px;padding:12px;background:#f8fafc;border-radius:8px;border-left:3px solid #3b82f6;">';
+  html += '<div style="margin-bottom:16px;padding:12px;background:var(--bg-primary);border-radius:8px;border-left:3px solid #3b82f6;">';
   html += '<div style="color:#94a3b8;font-size:12px;margin-bottom:4px;">고객 질문 (' + (c.lang || '-') + ') | ' + (c.timestamp || '').substring(0, 19).replace('T', ' ') + '</div>';
   html += '<div style="color:#1e293b;font-size:15px;">' + (c.userMessage || '-') + '</div>';
   if (c.userName) html += '<div style="color:#94a3b8;font-size:11px;margin-top:4px;">고객: ' + c.userName + '</div>';
   html += '</div>';
-  html += '<div style="margin-bottom:16px;padding:12px;background:#f8fafc;border-radius:8px;border-left:3px solid ' + (c.escalated ? '#ef4444' : '#22c55e') + ';">';
+  html += '<div style="margin-bottom:16px;padding:12px;background:var(--bg-primary);border-radius:8px;border-left:3px solid ' + (c.escalated ? '#ef4444' : '#22c55e') + ';">';
   html += '<div style="color:#94a3b8;font-size:12px;margin-bottom:4px;">AI 답변 (' + (c.type || '-') + ')' + (c.escalated ? ' <span style="color:#ef4444">에스컬레이션</span>' : '') + '</div>';
   html += '<div style="color:#1e293b;font-size:14px;white-space:pre-wrap;line-height:1.6;">' + (c.aiResponse || '-') + '</div>';
   html += '</div>';
@@ -1170,10 +1170,10 @@ function loadCSScoreData() {
       ];
       metrics.forEach(function(m) {
         var mColor = m.score >= 4 ? '#10b981' : m.score >= 3 ? '#f59e0b' : '#ef4444';
-        html += '<div style="background:#ffffff;border-radius:12px;padding:16px;text-align:center;border-left:4px solid ' + mColor + ';cursor:pointer" onclick="toggleMetricTip(this)">';
+        html += '<div style="background:var(--bg-secondary);border-radius:12px;padding:16px;text-align:center;border:1px solid var(--border-primary);border-left:4px solid ' + mColor + ';cursor:pointer" onclick="toggleMetricTip(this)">';
         html += '<div style="font-size:24px;margin-bottom:4px">' + m.icon + '</div>';
         html += '<div style="font-size:11px;color:#94a3b8;margin-bottom:8px">' + m.label + '</div>';
-        html += '<div style="font-size:28px;font-weight:700;color:white">' + m.value + '</div>';
+        html += '<div style="font-size:28px;font-weight:700;color:var(--text-primary)">' + m.value + '</div>';
         html += '<div style="font-size:10px;color:#94a3b8">' + m.detail + '</div>';
         var csMetricTips = {'첫 응답 속도':'⚡ FRT: 고객 메시지 후 매니저 첫 응답까지 시간. 30분 이내 80% 목표. 가중치 20%','첫 접촉 해결률':'🎯 FCR: 1회 상담으로 해결된 비율. 72시간 내 재문의 시 미해결 집계. 70% 목표. 가중치 25%','고객 만족도':'⭐ CSAT: 1~5점 만족도. 1=최고. 3.5 이상 목표. 가중치 20%','고객 노력 점수':'💪 CES: 문제 해결 용이성. 높을수록 좋음. 3.5 이상 목표. 가중치 15%','미응답 종료율':'📭 매니저 미응답으로 자동 종료된 비율. 10% 이하 목표. 가중치 20%'};
         var tipText = csMetricTips[m.label] || '';
@@ -1187,8 +1187,8 @@ function loadCSScoreData() {
       if (d.responseTime && d.responseTime.distribution) {
         var dist = d.responseTime.distribution;
         var total = d.responseTime.totalSamples || 1;
-        html += '<div style="background:#ffffff;border-radius:12px;padding:20px;margin-bottom:16px">';
-        html += '<div style="font-size:14px;font-weight:600;color:white;margin-bottom:16px">Response Time Distribution</div>';
+        html += '<div style="background:var(--bg-secondary);border-radius:12px;padding:20px;margin-bottom:16px;border:1px solid var(--border-primary)">';
+        html += '<div style="font-size:14px;font-weight:600;color:var(--text-primary);margin-bottom:16px">Response Time Distribution</div>';
         var bars = [
           { label: '5분 미만', count: dist.under5 || 0, color: '#10b981' },
           { label: '5~15분', count: dist.under15 || 0, color: '#22d3ee' },
@@ -1200,7 +1200,7 @@ function loadCSScoreData() {
           var pct = Math.round(b.count / total * 100);
           html += '<div style="display:flex;align-items:center;margin-bottom:8px">';
           html += '<span style="width:70px;font-size:11px;color:#94a3b8">' + b.label + '</span>';
-          html += '<div style="flex:1;background:#f8fafc;border-radius:4px;height:24px;margin:0 8px;overflow:hidden">';
+          html += '<div style="flex:1;background:var(--bg-primary);border-radius:4px;height:24px;margin:0 8px;overflow:hidden">';
           html += '<div style="width:' + pct + '%;height:100%;background:' + b.color + ';border-radius:4px"></div>';
           html += '</div>';
           html += '<span style="width:60px;font-size:12px;color:white;text-align:right">' + b.count + ' (' + pct + '%)</span>';
@@ -1211,13 +1211,13 @@ function loadCSScoreData() {
 
       // Manager Performance Table
       if (d.managerResponseTime && d.managerResponseTime.length > 0) {
-        html += '<div style="background:#ffffff;border-radius:12px;padding:20px;margin-bottom:16px">';
-        html += '<div style="font-size:14px;font-weight:600;color:white;margin-bottom:12px">매니저 응답 성과</div>';
+        html += '<div style="background:var(--bg-secondary);border-radius:12px;padding:20px;margin-bottom:16px;border:1px solid var(--border-primary)">';
+        html += '<div style="font-size:14px;font-weight:600;color:var(--text-primary);margin-bottom:12px">매니저 응답 성과</div>';
         html += '<table style="width:100%;border-collapse:collapse;font-size:12px">';
-        html += '<tr style="color:#94a3b8;border-bottom:1px solid #e2e8f0"><th style="padding:8px;text-align:left">매니저</th><th>평균 응답시간</th><th>30분 내 응답률</th><th>샘플 수</th><th>상태</th></tr>';
+        html += '<tr style="color:#94a3b8;border-bottom:1px solid var(--border-primary)"><th style="padding:8px;text-align:left">매니저</th><th>평균 응답시간</th><th>30분 내 응답률</th><th>샘플 수</th><th>상태</th></tr>';
         d.managerResponseTime.forEach(function(m) {
           var si = m.within30Rate >= 80 ? '&#128994;' : m.within30Rate >= 50 ? '&#128993;' : '&#128308;';
-          html += '<tr style="color:white;border-bottom:1px solid #f1f5f9"><td style="padding:8px">' + (mgrNameMap[m.managerId] || m.managerId) + '</td>';
+          html += '<tr style="color:var(--text-primary);border-bottom:1px solid var(--border-primary)"><td style="padding:8px">' + (mgrNameMap[m.managerId] || m.managerId) + '</td>';
           html += '<td style="text-align:center">' + m.avgMin + 'min</td>';
           html += '<td style="text-align:center">' + m.within30Rate + '%</td>';
           html += '<td style="text-align:center">' + m.samples + '</td>';
@@ -1228,8 +1228,8 @@ function loadCSScoreData() {
 
       // FCR Detail
       if (d.fcr) {
-        html += '<div style="background:#ffffff;border-radius:12px;padding:20px;margin-bottom:16px">';
-        html += '<div style="font-size:14px;font-weight:600;color:white;margin-bottom:12px">첫 접촉 해결률 (FCR)</div>';
+        html += '<div style="background:var(--bg-secondary);border-radius:12px;padding:20px;margin-bottom:16px;border:1px solid var(--border-primary)">';
+        html += '<div style="font-size:14px;font-weight:600;color:var(--text-primary);margin-bottom:12px">첫 접촉 해결률 (FCR)</div>';
         html += '<div style="display:flex;gap:20px">';
         html += '<div style="flex:1;text-align:center"><div style="font-size:36px;font-weight:700;color:' + (d.fcr.rate >= 70 ? '#10b981' : '#ef4444') + '">' + d.fcr.rate + '%</div><div style="font-size:11px;color:#94a3b8">해결률</div></div>';
         html += '<div style="flex:1;text-align:center"><div style="font-size:36px;font-weight:700;color:#22d3ee">' + d.fcr.resolved + '</div><div style="font-size:11px;color:#94a3b8">해결 건수</div></div>';
@@ -1238,8 +1238,8 @@ function loadCSScoreData() {
       }
 
       // CES Detail
-      html += '<div style="background:#ffffff;border-radius:12px;padding:20px;margin-bottom:16px">';
-      html += '<div style="font-size:14px;font-weight:600;color:white;margin-bottom:12px">고객 노력 점수 (CES)</div>';
+      html += '<div style="background:var(--bg-secondary);border-radius:12px;padding:20px;margin-bottom:16px;border:1px solid var(--border-primary)">';
+      html += '<div style="font-size:14px;font-weight:600;color:var(--text-primary);margin-bottom:12px">고객 노력 점수 (CES)</div>';
       if (d.ces && d.ces.totalResponses > 0) {
         var cesColor = d.ces.avgScore >= 3.5 ? '#10b981' : d.ces.avgScore >= 2.5 ? '#f59e0b' : '#ef4444';
         html += '<div style="display:flex;gap:20px">';
@@ -1258,8 +1258,8 @@ function loadCSScoreData() {
       html += '</div>';
 
       // Improvement Suggestions
-      html += '<div style="background:#ffffff;border-radius:12px;padding:20px">';
-      html += '<div style="font-size:14px;font-weight:600;color:white;margin-bottom:12px">우선 개선 사항</div>';
+      html += '<div style="background:var(--bg-secondary);border-radius:12px;padding:20px;border:1px solid var(--border-primary)">';
+      html += '<div style="font-size:14px;font-weight:600;color:var(--text-primary);margin-bottom:12px">우선 개선 사항</div>';
       var suggestions = [];
       if (bd.noReply && bd.noReply.score < 3) suggestions.push({ p: 'HIGH', t: '미응답 종료율 ' + (d.noReplyClose ? d.noReplyClose.rate : '?') + '% (목표 10% 이하). 15분 자동 재배정 + 30분 대기 메시지 가동 중.' });
       if (bd.frt && bd.frt.score < 3) suggestions.push({ p: 'HIGH', t: '첫 응답 속도: ' + (d.responseTime ? d.responseTime.within30MinRate : '?') + '% 30분 내 응답 (목표 80% 이상). 매니저 근무시간 조정 필요.' });
@@ -1269,9 +1269,9 @@ function loadCSScoreData() {
       if (suggestions.length === 0) suggestions.push({ p: 'OK', t: '모든 지표가 목표를 달성하고 있습니다!' });
       suggestions.forEach(function(s) {
         var pc = s.p === 'HIGH' ? '#ef4444' : s.p === 'MED' ? '#f59e0b' : '#10b981';
-        html += '<div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:10px;padding:10px;background:#f8fafc;border-radius:8px;border-left:3px solid ' + pc + '">';
+        html += '<div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:10px;padding:10px;background:var(--bg-primary);border-radius:8px;border-left:3px solid ' + pc + '">';
         html += '<span style="font-size:10px;font-weight:700;color:' + pc + ';white-space:nowrap">[' + s.p + ']</span>';
-        html += '<span style="font-size:12px;color:#1e293b">' + s.t + '</span>';
+        html += '<span style="font-size:12px;color:var(--text-secondary)">' + s.t + '</span>';
         html += '</div>';
       });
       html += '</div>';
@@ -1446,10 +1446,10 @@ async function loadDataHealth() {
     items.forEach(function(item) {
       var color = statusColors[item.status] || '#64748b';
       var pct = Math.min(100, Math.round(item.current / item.target * 100));
-      html += '<div style="padding:10px;background:#f8fafc;border-radius:8px;border-left:3px solid ' + color + ';">';
+      html += '<div style="padding:10px;background:var(--bg-primary);border-radius:8px;border-left:3px solid ' + color + ';">';
       html += '<div style="font-size:11px;color:#94a3b8;">' + item.name + '</div>';
       html += '<div style="font-size:16px;color:' + color + ';font-weight:bold;margin:4px 0;">' + item.current + '/' + item.target + '</div>';
-      html += '<div style="width:100%;height:4px;background:#ffffff;border-radius:2px;"><div style="width:' + pct + '%;height:100%;background:' + color + ';border-radius:2px;"></div></div>';
+      html += '<div style="width:100%;height:4px;background:var(--bg-primary);border-radius:2px;"><div style="width:' + pct + '%;height:100%;background:' + color + ';border-radius:2px;"></div></div>';
       html += '</div>';
     });
     html += '</div>';
@@ -1466,7 +1466,7 @@ async function loadDataHealth() {
     
     // 추천 액션
     if (data.recommendations && data.recommendations.length > 0) {
-      html += '<div style="margin-top:12px;padding:10px;background:#f8fafc;border-radius:8px;border-left:3px solid #f59e0b;">';
+      html += '<div style="margin-top:12px;padding:10px;background:var(--bg-primary);border-radius:8px;border-left:3px solid #f59e0b;">';
       html += '<div style="font-size:11px;color:#f59e0b;font-weight:bold;margin-bottom:6px;">📋 필요 조치</div>';
       data.recommendations.forEach(function(r) {
         html += '<div style="font-size:11px;color:#94a3b8;margin-bottom:4px;">• ' + r + '</div>';
