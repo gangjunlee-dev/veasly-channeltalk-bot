@@ -218,7 +218,7 @@ async function connectManager(chatId, lang) {
         await channeltalk.inviteManager(chatId, managers[i].id);
         
       // shortReplyWarning: 매니저 답변이 너무 짧으면 로그
-      var replyLen = (plainText || '').length;
+      // QA check removed - plainText not in scope
       if (replyLen > 0 && replyLen < 30) {
         console.log('[QA] 매니저 짧은 답변 경고 - chatId:', chatId, 'length:', replyLen, 'text:', (plainText || '').substring(0, 50));
       }
@@ -595,7 +595,7 @@ router.post('/channeltalk', async function(req, res) {
         };
         await channeltalk.sendMessage(chatId, { blocks: [{ type: 'text', value: reasonThanks[detectedLang] || reasonThanks['zh-TW'] }] });
         console.log('[CSAT-REASON] Feedback saved for chat:', chatId, '| Score:', pendingCSATReason[chatId] ? pendingCSATReason[chatId].csatScore : '?', '| Reason:', reasonText.substring(0, 50));
-        aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || '', userName: '', lang: detectedLang, type: 'csat_feedback', userMessage: reasonText, aiResponse: 'CSAT feedback recorded', escalated: false });
+        aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || '', userName: '', lang: detectedLang, type: 'csat_feedback', userMessage: reasonText, aiResponse: 'CSAT feedback recorded', escalated: false, confidence: 1.0 });
         return res.status(200).send('OK');
       }
       if (Date.now() - pendingCSATReason[chatId].timestamp > 600000) {
@@ -625,7 +625,7 @@ router.post('/channeltalk', async function(req, res) {
         };
         await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: cesThanks[detectedLang] || cesThanks["zh-TW"] }] });
         console.log("[CES] Score recorded:", cesNum, "for chat:", chatId);
-        aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || '', userName: '', lang: detectedLang, type: 'ces_response', userMessage: cesText, aiResponse: 'CES score: ' + cesNum, escalated: false });
+        aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || '', userName: '', lang: detectedLang, type: 'ces_response', userMessage: cesText, aiResponse: 'CES score: ' + cesNum, escalated: false, confidence: 1.0 });
         return res.status(200).send('OK');
       }
       // 10분 지나면 만료
@@ -744,7 +744,7 @@ router.post('/channeltalk', async function(req, res) {
         'ja': 'どういたしまして！他にご質問があればお気軽にどうぞ 😊\n\n' + getMenuText('ja')
       };
       await channeltalk.sendMessage(chatId, { blocks: [{ type: 'text', value: thankReply[detectedLang] || thankReply['zh-TW'] }] });
-      aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "thank_you", userMessage: userText, aiResponse: "감사 응답", escalated: false });
+      aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "thank_you", userMessage: userText, aiResponse: "감사 응답", escalated: false, confidence: 1.0 });
       // thank_you 후 3초 뒤 간단 CSAT 발송 (중복 방지)
       if (!satisfactionPending[chatId]) {
         var csatSentFile = require('path').join(__dirname, '..', 'data', 'csat-sent.json');
@@ -790,7 +790,7 @@ router.post('/channeltalk', async function(req, res) {
         greetText += pointHints[detectedLang] || pointHints["zh-TW"];
       }
       await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: greetText }] });
-      aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "greeting", userMessage: userText, aiResponse: "인사 응답 + 메뉴 제공" + (veaslyUser && veaslyUser.credit >= 500 ? " (포인트:" + veaslyUser.credit + ")" : ""), escalated: false });
+      aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "greeting", userMessage: userText, aiResponse: "인사 응답 + 메뉴 제공" + (veaslyUser && veaslyUser.credit >= 500 ? " (포인트:" + veaslyUser.credit + ")" : ""), escalated: false, confidence: 1.0 });
       return res.status(200).send('OK');
     }
 
@@ -979,7 +979,7 @@ router.post('/channeltalk', async function(req, res) {
         "ja": "📷 ファイルを確認しました！\n\nAIアシスタントはまだ画像/ファイルを読み取れません。テキストで問題をご説明いただければ対応いたします！"
       };
       await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: fileMsgs[detectedLang] || fileMsgs["zh-TW"] }] });
-      aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", lang: detectedLang, type: "file_message", userMessage: userText, aiResponse: "파일/이미지 수신 안내", escalated: false });
+      aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", lang: detectedLang, type: "file_message", userMessage: userText, aiResponse: "파일/이미지 수신 안내", escalated: false, confidence: 0.5 });
       return res.status(200).send("OK");
     }
     var isSticker = skipPatterns.some(function(p) { return userText.indexOf(p) > -1; });
@@ -1032,7 +1032,7 @@ router.post('/channeltalk', async function(req, res) {
         multiReply = (multiHeaders[detectedLang] || multiHeaders["zh-TW"]) + multiReply;
         multiReply += "💡 " + (detectedLang === "ko" ? "더 궁금한 점이 있으면 입력해주세요!" : detectedLang === "en" ? "Any questions?" : detectedLang === "ja" ? "ご質問があればどうぞ！" : "還有問題嗎？直接輸入問題，或輸入「客服」轉接真人客服喔！");
         await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: multiReply }] });
-        aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "order_lookup", userMessage: userText.substring(0, 200), aiResponse: "복수 주문조회: " + orderMatches.length + "건 (" + successCount + "건 성공)", escalated: false });
+        aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "order_lookup", userMessage: userText.substring(0, 200), aiResponse: "복수 주문조회: " + orderMatches.length + "건 (" + successCount + "건 성공)", escalated: false, confidence: 0.8 });
         return res.status(200).send("OK");
       } catch(multiErr) { console.error("[Order] Multi-order error:", multiErr.message); return res.status(200).send("OK"); }
     }
@@ -1082,6 +1082,7 @@ router.post('/channeltalk', async function(req, res) {
             aiResponse: "주문조회: " + orderNum + " (" + orderItems.length + "개 아이템)",
             escalated: false,
             category: "order"
+        confidence: null,
           });
           return res.status(200).send("OK");
         } else {
@@ -1120,7 +1121,7 @@ router.post('/channeltalk', async function(req, res) {
           await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: listReply }] });
           console.log("[Order] Listed", recentOrders.length, "orders for", veaslyUser.email);
           
-      aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "order_list", userMessage: userText, aiResponse: "주문 목록 " + recentOrders.length + "건 조회", escalated: false });
+      aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "order_list", userMessage: userText, aiResponse: "주문 목록 " + recentOrders.length + "건 조회", escalated: false, confidence: 0.8 });
       return res.status(200).send("OK");
         }
       } catch(olErr) { console.error("[Order] List error:", olErr.message); }
@@ -1282,6 +1283,7 @@ router.post('/channeltalk', async function(req, res) {
         aiResponse: aiAnswer.substring(0, 500),
         escalated: needEscalate,
         category: analytics.classifyMessage(userText)
+        confidence: confidence,
       });
       recordFCRResolved(memberId || personId || "", chatId, "ai_answer");
 
@@ -1363,6 +1365,7 @@ router.post('/channeltalk', async function(req, res) {
       aiResponse: 'AI 답변 실패 - fallback 메시지',
       escalated: false,
       category: analytics.classifyMessage(userText)
+        confidence: null,
     });
     var fbMenu = getMenuText(detectedLang);
     await channeltalk.sendMessage(chatId, { blocks: [{ type: 'text', value: (fallbackMsgs[detectedLang] || fallbackMsgs['zh-TW']) + fbMenu }] });
