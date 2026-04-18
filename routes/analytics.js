@@ -382,6 +382,35 @@ router.get('/ai-reviews', async function(req, res) {
 
 
 // CS Score Metrics - 응답속도 분포, 미응답종료율, 재문의율
+// ai-quality-reviews 별칭 (대시보드 호환)
+router.get('/ai-quality-reviews', async function(req, res) {
+  try {
+    var reviewFile = path.join(__dirname, '..', 'data', 'ai-reviews.json');
+    var reviews = [];
+    if (fs.existsSync(reviewFile)) {
+      reviews = JSON.parse(fs.readFileSync(reviewFile, 'utf8'));
+    }
+    var days = parseInt(req.query.days) || 30;
+    var cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - days);
+    var filtered = reviews.filter(function(r) {
+      return new Date(r.timestamp || r.date) >= cutoff;
+    });
+    var metrics = filtered.map(function(r) {
+      return {
+        managerId: r.managerId || 'unknown',
+        score: r.scores ? (r.scores.total || 0) : 0,
+        date: r.timestamp || r.date,
+        summary: r.scores ? (r.scores.summary || '') : ''
+      };
+    });
+    res.json({ success: true, metrics: metrics, total: metrics.length });
+  } catch(e) {
+    res.json({ success: true, metrics: [], total: 0 });
+  }
+});
+
+
 router.get('/cs-score-metrics', async function(req, res) {
   try {
     var days = parseInt(req.query.days) || 7;

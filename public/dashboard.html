@@ -238,7 +238,28 @@ td { padding: 10px 8px; border-bottom: 1px solid var(--border-secondary); font-s
 
 <!-- TAB: CS Score -->
 <div id="tab-csscore" class="tab-content">
-  <div id="csscoreContent"><div class="loading">CS Score 데이터 로딩 중...</div></div>
+  <div id="csscoreContent"><div class="loading">CS Score 데이터 로딩 중...</div>
+      <!-- CS Score 트렌드 패널 -->
+      <div id="csScoreTrendPanel" class="chart-card" style="margin-top:16px;">
+        <h3 style="color:var(--text-primary);margin:0 0 12px;">📈 CS Score 트렌드 (30일)</h3>
+        <div id="trend-status" style="font-size:13px;color:var(--text-secondary);margin-bottom:12px;">로딩 중...</div>
+        <div id="trend-bars" style="display:flex;align-items:flex-end;height:120px;gap:2px;border-bottom:1px solid var(--border-primary);padding-bottom:4px;"></div>
+        <div id="trend-prediction" style="font-size:12px;color:var(--text-faint);margin-top:8px;">예측 데이터 로딩 중...</div>
+      </div>
+      <!-- FAQ 추천 패널 -->
+      <div id="faqRecPanel" class="chart-card" style="margin-top:16px;">
+        <h3 style="color:var(--text-primary);margin:0 0 12px;">💡 FAQ 추가 추천</h3>
+        <div id="faq-rec-content" style="font-size:13px;color:var(--text-secondary);">로딩 중...</div>
+      </div>
+      <!-- 비즈니스 메트릭 패널 -->
+      <div id="bizMetricsPanel" class="chart-card" style="margin-top:16px;">
+        <h3 style="color:var(--text-primary);margin:0 0 12px;">📊 비즈니스 메트릭</h3>
+        <div id="biz-metrics-content" style="font-size:13px;color:var(--text-secondary);">로딩 중...</div>
+      </div>
+      <!-- 데이터 헬스 패널 -->
+      <div id="health-content" class="chart-card" style="margin-top:16px;display:none;">
+      </div>
+</div>
 </div>
 
 <!-- TAB: CSAT -->
@@ -271,6 +292,7 @@ function switchTab(name) {
   if (name === 'ai' && !cachedData.ai) loadAIData();
   if (name === 'csat' && !cachedData.csat) loadCSATData();
   if (name === 'csscore' && !cachedData.csscore) loadCSScoreData();
+  if (name === 'csscore') { setTimeout(function(){ loadCSScoreTrend(); loadFAQRecommendations(); }, 500); }
 }
 
 function toggleAutoRefresh() {
