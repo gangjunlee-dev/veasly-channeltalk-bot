@@ -1158,7 +1158,7 @@ router.post('/channeltalk', async function(req, res) {
               pendingEscalations[chatId] = { time: Date.now(), timestamp: Date.now(), lang: detectedLang };
               managerActive[chatId] = Date.now();
               console.log("[AI] Very low confidence auto-escalation for:", chatId);
-              aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", lang: detectedLang, type: "escalation", userMessage: userText.substring(0, 200), aiResponse: "confidence " + confidence.toFixed(3) + " < 0.3 → 자동 에스컬레이션", escalated: true });
+              aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", lang: detectedLang, type: "escalation", userMessage: userText.substring(0, 200), aiResponse: "confidence " + confidence.toFixed(3) + " < 0.3 → 자동 에스컬레이션", escalated: true, escalationReason: "low_confidence", confidence: confidence });
             } catch(lcErr) { console.error("[AI] Low confidence escalation error:", lcErr.message); }
           } else if (confidence < 0.6) {
             var hasOrderCtx = chatContext[chatId] && chatContext[chatId].lastOrderContext && (Date.now() - chatContext[chatId].lastOrderTime) < 60 * 60 * 1000;
@@ -1283,7 +1283,7 @@ router.post('/channeltalk', async function(req, res) {
         } catch(e) {}
       }
       
-          aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "escalation", userMessage: userText, aiResponse: "매니저 에스컬레이션 (수동)", escalated: true });
+          aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "escalation", userMessage: userText, aiResponse: "매니저 에스컬레이션 (수동)", escalated: true, escalationReason: "ai_self_escalate", confidence: 0 });
           return res.status(200).send("OK");
     }
     // Fallback
