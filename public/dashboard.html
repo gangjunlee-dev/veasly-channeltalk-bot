@@ -88,7 +88,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .chart-card h3 { font-size: 16px; margin-bottom: 16px; color: var(--text-primary); }
 .chart-card.full { grid-column: span 2; }
 .bar-chart .bar-row { display: flex; align-items: center; margin-bottom: 8px; }
-.bar-chart .bar-label { width: 120px; font-size: 13px; color: var(--text-faint); flex-shrink: 0; }
+.bar-chart .bar-label { width: 120px; font-size: 13px; color: var(--text-secondary); flex-shrink: 0; }
 .bar-chart .bar-track { flex: 1; height: 24px; background: var(--bg-tertiary); border-radius: 4px; overflow: hidden; position: relative; }
 .bar-chart .bar-fill { height: 100%; border-radius: 4px; transition: width 0.6s ease; }
 .bar-chart .bar-count { font-size: 12px; color: var(--text-secondary); position: absolute; right: 8px; top: 4px; }
@@ -99,7 +99,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .hour-chart .hour-row { display: flex; align-items: center; margin-bottom: 2px; }
 .hour-chart .hour-label { width: 50px; font-size: 11px; color: var(--text-faint); text-align: right; padding-right: 8px; }
 .hour-chart .hour-bar { height: 16px; background: var(--accent); border-radius: 2px; transition: width 0.6s ease; min-width: 2px; }
-.hour-chart .hour-count { font-size: 11px; color: var(--text-faint); margin-left: 6px; }
+.hour-chart .hour-count { font-size: 11px; color: var(--text-secondary); margin-left: 6px; }
 .insights { padding: 0 32px 16px; }
 .insights-card { background: var(--bg-secondary); border-radius: 12px; padding: 20px; border: 1px solid var(--border-primary); }
 .insights-card h3 { font-size: 16px; margin-bottom: 16px; color: var(--text-primary); }
@@ -136,7 +136,7 @@ td { padding: 10px 8px; border-bottom: 1px solid var(--border-secondary); font-s
 .strat-sub { background:var(--bg-secondary); box-shadow:var(--shadow-sm); border-radius:10px; padding:10px 12px; cursor:pointer; border-left:3px solid var(--border-primary); transition:all 0.2s; border:1px solid var(--border-primary); border-left-width:3px; }
 .strat-sub:hover { background:var(--bg-hover); }
 .strat-sub .sub-icon { font-size:14px; }
-.strat-sub .sub-name { font-size:11px; color:var(--text-faint); margin-top:2px; }
+.strat-sub .sub-name { font-size:11px; color:var(--text-secondary); margin-top:2px; }
 .strat-sub .sub-score { font-size:20px; font-weight:800; margin:2px 0; }
 .strat-sub .sub-detail { font-size:10px; color:var(--text-muted); display:none; margin-top:6px; padding-top:6px; border-top:1px solid var(--border-secondary); }
 .strat-sub.expanded .sub-detail { display:block; }
@@ -738,7 +738,7 @@ function loadManagerData() {
       html += '<div style="padding:0 32px 16px;"><div class="chart-card">';
       html += '<table><tr><th>매니저</th><th>이메일</th><th>상태</th></tr>';
       inactive.forEach(function(m) {
-        html += '<tr><td style="color:var(--text-faint);">' + m.name + '</td><td style="color:var(--text-faint);">' + (m.email || '') + '</td><td><span class="pill" style="background:rgba(239,68,68,0.15);color:#ef4444;">비활성</span></td></tr>';
+        html += '<tr><td style="color:var(--text-secondary);">' + m.name + '</td><td style="color:var(--text-secondary);">' + (m.email || '') + '</td><td><span class="pill" style="background:rgba(239,68,68,0.15);color:#ef4444;">비활성</span></td></tr>';
       });
       html += '</table></div></div>';
     }
@@ -1095,7 +1095,7 @@ function showReview(encoded) {
   html += '<div style="margin-bottom:16px;padding:12px;background:var(--bg-primary);border-radius:8px;border-left:3px solid #3b82f6;">';
   html += '<div style="color:var(--text-secondary);font-size:12px;margin-bottom:4px;">고객 질문 (' + (c.lang || '-') + ') | ' + (c.timestamp || '').substring(0, 19).replace('T', ' ') + '</div>';
   html += '<div style="color:var(--text-primary);font-size:15px;">' + (c.userMessage || '-') + '</div>';
-  if (c.userName) html += '<div style="color:var(--text-faint);font-size:11px;margin-top:4px;">고객: ' + c.userName + '</div>';
+  if (c.userName) html += '<div style="color:var(--text-secondary);font-size:11px;margin-top:4px;">고객: ' + c.userName + '</div>';
   html += '</div>';
   html += '<div style="margin-bottom:16px;padding:12px;background:var(--bg-primary);border-radius:8px;border-left:3px solid ' + (c.escalated ? '#ef4444' : '#22c55e') + ';">';
   html += '<div style="color:var(--text-secondary);font-size:12px;margin-bottom:4px;">AI 답변 (' + (c.type || '-') + ')' + (c.escalated ? ' <span style="color:#ef4444">에스컬레이션</span>' : '') + '</div>';
@@ -1236,7 +1236,7 @@ function loadCSScoreData() {
         html += '<div style="background:var(--bg-secondary);border-radius:12px;padding:20px;margin-bottom:16px;border:1px solid var(--border-primary)">';
         html += '<div style="font-size:14px;font-weight:600;color:var(--text-primary);margin-bottom:12px">매니저 응답 성과</div>';
         html += '<table style="width:100%;border-collapse:collapse;font-size:12px">';
-        html += '<tr style="color:var(--text-faint);border-bottom:1px solid var(--border-primary)"><th style="padding:8px;text-align:left">매니저</th><th>평균 응답시간</th><th>30분 내 응답률</th><th>샘플 수</th><th>상태</th></tr>';
+        html += '<tr style="color:var(--text-secondary);border-bottom:1px solid var(--border-primary)"><th style="padding:8px;text-align:left">매니저</th><th>평균 응답시간</th><th>30분 내 응답률</th><th>샘플 수</th><th>상태</th></tr>';
         d.managerResponseTime.forEach(function(m) {
           var si = m.within30Rate >= 80 ? '&#128994;' : m.within30Rate >= 50 ? '&#128993;' : '&#128308;';
           html += '<tr style="color:var(--text-primary);border-bottom:1px solid var(--border-primary)"><td style="padding:8px">' + (mgrNameMap[m.managerId] || m.managerId) + '</td>';
@@ -1326,7 +1326,7 @@ async function loadCSScoreTrend() {
         const pct = (h.score / 5) * 100;
         const color = h.score >= 3.0 ? '#22c55e' : h.score >= 2.5 ? '#eab308' : '#ef4444';
         return `<div style="flex:1;min-width:12px;display:flex;flex-direction:column;align-items:center;">
-          <span style="font-size:9px;color:var(--text-faint);margin-bottom:4px;">${h.score}</span>
+          <span style="font-size:9px;color:var(--text-secondary);margin-bottom:4px;">${h.score}</span>
           <div style="width:100%;height:${pct}%;background:${color};border-radius:3px 3px 0 0;min-height:4px;" title="${h.date}: ${h.score}"></div>
           <span style="font-size:8px;color:var(--text-secondary);margin-top:2px;writing-mode:vertical-rl;">${h.date.slice(5)}</span>
         </div>`;
@@ -1469,7 +1469,7 @@ async function loadDataHealth() {
       var color = statusColors[item.status] || '#64748b';
       var pct = Math.min(100, Math.round(item.current / item.target * 100));
       html += '<div style="padding:10px;background:var(--bg-primary);border-radius:8px;border-left:3px solid ' + color + ';">';
-      html += '<div style="font-size:11px;color:var(--text-faint);">' + item.name + '</div>';
+      html += '<div style="font-size:11px;color:var(--text-secondary);">' + item.name + '</div>';
       html += '<div style="font-size:16px;color:' + color + ';font-weight:bold;margin:4px 0;">' + item.current + '/' + item.target + '</div>';
       html += '<div style="width:100%;height:4px;background:var(--bg-primary);border-radius:2px;"><div style="width:' + pct + '%;height:100%;background:' + color + ';border-radius:2px;"></div></div>';
       html += '</div>';
@@ -1491,7 +1491,7 @@ async function loadDataHealth() {
       html += '<div style="margin-top:12px;padding:10px;background:var(--bg-primary);border-radius:8px;border-left:3px solid #f59e0b;">';
       html += '<div style="font-size:11px;color:#f59e0b;font-weight:bold;margin-bottom:6px;">📋 필요 조치</div>';
       data.recommendations.forEach(function(r) {
-        html += '<div style="font-size:11px;color:var(--text-faint);margin-bottom:4px;">• ' + r + '</div>';
+        html += '<div style="font-size:11px;color:var(--text-secondary);margin-bottom:4px;">• ' + r + '</div>';
       });
       html += '</div>';
     }
