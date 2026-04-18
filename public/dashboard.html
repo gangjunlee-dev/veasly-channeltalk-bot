@@ -447,13 +447,45 @@ function loadStrategySection(days) {
     h += '<div class="strat-two-col">';
     // 문제점
     h += '<div class="strat-panel"><h3>🔍 핵심 문제 Top 5</h3>';
-    var problems = [
-      {sev:'crit', title:'에스컬레이션 47%', sub:'other 46건 AI 분류 불가 → 매니저 부하'},
-      {sev:'crit', title:'NoReply 미응답 33%', sub:'오프시간 50%, 피크 10-12시 80건+'},
-      {sev:'warn', title:'CSAT 평균 2.3/5', sub:'응답 10건 중 70%가 2점 이하'},
-      {sev:'warn', title:'CES/FCR 데이터 부족', sub:'CES '+((m.ces||{}).totalResponses||(m.ces||{}).count||0)+'건, FCR '+((m.fcr||{}).resolved||0)+'건'},
-      {sev:'info', title:'매니저 업무 편중', sub:'vida 77채팅/152응답, 나머지 최소'}
-    ];
+    // 실시간 데이터 기반 핵심 문제 생성
+    var escRate = esc && esc.totalEscalated && m.aiResolution ? Math.round((esc.totalEscalated / (esc.totalEscalated + (m.aiResolution.resolved||0))) * 100) : 0;
+    var noReplyR = (m.noReplyClose||{}).rate || 0;
+    var csatAvgD = csat && (csat.averageScore||csat.average) ? (csat.averageScore||csat.average) : 0;
+    var csatTotalD = csat && (csat.totalResponses||csat.total) ? (csat.totalResponses||csat.total) : 0;
+    var cesCountD = (m.ces||{}).totalResponses || (m.ces||{}).count || 0;
+    var fcrResolvedD = (m.fcr||{}).resolved || 0;
+    var frtRateD = (m.responseTime||{}).within30MinRate || 0;
+
+    var problems = [];
+    // 에스컬레이션
+    if (escRate > 40) problems.push({sev:'crit', title:'에스컬레이션 '+escRate+'%', sub:'목표 30% 이하. AI 분류 강화 필요'});
+    else if (escRate > 30) problems.push({sev:'warn', title:'에스컬레이션 '+escRate+'%', sub:'목표 30%에 근접 중'});
+    // NoReply
+    if (noReplyR > 25) problems.push({sev:'crit', title:'NoReply 미응답 '+noReplyR+'%', sub:'목표 15% 이하. 오프시간 AI 강화 필요'});
+    else if (noReplyR > 15) problems.push({sev:'warn', title:'NoReply 미응답 '+noReplyR+'%', sub:'목표 15%에 근접 중'});
+    // FRT
+    if (frtRateD < 50) problems.push({sev:'crit', title:'FRT 30분내 '+frtRateD+'%', sub:'목표 80%. 평균 '+ ((m.responseTime||{}).avgMinutes||0) +'분'});
+    else if (frtRateD < 80) problems.push({sev:'warn', title:'FRT 30분내 '+frtRateD+'%', sub:'목표 80%. 개선 진행 중'});
+    // CSAT
+    if (csatAvgD > 0 && csatAvgD > 2.5) problems.push({sev:'crit', title:'CSAT 평균 '+csatAvgD.toFixed(1)+' (1=최고)', sub:'응답 '+csatTotalD+'건. 목표 2.0 이하'});
+    else if (csatAvgD > 0 && csatAvgD > 2.0) problems.push({sev:'warn', title:'CSAT 평균 '+csatAvgD.toFixed(1)+' (1=최고)', sub:'응답 '+csatTotalD+'건. 양호하지만 개선 여지'});
+    else if (csatTotalD < 10) problems.push({sev:'warn', title:'CSAT 응답 '+csatTotalD+'건', sub:'샘플 부족. 최소 20건 이상 필요'});
+    // CES/FCR 데이터
+    if (cesCountD < 10 || fcrResolvedD < 10) problems.push({sev:'warn', title:'CES/FCR 데이터 부족', sub:'CES '+cesCountD+'건, FCR '+fcrResolvedD+'건. 최소 10건+ 필요'});
+    // 매니저 편중
+    if (mgrData.length > 1) {
+      var maxChats = 0, maxName = '', minChats = 9999;
+      for (var pi=0; pi<mgrData.length; pi++) {
+        var uc = mgrData[pi].uniqueChats || 0;
+        if (uc > maxChats) { maxChats = uc; maxName = (mgrData[pi].name||'').split('@')[0]; }
+        if (uc > 0 && uc < minChats) minChats = uc;
+      }
+      if (maxChats > 0 && minChats > 0 && maxChats / minChats > 5) problems.push({sev:'info', title:'매니저 업무 편중', sub:maxName+' '+maxChats+'건 vs 최소 '+minChats+'건'});
+    }
+    // 문제 없으면
+    if (problems.length === 0) problems.push({sev:'info', title:'현재 심각한 문제 없음', sub:'CS Score '+totalScore.toFixed(2)+' — 목표 3.0 달성'});
+    // 최대 5개
+    problems = problems.slice(0, 5);
     for (var p=0; p<problems.length; p++) {
       var pr = problems[p];
       h += '<div class="prob-item" onclick="this.classList.toggle(\'expanded\')">';
@@ -464,13 +496,22 @@ function loadStrategySection(days) {
     h += '</div>';
     // 액션
     h += '<div class="strat-panel"><h3>🎯 액션 플랜</h3>';
-    var actions = [
-      {st:'done', title:'AI 에스컬레이션 47%→30%', desc:'분류 개선, FAQ 8건 추가', target:'AI처리 85%'},
-      {st:'done', title:'FRT 42%→80%', desc:'오프시간 AI선응답, 알림 체계', target:'NoReply 15%'},
-      {st:'prog', title:'CSAT 2.3→3.5', desc:'응답 템플릿, 설문률 20%', target:'CSAT 3.5'},
-      {st:'wait', title:'CES/FCR 데이터 수집', desc:'CES 20건+, FCR 10건+', target:'정확도 향상'},
-      {st:'wait', title:'비즈니스 KPI 연동', desc:'재구매율, 환불율 연동', target:'매출 상관분석'}
-    ];
+    // 실시간 데이터 기반 액션 플랜
+    var actions = [];
+    // 1. 에스컬레이션
+    var escSt = escRate <= 30 ? 'done' : escRate <= 40 ? 'prog' : 'wait';
+    actions.push({st:escSt, title:'에스컬레이션 '+escRate+'%→30%', desc:'FAQ 강화, AI confidence 튜닝', target:'AI처리 70%+'});
+    // 2. FRT/NoReply
+    var frtSt = frtRateD >= 80 ? 'done' : frtRateD >= 50 ? 'prog' : 'wait';
+    actions.push({st:frtSt, title:'FRT '+frtRateD+'%→80%', desc:'오프시간 AI선응답, 알림 체계', target:'NoReply '+noReplyR+'%→15%'});
+    // 3. CSAT
+    var csatSt = (csatAvgD > 0 && csatAvgD <= 2.0) ? 'done' : (csatAvgD > 0 && csatAvgD <= 2.5) ? 'prog' : 'wait';
+    actions.push({st:csatSt, title:'CSAT '+(csatAvgD>0?csatAvgD.toFixed(1):'N/A')+'→2.0', desc:'응답 품질 강화, 설문률 확대 (현재 '+csatTotalD+'건)', target:'CSAT 2.0 이하'});
+    // 4. CES/FCR
+    var dataSt = (cesCountD >= 20 && fcrResolvedD >= 10) ? 'done' : (cesCountD >= 5 || fcrResolvedD >= 5) ? 'prog' : 'wait';
+    actions.push({st:dataSt, title:'CES/FCR 데이터 수집', desc:'CES '+cesCountD+'/20건, FCR '+fcrResolvedD+'/10건', target:'측정 정확도 향상'});
+    // 5. 비즈니스 KPI
+    actions.push({st:'wait', title:'비즈니스 KPI 연동', desc:'재구매율, 환불율 연동', target:'매출 상관분석'});
     for (var a=0; a<actions.length; a++) {
       var act = actions[a];
       h += '<div class="act-item"><div class="act-num '+act.st+'">'+(a+1)+'</div>';
@@ -509,8 +550,8 @@ function loadStrategySection(days) {
     h += '<div class="forecast-row">';
     var forecasts = [
       {label:'현재', val:totalScore.toFixed(2), color:'#ef4444', bg:'rgba(239,68,68,0.1)', note:''},
-      {label:'2주후', val:'2.72', color:'#eab308', bg:'rgba(234,179,8,0.1)', note:'AI개선'},
-      {label:'4주후', val:'3.12', color:'#22c55e', bg:'rgba(34,197,94,0.1)', note:'데이터확보'},
+      {label:'2주후', val:(totalScore + 0.15).toFixed(2), color:(totalScore+0.15)>=3.0?'#22c55e':'#eab308', bg:(totalScore+0.15)>=3.0?'rgba(34,197,94,0.1)':'rgba(234,179,8,0.1)', note:'AI+FAQ강화'},
+      {label:'4주후', val:(totalScore + 0.35).toFixed(2), color:(totalScore+0.35)>=3.0?'#22c55e':'#eab308', bg:(totalScore+0.35)>=3.0?'rgba(34,197,94,0.1)':'rgba(234,179,8,0.1)', note:'CSAT+CES확보'},
       {label:'목표', val:(sc.target||3).toFixed(1), color:'#38bdf8', bg:'rgba(56,189,248,0.1)', note:''}
     ];
     for (var fi=0; fi<forecasts.length; fi++) {
