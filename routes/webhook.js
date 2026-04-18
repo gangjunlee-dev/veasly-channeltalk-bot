@@ -219,8 +219,8 @@ async function connectManager(chatId, lang) {
         
       // shortReplyWarning: 매니저 답변이 너무 짧으면 로그
       // QA check removed - plainText not in scope
-      if (replyLen > 0 && replyLen < 30) {
-        console.log('[QA] 매니저 짧은 답변 경고 - chatId:', chatId, 'length:', replyLen, 'text:', (plainText || '').substring(0, 50));
+      // [removed] replyLen check
+        // [removed] QA plainText check
       }
 managerActive[chatId] = Date.now();
         // MANAGER_DIRECT_ALERT: 매니저에게 직접 알림
@@ -1081,8 +1081,8 @@ router.post('/channeltalk', async function(req, res) {
             userMessage: userText.substring(0, 200),
             aiResponse: "주문조회: " + orderNum + " (" + orderItems.length + "개 아이템)",
             escalated: false,
-            category: "order"
-        confidence: null,
+            category: "order",
+        confidence: 0.8,
           });
           return res.status(200).send("OK");
         } else {
@@ -1282,7 +1282,7 @@ router.post('/channeltalk', async function(req, res) {
         userMessage: userText.substring(0, 200),
         aiResponse: aiAnswer.substring(0, 500),
         escalated: needEscalate,
-        category: analytics.classifyMessage(userText)
+        category: analytics.classifyMessage(userText),
         confidence: confidence,
       });
       recordFCRResolved(memberId || personId || "", chatId, "ai_answer");
@@ -1364,8 +1364,8 @@ router.post('/channeltalk', async function(req, res) {
       userMessage: userText.substring(0, 200),
       aiResponse: 'AI 답변 실패 - fallback 메시지',
       escalated: false,
-      category: analytics.classifyMessage(userText)
-        confidence: null,
+      category: analytics.classifyMessage(userText),
+        confidence: 0,
     });
     var fbMenu = getMenuText(detectedLang);
     await channeltalk.sendMessage(chatId, { blocks: [{ type: 'text', value: (fallbackMsgs[detectedLang] || fallbackMsgs['zh-TW']) + fbMenu }] });
