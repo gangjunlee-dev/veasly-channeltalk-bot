@@ -457,7 +457,7 @@ router.get('/cs-score-metrics', async function(req, res) {
     recentLogs.forEach(function(l) {
       var h = parseInt((l.timestamp || '').substring(11, 13));
       var twH = (h + 1) % 24;
-      if (twH >= 9 && twH < 18) bizHourMsgs++;
+      if (bizHours.isBusinessHoursAt(msgDate)) bizHourMsgs++; // business-hours.js 모듈 사용
       else offHourMsgs++;
     });
 

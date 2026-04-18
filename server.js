@@ -41,6 +41,9 @@ var marketingRouter = require('./routes/marketing');
 var scheduler = require('./lib/scheduler');
 var aiEngine = require('./lib/ai-engine');
 
+// dashboard.html 직접 접근 지원
+app.get('/dashboard.html', function(req, res) { res.sendFile(require('path').join(__dirname, 'public', 'dashboard.html')); });
+
 app.use('/webhook', webhookRouter);
 app.use('/api/bot', botRouter);
 app.use('/api/analytics', analyticsRouter);
