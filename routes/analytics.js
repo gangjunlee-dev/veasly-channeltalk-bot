@@ -511,7 +511,11 @@ router.get('/cs-score-metrics', async function(req, res) {
   else frtScore = 1.5;
 
   var fcrScore = 0;
-  if (fcrRate >= 80) fcrScore = 5;
+  var fcrSampleCount = recentResolved.length + recentReopened.length;
+  if (fcrSampleCount < 10) {
+    fcrScore = 2; // 데이터 부족 시 보수적 기본값
+    console.log("[CS Score] FCR data insufficient:", fcrSampleCount, "samples (min 10) - using default 2.0");
+  } else if (fcrRate >= 80) fcrScore = 5;
   else if (fcrRate >= 70) fcrScore = 4;
   else if (fcrRate >= 55) fcrScore = 3;
   else fcrScore = 2;
@@ -524,7 +528,8 @@ router.get('/cs-score-metrics', async function(req, res) {
       csatAvg = recentCSAT.reduce(function(sum, c) { return sum + c.score; }, 0) / recentCSAT.length;
     }
   } catch(e) {}
-  var csatScore = csatAvg > 0 ? csatAvg : 2.5; // default if no data
+  var csatScore = csatAvg > 0 ? csatAvg : 2.5; // default if no CSAT data
+  if (csatAvg === 0) console.log('[CS Score] CSAT no data - using default 2.5');
 
   var cesScoreVal = cesAvg > 0 ? cesAvg : 2.5; // default if no data
 
