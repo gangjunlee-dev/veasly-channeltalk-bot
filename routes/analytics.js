@@ -703,10 +703,14 @@ router.get('/escalation-analysis', function(req, res) {
     recent.forEach(function(c) {
       var msg = (c.userMessage || '').toLowerCase();
       var cat = 'other';
+      // 0. 인사/감사/확인 메시지 → 제외
+      if (msg.indexOf('了解') > -1 && msg.indexOf('謝謝') > -1) cat = 'greeting';
+      else if (msg.indexOf('好的') > -1 && msg.indexOf('了解') > -1 && msg.length < 40) cat = 'greeting';
+      else if (/^\[image/i.test(msg.trim()) || msg.indexOf('從我的iphone') > -1 || msg.indexOf('mail.channel.io') > -1) cat = 'greeting';
       // 1. 상담사 직접 요청 (가장 먼저 - 단순 "客服" 한마디)
       if (/^客服$|^상담사$|^상담원$|^真人$|^人工$/i.test(msg.trim())) cat = 'agent_direct';
       // 2. 주문 상태/추적 (번호 입력 포함)
-      else if (msg.indexOf('訂單') > -1 || msg.indexOf('주문') > -1 || msg.indexOf('進度') > -1 || msg.indexOf('狀態') > -1 || /\d{10,}/.test(msg) || /\d{8}(tw|hk)\d+/i.test(msg) || /^(tw|hk)?\d{6,}$/i.test(msg.trim()) || msg.indexOf('多久') > -1 || msg.indexOf('等了') > -1 || msg.indexOf('天了') > -1 || msg.indexOf('幾天') > -1 || msg.indexOf('update') > -1 || msg.indexOf('一個禮拜') > -1 || msg.indexOf('這三筆') > -1 || msg.indexOf('這筆') > -1 || msg.indexOf('那筆') > -1) cat = 'order_status';
+      else if (msg.indexOf('訂單') > -1 || msg.indexOf('주문') > -1 || msg.indexOf('進度') > -1 || msg.indexOf('狀態') > -1 || /\d{10,}/.test(msg) || /\d{8}(tw|hk)\d+/i.test(msg) || /^(tw|hk)?\d{6,}$/i.test(msg.trim()) || msg.indexOf('多久') > -1 || msg.indexOf('等了') > -1 || msg.indexOf('天了') > -1 || msg.indexOf('幾天') > -1 || msg.indexOf('update') > -1 || msg.indexOf('一個禮拜') > -1 || msg.indexOf('這三筆') > -1 || msg.indexOf('這筆') > -1 || msg.indexOf('那筆') > -1 || msg.indexOf('還沒到') > -1 || msg.indexOf('沒到') > -1 || msg.indexOf('過期') > -1 || msg.indexOf('馬上下單') > -1 || msg.indexOf('查詢都') > -1) cat = 'order_status';
       // 3. 배송/물류
       else if (msg.indexOf('배송') > -1 || msg.indexOf('物流') > -1 || msg.indexOf('配送') > -1 || msg.indexOf('出貨') > -1 || msg.indexOf('發貨') > -1 || msg.indexOf('寄出') > -1 || msg.indexOf('到貨') > -1 || msg.indexOf('快遞') > -1 || msg.indexOf('順豐') > -1 || msg.indexOf('택배') > -1 || msg.indexOf('도착') > -1 || msg.indexOf('집운') > -1 || msg.indexOf('集運') > -1 || msg.indexOf('貨') > -1 || msg.indexOf('還要多久') > -1 || msg.indexOf('禮拜') > -1 || msg.indexOf('包裹') > -1) cat = 'shipping';
       // 4. 국제배송비/운임
@@ -714,17 +718,17 @@ router.get('/escalation-analysis', function(req, res) {
       // 5. 취소/환불/반품
       else if (msg.indexOf('취소') > -1 || msg.indexOf('取消') > -1 || msg.indexOf('退款') > -1 || msg.indexOf('退貨') > -1 || msg.indexOf('환불') > -1 || msg.indexOf('반품') > -1 || msg.indexOf('不要了') > -1 || msg.indexOf('先不要發貨') > -1) cat = 'cancel_refund';
       // 6. 결제/금액
-      else if (msg.indexOf('결제') > -1 || msg.indexOf('付款') > -1 || msg.indexOf('刷卡') > -1 || msg.indexOf('金額') > -1 || msg.indexOf('價') > -1 || msg.indexOf('元') > -1 || msg.indexOf('費用') > -1 || msg.indexOf('報價') > -1 || msg.indexOf('얼마') > -1 || msg.indexOf('多少') > -1) cat = 'payment';
+      else if (msg.indexOf('결제') > -1 || msg.indexOf('付款') > -1 || msg.indexOf('刷卡') > -1 || msg.indexOf('金額') > -1 || msg.indexOf('價') > -1 || msg.indexOf('元') > -1 || msg.indexOf('費用') > -1 || msg.indexOf('報價') > -1 || msg.indexOf('얼마') > -1 || msg.indexOf('多少') > -1 || msg.indexOf('優惠碼') > -1 || msg.indexOf('tappay') > -1 || msg.indexOf('얼마') > -1) cat = 'payment';
       // 7. 상품문의/불량/교환
-      else if (msg.indexOf('商品') > -1 || msg.indexOf('상품') > -1 || msg.indexOf('壞') > -1 || msg.indexOf('不能用') > -1 || msg.indexOf('損') > -1 || msg.indexOf('瑕疵') > -1 || msg.indexOf('品質') > -1 || msg.indexOf('색상') > -1 || msg.indexOf('色差') > -1 || msg.indexOf('換貨') > -1 || msg.indexOf('교환') > -1 || msg.indexOf('包包') > -1 || msg.indexOf('사이즈') > -1 || msg.indexOf('찾') > -1 || msg.indexOf('找') > -1 || msg.indexOf('有賣') > -1 || msg.indexOf('壞掉') > -1 || msg.indexOf('記憶卡') > -1 || msg.indexOf('相機') > -1 || msg.indexOf('受損') > -1 || msg.indexOf('變形') > -1 || msg.indexOf('檢查') > -1 || msg.indexOf('這款') > -1) cat = 'product';
+      else if (msg.indexOf('商品') > -1 || msg.indexOf('상품') > -1 || msg.indexOf('壞') > -1 || msg.indexOf('不能用') > -1 || msg.indexOf('損') > -1 || msg.indexOf('瑕疵') > -1 || msg.indexOf('品質') > -1 || msg.indexOf('색상') > -1 || msg.indexOf('色差') > -1 || msg.indexOf('換貨') > -1 || msg.indexOf('교환') > -1 || msg.indexOf('包包') > -1 || msg.indexOf('사이즈') > -1 || msg.indexOf('찾') > -1 || msg.indexOf('找') > -1 || msg.indexOf('有賣') > -1 || msg.indexOf('壞掉') > -1 || msg.indexOf('記憶卡') > -1 || msg.indexOf('相機') > -1 || msg.indexOf('受損') > -1 || msg.indexOf('變形') > -1 || msg.indexOf('檢查') > -1 || msg.indexOf('這款') > -1 || msg.indexOf('開箱') > -1 || msg.indexOf('影片') > -1 || msg.indexOf('玩具') > -1 || msg.indexOf('娃娃') > -1 || msg.indexOf('還有') > -1 || /^品$/.test(msg.trim())) cat = 'product';
       // 8. 계정/로그인/회원정보
-      else if (msg.indexOf('登') > -1 || msg.indexOf('帳號') > -1 || msg.indexOf('會員') > -1 || msg.indexOf('계정') > -1 || msg.indexOf('密碼') > -1 || msg.indexOf('信箱') > -1 || msg.indexOf('email') > -1 || msg.indexOf('이메일') > -1 || msg.indexOf('修改') > -1 || msg.indexOf('填錯') > -1 || msg.indexOf('註冊') > -1 || msg.indexOf('登不了') > -1) cat = 'account';
+      else if (msg.indexOf('登') > -1 || msg.indexOf('帳號') > -1 || msg.indexOf('會員') > -1 || msg.indexOf('계정') > -1 || msg.indexOf('密碼') > -1 || msg.indexOf('信箱') > -1 || msg.indexOf('email') > -1 || msg.indexOf('이메일') > -1 || msg.indexOf('修改') > -1 || msg.indexOf('填錯') > -1 || msg.indexOf('註冊') > -1 || msg.indexOf('登不了') > -1 || msg.indexOf('ez way') > -1 || msg.indexOf('ezway') > -1 || msg.indexOf('申報') > -1) cat = 'account';
       // 9. 사이트 이용/주문방법
-      else if (msg.indexOf('下訂') > -1 || msg.indexOf('無法') > -1 || msg.indexOf('怎麼') > -1 || msg.indexOf('如何') > -1 || msg.indexOf('방법') > -1 || msg.indexOf('使用') > -1 || msg.indexOf('操作') > -1 || msg.indexOf('어떻게') > -1 || msg.indexOf('顯示') > -1 || msg.indexOf('何時會改') > -1 || msg.indexOf('無法下訂') > -1 || msg.indexOf('看不懂') > -1) cat = 'how_to';
+      else if (msg.indexOf('下訂') > -1 || msg.indexOf('無法') > -1 || msg.indexOf('怎麼') > -1 || msg.indexOf('如何') > -1 || msg.indexOf('방법') > -1 || msg.indexOf('使用') > -1 || msg.indexOf('操作') > -1 || msg.indexOf('어떻게') > -1 || msg.indexOf('顯示') > -1 || msg.indexOf('何時會改') > -1 || msg.indexOf('無法下訂') > -1 || msg.indexOf('看不懂') > -1 || msg.indexOf('可以嗎') > -1 || msg.indexOf('辦法') > -1 || msg.indexOf('何時') > -1 || msg.indexOf('買不到') > -1) cat = 'how_to';
       // 10. 클레임/불만
       else if (msg.indexOf('多收') > -1 || msg.indexOf('多收錢') > -1 || msg.indexOf('沒有處理') > -1 || msg.indexOf('不合理') > -1 || msg.indexOf('受害者') > -1 || msg.indexOf('處理問題') > -1 || msg.indexOf('不智能') > -1 || msg.indexOf('傻眼') > -1 || msg.indexOf('混亂') > -1 || msg.indexOf('離譜') > -1 || msg.indexOf('被騙') > -1 || msg.indexOf('不太對') > -1) cat = 'complaint';
       // 11. 상담사 연결 요청 (문장 속 客服)
-      else if (msg.indexOf('客服') > -1 || msg.indexOf('真人') > -1 || msg.indexOf('상담') > -1 || msg.indexOf('人工') > -1 || msg.indexOf('幫我') > -1) cat = 'agent_request';
+      else if (msg.indexOf('客服') > -1 || msg.indexOf('真人') > -1 || msg.indexOf('상담') > -1 || msg.indexOf('人工') > -1 || msg.indexOf('幫我') > -1 || msg.indexOf('客房') > -1 || msg.indexOf('轉做') > -1 || msg.indexOf('麻煩轉') > -1) cat = 'agent_request';
       categories[cat] = (categories[cat] || 0) + 1;
       if (!examples[cat]) examples[cat] = [];
       if (examples[cat].length < 3) examples[cat].push((c.userMessage || '').substring(0, 80));
