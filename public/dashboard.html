@@ -58,7 +58,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .theme-toggle:hover { background: var(--bg-hover); }
 .theme-toggle span { font-size: 11px; color: var(--text-muted); }
 .tabs { display: flex; padding: 0 32px; border-bottom: 1px solid var(--border-primary); background: var(--bg-secondary); }
-.tab { padding: 12px 20px; font-size: 14px; color: var(--text-faint); cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s; }
+.tab { padding: 12px 20px; font-size: 14px; color: var(--text-secondary); cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s; }
 .tab:hover { color: var(--text-secondary); }
 .tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
 .controls { padding: 16px 32px; display: flex; gap: 12px; align-items: center; }
@@ -74,7 +74,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .card-detail.open { display: block; }
 .card-arrow { position: absolute; top: 12px; right: 12px; font-size: 10px; color: var(--text-faint); transition: transform 0.2s; }
 .card-arrow.open { transform: rotate(180deg); }
-.card .label { font-size: 12px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 1px; }
+.card .label { font-size: 12px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 1px; }
 .card .value { font-size: 28px; font-weight: 700; margin-top: 8px; }
 .card .sub { font-size: 13px; color: var(--text-muted); margin-top: 4px; }
 .blue { color: #3b82f6; }
@@ -97,7 +97,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .keyword-list .kw { color: var(--text-secondary); }
 .keyword-list .kc { color: var(--accent); font-weight: 600; }
 .hour-chart .hour-row { display: flex; align-items: center; margin-bottom: 2px; }
-.hour-chart .hour-label { width: 50px; font-size: 11px; color: var(--text-faint); text-align: right; padding-right: 8px; }
+.hour-chart .hour-label { width: 50px; font-size: 11px; color: var(--text-secondary); text-align: right; padding-right: 8px; }
 .hour-chart .hour-bar { height: 16px; background: var(--accent); border-radius: 2px; transition: width 0.6s ease; min-width: 2px; }
 .hour-chart .hour-count { font-size: 11px; color: var(--text-secondary); margin-left: 6px; }
 .insights { padding: 0 32px 16px; }
@@ -106,7 +106,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .insight-item { padding: 12px 0; border-bottom: 1px solid var(--border-secondary); font-size: 14px; line-height: 1.6; }
 .insight-item:last-child { border-bottom: none; }
 table { width: 100%; border-collapse: collapse; }
-th { text-align: left; padding: 10px 8px; color: var(--text-faint); font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--border-primary); }
+th { text-align: left; padding: 10px 8px; color: var(--text-secondary); font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--border-primary); }
 td { padding: 10px 8px; border-bottom: 1px solid var(--border-secondary); font-size: 13px; color: var(--text-secondary); }
 .score-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; }
 .score-high { background: rgba(34,197,94,0.15); color: #22c55e; }
@@ -119,7 +119,7 @@ td { padding: 10px 8px; border-bottom: 1px solid var(--border-secondary); font-s
 .section-title { padding: 16px 32px 8px; font-size: 18px; font-weight: 600; color: var(--text-primary); }
 .tab-content { display: none; }
 .tab-content.active { display: block; }
-.loading { text-align: center; padding: 60px; color: var(--text-faint); font-size: 18px; }
+.loading { text-align: center; padding: 60px; color: var(--text-secondary); font-size: 18px; }
 .pill { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
 @media (max-width: 768px) { .charts { grid-template-columns: 1fr; } .grid { grid-template-columns: repeat(2, 1fr); } .chart-card.full { grid-column: span 1; } .radar-scores { grid-template-columns: repeat(3, 1fr); } }
 .metric-tip { display:none; margin-top:10px; padding:10px; background:var(--bg-tertiary); border-radius:8px; font-size:12px; color:var(--text-muted); line-height:1.6; border:1px solid var(--border-primary); }
@@ -168,7 +168,7 @@ td { padding: 10px 8px; border-bottom: 1px solid var(--border-secondary); font-s
 .act-body .act-target { font-size:10px; color:#38bdf8; margin-top:2px; }
 .strat-bottom-row { display:grid; grid-template-columns:2fr 1fr; gap:16px; margin-bottom:16px; }
 .mgr-table { width:100%; border-collapse:collapse; }
-.mgr-table th { font-size:10px; color:var(--text-faint); text-align:left; padding:6px 8px; border-bottom:1px solid var(--border-secondary); }
+.mgr-table th { font-size:10px; color:var(--text-secondary); text-align:left; padding:6px 8px; border-bottom:1px solid var(--border-secondary); }
 .mgr-table td { font-size:12px; color:var(--text-secondary); padding:8px; border-bottom:1px solid var(--border-secondary); }
 .mgr-table tr:hover { background:var(--bg-hover); }
 .mgr-badge { display:inline-block; padding:2px 6px; border-radius:4px; font-size:10px; font-weight:700; }
@@ -737,7 +737,7 @@ function loadManagerData() {
     // Inactive managers
     var inactive = mgrPerf.managers.filter(function(m) { return m.status === 'inactive'; });
     if (inactive.length > 0) {
-      html += '<div class="section-title" style="color:var(--text-faint);">비활성 매니저</div>';
+      html += '<div class="section-title" style="color:var(--text-secondary);">비활성 매니저</div>';
       html += '<div style="padding:0 32px 16px;"><div class="chart-card">';
       html += '<table><tr><th>매니저</th><th>이메일</th><th>상태</th></tr>';
       inactive.forEach(function(m) {
@@ -893,14 +893,14 @@ function loadAIData() {
           // 고객 메시지
           if (m.userMessage) {
             html += '<div style="margin-bottom:8px">';
-            html += '<div style="display:flex;align-items:center;margin-bottom:4px"><span style="color:#3b82f6;font-size:11px;font-weight:600">👤 고객</span><span style="color:var(--text-faint);font-size:10px;margin-left:8px">' + mTime + '</span></div>';
+            html += '<div style="display:flex;align-items:center;margin-bottom:4px"><span style="color:#3b82f6;font-size:11px;font-weight:600">👤 고객</span><span style="color:var(--text-secondary);font-size:10px;margin-left:8px">' + mTime + '</span></div>';
             html += '<div style="background:var(--bg-primary);border-radius:8px;padding:10px;color:var(--text-secondary);font-size:13px;line-height:1.5;margin-left:20px;white-space:pre-wrap">' + m.userMessage + '</div>';
             html += '</div>';
           }
           // AI/봇 응답
           if (m.aiResponse) {
             html += '<div style="margin-bottom:8px">';
-            html += '<div style="display:flex;align-items:center;margin-bottom:4px"><span style="color:' + tc + ';font-size:11px;font-weight:600">🤖 ' + tn + '</span><span style="color:var(--text-faint);font-size:10px;margin-left:8px">' + mTime + '</span>';
+            html += '<div style="display:flex;align-items:center;margin-bottom:4px"><span style="color:' + tc + ';font-size:11px;font-weight:600">🤖 ' + tn + '</span><span style="color:var(--text-secondary);font-size:10px;margin-left:8px">' + mTime + '</span>';
             if (m.escalated) html += '<span class="pill" style="background:rgba(239,68,68,0.15);color:#ef4444;margin-left:8px;font-size:10px">에스컬</span>';
             html += '</div>';
             html += '<div style="background:#1a2332;border-radius:8px;padding:10px;color:var(--text-secondary);font-size:13px;line-height:1.5;margin-left:20px;border-left:3px solid ' + tc + ';white-space:pre-wrap">' + m.aiResponse + '</div>';
@@ -919,7 +919,7 @@ function loadAIData() {
         for (var li = msgs.length - 1; li >= 0; li--) { if (msgs[li].type === 'ai_answer') { lastAi = msgs[li]; break; } }
         if (lastAi) {
           html += '<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border-primary);text-align:right">';
-          html += '<button style="padding:4px 12px;border-radius:6px;border:1px solid var(--border-primary);background:var(--bg-primary);color:var(--text-faint);cursor:pointer;font-size:11px;margin-left:4px" onclick="event.stopPropagation();showReview(\'' + encodeURIComponent(JSON.stringify(lastAi)) + '\')">📝 평가하기</button>';
+          html += '<button style="padding:4px 12px;border-radius:6px;border:1px solid var(--border-primary);background:var(--bg-primary);color:var(--text-secondary);cursor:pointer;font-size:11px;margin-left:4px" onclick="event.stopPropagation();showReview(\'' + encodeURIComponent(JSON.stringify(lastAi)) + '\')">📝 평가하기</button>';
           html += '</div>';
         }
 
@@ -983,7 +983,7 @@ function loadCSATData() {
     } else {
       html += '<div style="padding:32px;text-align:center;">';
       html += '<div style="font-size:48px;margin-bottom:16px;">📊</div>';
-      html += '<div style="color:var(--text-faint);font-size:16px;">CSAT 데이터가 아직 없습니다</div>';
+      html += '<div style="color:var(--text-secondary);font-size:16px;">CSAT 데이터가 아직 없습니다</div>';
       html += '<div style="color:var(--text-secondary);font-size:13px;margin-top:8px;">고객이 만족도 설문에 응답하면 여기에 표시됩니다</div>';
       html += '</div>';
     }
@@ -1064,7 +1064,7 @@ function messageBreakdown(r) {
   h += '<span style="color:#22c55e;">AI 봇 ' + botPct + '% (' + r.botMessages + '건)</span>';
   h += '<span style="color:#eab308;">매니저 ' + mgrPct + '% (' + r.managerMessages + '건)</span>';
   h += '</div>';
-  h += '<div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border-primary);font-size:13px;color:var(--text-faint);">목표: AI 응답률 70% 이상</div></div>';
+  h += '<div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border-primary);font-size:13px;color:var(--text-secondary);">목표: AI 응답률 70% 이상</div></div>';
   return h;
 }
 function insightsCard(r) {
@@ -1202,7 +1202,7 @@ function loadCSScoreData() {
         var csMetricTips = {'첫 응답 속도':'⚡ FRT: 고객 메시지 후 매니저 첫 응답까지 시간. 30분 이내 80% 목표. 가중치 20%','첫 접촉 해결률':'🎯 FCR: 1회 상담으로 해결된 비율. 72시간 내 재문의 시 미해결 집계. 70% 목표. 가중치 25%','고객 만족도':'⭐ CSAT: 1~5점 만족도. 1=최고. 3.5 이상 목표. 가중치 20%','고객 노력 점수':'💪 CES: 문제 해결 용이성. 높을수록 좋음. 3.5 이상 목표. 가중치 15%','미응답 종료율':'📭 매니저 미응답으로 자동 종료된 비율. 10% 이하 목표. 가중치 20%'};
         var tipText = csMetricTips[m.label] || '';
         html += '<div style="margin-top:8px;font-size:11px;color:' + mColor + ';font-weight:600">점수: ' + m.score.toFixed(1) + '/5 (목표 ' + m.target + ')</div>';
-        if (tipText) { html += '<div style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid var(--border-primary);font-size:10px;color:var(--text-faint);line-height:1.5" class="metric-tip">' + tipText + '</div>'; }
+        if (tipText) { html += '<div style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid var(--border-primary);font-size:10px;color:var(--text-secondary);line-height:1.5" class="metric-tip">' + tipText + '</div>'; }
         html += '</div>';
       });
       html += '</div>';
@@ -1394,19 +1394,19 @@ async function loadBusinessMetrics() {
     el.innerHTML = `
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;">
         <div style="padding:12px;background:var(--bg-primary);border-radius:8px;text-align:center;">
-          <div style="font-size:11px;color:var(--text-faint);">CS Score 추이</div>
+          <div style="font-size:11px;color:var(--text-secondary);">CS Score 추이</div>
           <div style="font-size:20px;color:#38bdf8;font-weight:bold;margin-top:4px;">${latest.csScore || '-'}</div>
         </div>
         <div style="padding:12px;background:var(--bg-primary);border-radius:8px;text-align:center;">
-          <div style="font-size:11px;color:var(--text-faint);">주간 에스컬레이션</div>
+          <div style="font-size:11px;color:var(--text-secondary);">주간 에스컬레이션</div>
           <div style="font-size:20px;color:#f59e0b;font-weight:bold;margin-top:4px;">${latest.totalEscalations || 0}건</div>
         </div>
         <div style="padding:12px;background:var(--bg-primary);border-radius:8px;text-align:center;">
-          <div style="font-size:11px;color:var(--text-faint);">데이터 기간</div>
+          <div style="font-size:11px;color:var(--text-secondary);">데이터 기간</div>
           <div style="font-size:20px;color:#22c55e;font-weight:bold;margin-top:4px;">${data.totalWeeks}주</div>
         </div>
       </div>
-      <div style="margin-top:12px;font-size:11px;color:var(--text-faint);">
+      <div style="margin-top:12px;font-size:11px;color:var(--text-secondary);">
         ※ 재구매율/객단가/환불율은 Veasly 주문 DB 연동 후 자동 표시됩니다. 현재는 CS 지표만 수집합니다.
       </div>
     `;
