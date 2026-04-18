@@ -668,7 +668,7 @@ router.post('/channeltalk', async function(req, res) {
 
         // Clear CSAT pending
         // Clear CSAT pending from file
-        try { var csatFile = require("path").join(__dirname, "..", "data", "csat-sent.json"); var csatData = JSON.parse(require("fs").readFileSync(csatFile, "utf8")); csatData[chatId] = { responded: true, respondedAt: Date.now() }; require("fs").writeFileSync(csatFile, JSON.stringify(csatData), "utf8"); } catch(ce) {}
+        try { var csatFile = require("path").join(__dirname, "..", "data", "csat-sent.json"); var csatData = JSON.parse(require("fs").readFileSync(csatFile, "utf8")); csatData[chatId] = 'responded:' + new Date().toISOString(); require("fs").writeFileSync(csatFile, JSON.stringify(csatData), "utf8"); } catch(ce) {}
 
         // CSAT 점수별 분기: 만족(1-2)→CES(간단), 보통(3)→CES, 불만족(4-5)→사유질문
         if (csatScore <= 2) {
