@@ -467,9 +467,8 @@ router.get('/cs-score-metrics', async function(req, res) {
     var bizHourMsgs = 0;
     var offHourMsgs = 0;
     recentLogs.forEach(function(l) {
-      var h = parseInt((l.timestamp || '').substring(11, 13));
-      var twH = (h + 1) % 24;
-      if (bizHours.isBusinessHoursAt(msgDate)) bizHourMsgs++; // business-hours.js 모듈 사용
+      var msgDate = new Date(l.timestamp);
+      if (bizHours.isBusinessHoursAt(msgDate)) bizHourMsgs++;
       else offHourMsgs++;
     });
 
