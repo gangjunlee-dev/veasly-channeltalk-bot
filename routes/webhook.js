@@ -745,7 +745,7 @@ router.post('/channeltalk', async function(req, res) {
         try { csatSentCheck = JSON.parse(require('fs').readFileSync(csatSentFile, 'utf8')); } catch(cse) {}
         if (!csatSentCheck[chatId]) {
           satisfactionPending[chatId] = Date.now();
-          try { csatSentCheck[chatId] = { sentAt: Date.now(), source: 'thank_you' }; require('fs').writeFileSync(csatSentFile, JSON.stringify(csatSentCheck), 'utf8'); } catch(cse2) {}
+          try { csatSentCheck[chatId] = new Date().toISOString(); require('fs').writeFileSync(csatSentFile, JSON.stringify(csatSentCheck), 'utf8'); } catch(cse2) {}
           setTimeout(async function() {
             try {
               var tyCSAT = {
