@@ -42,6 +42,11 @@ var scheduler = require('./lib/scheduler');
 var aiEngine = require('./lib/ai-engine');
 
 // dashboard.html 직접 접근 지원
+app.get('/dashboard', function(req, res) {
+  // Basic Auth는 위 미들웨어에서 처리됨
+  res.sendFile(require('path').join(__dirname, 'public', 'dashboard.html'));
+});
+
 app.get('/dashboard.html', function(req, res) { res.sendFile(require('path').join(__dirname, 'public', 'dashboard.html')); });
 
 app.use('/webhook', webhookRouter);
