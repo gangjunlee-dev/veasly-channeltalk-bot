@@ -347,7 +347,7 @@ function loadOverview() {
 
     var botRate = r.totalMessages > 0 ? Math.round((r.botMessages / r.totalMessages) * 100) : 0;
     var aiResolveRate = (r.botMessages + r.managerMessages) > 0 ? Math.round((r.botMessages / (r.botMessages + r.managerMessages)) * 100) : 0;
-    var escalationCount = r.categories.escalation ? r.categories.escalation.count : 0;
+    var escalationCount = (r.categories.agent_direct ? r.categories.agent_direct.count : 0) + (r.categories.agent_request ? r.categories.agent_request.count : 0);
     var escalationRate = r.userMessages > 0 ? Math.round((escalationCount / r.userMessages) * 100) : 0;
 
     var html = '<div class="grid">';
@@ -358,9 +358,12 @@ function loadOverview() {
     html += card('미해결 상담', r.unresolvedChats, '건', r.unresolvedChats > 10 ? 'red' : 'green', r.unresolvedChats > 10 ? '우선 처리 필요' : '양호', '⏳ 아직 종료되지 않은 열린 상담입니다.');
     if (r.channelStats) {
       var cs = r.channelStats;
-      var total = cs.line + cs.web + cs.other;
-      html += card('LINE', cs.line, '건 (' + (total > 0 ? (cs.line/total*100).toFixed(0) : 0) + '%)', 'green', 'LINE 메신저', '💚 LINE 메신저를 통해 접수된 상담입니다.');
-      html += card('웹사이트', cs.web, '건 (' + (total > 0 ? (cs.web/total*100).toFixed(0) : 0) + '%)', 'blue', 'veasly.com', '🌐 웹사이트 채팅을 통해 접수된 상담입니다.');
+      var chTotal = r.totalChats || (cs.line + cs.web + cs.other);
+      html += card('LINE', cs.line, '건 (' + (chTotal > 0 ? (cs.line/chTotal*100).toFixed(0) : 0) + '%)', 'green', 'LINE 메신저', '💚 LINE 메신저를 통해 접수된 상담입니다.');
+      html += card('웹사이트', cs.web, '건 (' + (chTotal > 0 ? (cs.web/chTotal*100).toFixed(0) : 0) + '%)', 'blue', 'veasly.com', '🌐 웹사이트 채팅을 통해 접수된 상담입니다.');
+      if (cs.other > 0) {
+        html += card('기타 채널', cs.other, '건 (' + (chTotal > 0 ? (cs.other/chTotal*100).toFixed(0) : 0) + '%)', 'yellow', 'API/이메일 등', '📨 기타 채널을 통해 접수된 상담입니다.');
+      }
     }
     if (autoClose && autoClose.success) {
       html += card('CSAT 대기', autoClose.csatPending, '건', autoClose.csatPending > 10 ? 'yellow' : 'green', '24h 후 자동종료', '📋 CSAT 설문 발송 후 미응답 건수입니다.');
@@ -1002,13 +1005,13 @@ function insightsCard(r) {
   var catKeys = Object.keys(r.categories);
   var topCat = { key: '', count: 0 };
   for (var i = 0; i < catKeys.length; i++) {
-    if (catKeys[i] !== 'other' && catKeys[i] !== 'escalation' && r.categories[catKeys[i]].count > topCat.count) {
+    if (catKeys[i] !== 'other' && catKeys[i] !== 'agent_direct' && catKeys[i] !== 'agent_request' && r.categories[catKeys[i]].count > topCat.count) {
       topCat = { key: catKeys[i], count: r.categories[catKeys[i]].count, name: r.categories[catKeys[i]].nameKo };
     }
   }
   if (topCat.count > 0) insights.push('<span style="color:#3b82f6;">📊</span> 가장 많은 문의: <strong>' + topCat.name + '</strong> (' + topCat.count + '건) — FAQ 강화로 AI 해결률 향상 가능');
   if (r.unresolvedChats > 10) insights.push('<span style="color:#ef4444;">⚠️</span> 미해결 <strong>' + r.unresolvedChats + '건</strong> — 우선 처리 필요');
-  var escCount = r.categories.escalation ? r.categories.escalation.count : 0;
+  var escCount = (r.categories.agent_direct ? r.categories.agent_direct.count : 0) + (r.categories.agent_request ? r.categories.agent_request.count : 0);
   var aiRate = Math.round((r.botMessages / (r.botMessages + r.managerMessages)) * 100);
   if (aiRate >= 70) insights.push('<span style="color:#22c55e;">✅</span> AI 응답률 <strong>' + aiRate + '%</strong> — 목표(70%) 달성');
   else insights.push('<span style="color:#eab308;">📈</span> AI 응답률 <strong>' + aiRate + '%</strong> — 목표 70%까지 ' + (70 - aiRate) + '%p 필요');
