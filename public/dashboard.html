@@ -81,73 +81,73 @@ td { padding: 10px 8px; border-bottom: 1px solid #0f172a; font-size: 13px; }
 .metric-tip { display:none; margin-top:10px; padding:10px; background:#0f172a; border-radius:8px; font-size:12px; color:#94a3b8; line-height:1.6; border:1px solid #334155; }
 
 /* ===== Strategic Dashboard CSS ===== */
-.strat-hero { display:flex; align-items:center; gap:32px; padding:24px 32px; }
-.strat-gauge { position:relative; width:180px; height:180px; flex-shrink:0; }
-.strat-gauge canvas { width:180px; height:180px; }
-.strat-gauge .gauge-center { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); text-align:center; }
-.strat-gauge .gauge-score { font-size:36px; font-weight:800; color:#f8fafc; line-height:1; }
-.strat-gauge .gauge-target { font-size:12px; color:#64748b; margin-top:2px; }
-.strat-subs { flex:1; display:grid; grid-template-columns:repeat(5,1fr); gap:12px; }
-.strat-sub { background:#1e293b; border-radius:12px; padding:14px; border-left:4px solid #334155; transition:transform .15s; cursor:pointer; position:relative; }
-.strat-sub:hover { transform:translateY(-2px); }
+/* === Strategic Dashboard v3 Compact === */
+.strat-section { margin-top:24px; padding-top:20px; border-top:2px solid #334155; }
+.strat-title { color:#e2e8f0; font-size:18px; font-weight:700; margin:0 0 16px; }
+
+/* Score Row: 게이지 + 서브메트릭 가로 배치 */
+.strat-score-row { display:flex; gap:16px; align-items:stretch; margin-bottom:16px; }
+.strat-gauge-box { flex:0 0 180px; background:#0f172a; border-radius:12px; padding:16px; text-align:center; }
+.strat-gauge-box canvas { display:block; margin:0 auto; }
+.strat-gauge-val { font-size:28px; font-weight:800; margin-top:4px; }
+.strat-gauge-label { font-size:11px; color:#64748b; }
+
+.strat-subs { flex:1; display:grid; grid-template-columns:repeat(5,1fr); gap:8px; }
+.strat-sub { background:#0f172a; border-radius:10px; padding:10px 12px; cursor:pointer; border-left:3px solid #334155; transition:all 0.2s; }
+.strat-sub:hover { background:#1e293b; }
+.strat-sub .sub-icon { font-size:14px; }
+.strat-sub .sub-name { font-size:11px; color:#94a3b8; margin-top:2px; }
+.strat-sub .sub-score { font-size:20px; font-weight:800; margin:2px 0; }
+.strat-sub .sub-detail { font-size:10px; color:#64748b; display:none; margin-top:6px; padding-top:6px; border-top:1px solid #1e293b; }
+.strat-sub.expanded .sub-detail { display:block; }
 .strat-sub.sev-red { border-left-color:#ef4444; }
 .strat-sub.sev-yellow { border-left-color:#eab308; }
 .strat-sub.sev-green { border-left-color:#22c55e; }
-.strat-sub .sub-icon { position:absolute; top:8px; right:10px; font-size:14px; }
-.strat-sub .sub-name { font-size:11px; color:#94a3b8; font-weight:600; text-transform:uppercase; letter-spacing:.5px; }
-.strat-sub .sub-score { font-size:24px; font-weight:700; color:#f8fafc; margin:4px 0 2px; }
-.strat-sub .sub-actual { font-size:12px; color:#cbd5e1; }
-.strat-sub .sub-detail { display:none; margin-top:10px; padding-top:10px; border-top:1px solid #334155; font-size:11px; color:#94a3b8; line-height:1.6; }
-.strat-sub.expanded .sub-detail { display:block; }
-.strat-problems { padding:0 32px 16px; }
-.strat-problems h2 { font-size:16px; color:#f8fafc; margin:0 0 12px; display:flex; align-items:center; gap:8px; }
-.prob-cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:12px; }
-.prob-card { background:#1e293b; border-radius:12px; padding:16px; cursor:pointer; transition:all .15s; position:relative; overflow:hidden; }
-.prob-card:hover { background:#253349; }
-.prob-card .prob-rank { position:absolute; top:12px; right:14px; font-size:28px; font-weight:800; color:rgba(148,163,184,0.12); }
-.prob-card .prob-sev { display:inline-block; padding:2px 8px; border-radius:6px; font-size:10px; font-weight:700; margin-bottom:8px; }
-.prob-card .prob-sev.critical { background:rgba(239,68,68,0.15); color:#ef4444; }
-.prob-card .prob-sev.warning { background:rgba(234,179,8,0.15); color:#eab308; }
-.prob-card .prob-title { font-size:14px; font-weight:700; color:#f8fafc; margin-bottom:6px; }
-.prob-card .prob-data { font-size:12px; color:#94a3b8; line-height:1.7; }
-.prob-card .prob-data b { color:#e2e8f0; }
-.prob-card .prob-why { display:none; margin-top:10px; padding-top:10px; border-top:1px solid #334155; font-size:11px; color:#94a3b8; line-height:1.7; }
-.prob-card.expanded .prob-why { display:block; }
-.strat-actions { padding:0 32px 16px; }
-.strat-actions h2 { font-size:16px; color:#f8fafc; margin:0 0 12px; display:flex; align-items:center; gap:8px; }
-.action-timeline { position:relative; padding-left:28px; }
-.action-timeline::before { content:''; position:absolute; left:10px; top:0; bottom:0; width:2px; background:#334155; }
-.action-item { position:relative; margin-bottom:16px; }
-.action-item .action-dot { position:absolute; left:-24px; top:4px; width:14px; height:14px; border-radius:50%; border:2px solid #334155; background:#0f172a; }
-.action-item.done .action-dot { background:#22c55e; border-color:#22c55e; }
-.action-item.active .action-dot { background:#3b82f6; border-color:#3b82f6; box-shadow:0 0 8px rgba(59,130,246,0.5); }
-.action-item.waiting .action-dot { background:#475569; border-color:#475569; }
-.action-inner { background:#1e293b; border-radius:12px; padding:14px 16px; }
-.action-inner .action-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; }
-.action-inner .action-num { font-size:11px; font-weight:700; padding:2px 8px; border-radius:6px; }
-.action-inner .action-num.p1 { background:rgba(239,68,68,0.15); color:#ef4444; }
-.action-inner .action-num.p2 { background:rgba(251,146,60,0.15); color:#fb923c; }
-.action-inner .action-num.p3 { background:rgba(234,179,8,0.15); color:#eab308; }
-.action-inner .action-num.p4 { background:rgba(59,130,246,0.15); color:#3b82f6; }
-.action-inner .action-num.p5 { background:rgba(34,197,94,0.15); color:#22c55e; }
-.action-status { font-size:10px; padding:2px 8px; border-radius:6px; font-weight:600; }
-.action-status.s-done { background:rgba(34,197,94,0.15); color:#22c55e; }
-.action-status.s-active { background:rgba(59,130,246,0.15); color:#3b82f6; }
-.action-status.s-wait { background:rgba(100,116,139,0.15); color:#64748b; }
-.action-inner .action-title { font-size:13px; font-weight:700; color:#f8fafc; }
-.action-inner .action-desc { font-size:11px; color:#94a3b8; margin-top:4px; line-height:1.6; }
-.action-inner .action-impact { display:inline-block; margin-top:6px; font-size:11px; color:#22c55e; background:rgba(34,197,94,0.08); padding:2px 8px; border-radius:6px; }
-.strat-mgr { padding:0 32px 24px; }
-.strat-mgr h2 { font-size:16px; color:#f8fafc; margin:0 0 12px; display:flex; align-items:center; gap:8px; }
-.mgr-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:12px; }
-.mgr-card { background:#1e293b; border-radius:12px; padding:16px; }
-.mgr-card .mgr-name { font-size:14px; font-weight:700; color:#f8fafc; margin-bottom:8px; }
-.mgr-card .mgr-stat { display:flex; justify-content:space-between; font-size:12px; color:#94a3b8; padding:4px 0; border-bottom:1px solid #1a2332; }
-.mgr-card .mgr-stat:last-child { border:none; }
-.mgr-card .mgr-stat b { color:#e2e8f0; }
-.mgr-bar { height:6px; background:#334155; border-radius:3px; margin-top:4px; overflow:hidden; }
-.mgr-bar-fill { height:100%; border-radius:3px; transition:width .3s; }
-.strat-refresh-time { text-align:right; padding:0 32px 16px; font-size:11px; color:#475569; }
+
+/* 문제점 + 액션: 2열 가로 배치 */
+.strat-two-col { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px; }
+.strat-panel { background:#0f172a; border-radius:12px; padding:16px; }
+.strat-panel h3 { color:#e2e8f0; font-size:14px; margin:0 0 12px; }
+
+.prob-item { display:flex; align-items:flex-start; gap:8px; padding:8px 0; border-bottom:1px solid #1e293b; cursor:pointer; }
+.prob-item:last-child { border-bottom:none; }
+.prob-rank { width:20px; height:20px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:800; color:#fff; flex-shrink:0; }
+.prob-rank.crit { background:#ef4444; }
+.prob-rank.warn { background:#eab308; }
+.prob-rank.info { background:#3b82f6; }
+.prob-text { flex:1; }
+.prob-text .prob-title { font-size:12px; color:#e2e8f0; font-weight:600; }
+.prob-text .prob-sub { font-size:10px; color:#64748b; margin-top:2px; display:none; }
+.prob-item.expanded .prob-sub { display:block; }
+
+.act-item { display:flex; align-items:flex-start; gap:10px; padding:8px 0; border-bottom:1px solid #1e293b; }
+.act-item:last-child { border-bottom:none; }
+.act-num { width:22px; height:22px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:800; color:#fff; flex-shrink:0; }
+.act-num.done { background:#22c55e; }
+.act-num.prog { background:#3b82f6; }
+.act-num.wait { background:#475569; }
+.act-body { flex:1; }
+.act-body .act-title { font-size:12px; color:#e2e8f0; font-weight:600; }
+.act-body .act-desc { font-size:10px; color:#64748b; margin-top:1px; }
+.act-body .act-target { font-size:10px; color:#38bdf8; margin-top:2px; }
+
+/* 매니저 + 예측: 가로 배치 */
+.strat-bottom-row { display:grid; grid-template-columns:2fr 1fr; gap:16px; margin-bottom:16px; }
+.mgr-table { width:100%; border-collapse:collapse; }
+.mgr-table th { font-size:10px; color:#64748b; text-align:left; padding:6px 8px; border-bottom:1px solid #1e293b; }
+.mgr-table td { font-size:12px; color:#e2e8f0; padding:8px; border-bottom:1px solid #0f172a; }
+.mgr-table tr:hover { background:#1e293b; }
+.mgr-badge { display:inline-block; padding:2px 6px; border-radius:4px; font-size:10px; font-weight:700; }
+.mgr-badge.A { background:rgba(34,197,94,0.2); color:#22c55e; }
+.mgr-badge.B { background:rgba(234,179,8,0.2); color:#eab308; }
+.mgr-badge.C { background:rgba(239,68,68,0.2); color:#ef4444; }
+.mgr-badge.D { background:rgba(239,68,68,0.3); color:#ef4444; }
+
+.forecast-row { display:flex; gap:8px; }
+.forecast-item { flex:1; text-align:center; padding:12px 8px; border-radius:8px; }
+.forecast-item .fc-label { font-size:10px; color:#94a3b8; }
+.forecast-item .fc-val { font-size:22px; font-weight:800; margin:4px 0 2px; }
+.forecast-item .fc-note { font-size:9px; color:#64748b; }
 
 </style>
 </head>
@@ -324,118 +324,139 @@ function loadStrategySection(days) {
     fetch('/api/analytics/cs-score-metrics?days=' + days).then(function(r){return r.json();}).catch(function(){return null;}),
     fetch('/api/analytics/manager-performance?days=' + days).then(function(r){return r.json();}).catch(function(){return null;}),
     fetch('/api/analytics/escalation-analysis?days=' + days).then(function(r){return r.json();}).catch(function(){return null;}),
-    fetch('/api/analytics/data-health').then(function(r){return r.json();}).catch(function(){return null;}),
     fetch('/api/analytics/csat?days=' + days).then(function(r){return r.json();}).catch(function(){return null;})
   ]).then(function(res) {
     var el = document.getElementById('strategySection');
     if (!el) return;
-    var m = res[0], mgr = res[1], esc = res[2], dh = res[3], csat = res[4];
-    if (!m || !m.success) { el.innerHTML = '<div class="loading" style="color:#eab308;">전략 데이터 로딩 실패 - 기본 대시보드만 표시됩니다.</div>'; return; }
+    var m = res[0], mgr = res[1], esc = res[2], csat = res[3];
+    if (!m || !m.success) { el.innerHTML = '<div style="padding:20px;color:#eab308;text-align:center;">전략 데이터 로딩 실패</div>'; return; }
 
     var sc = m.integratedScore || {};
     var bd = sc.breakdown || {};
     var totalScore = sc.score || 0;
+    var scoreColor = totalScore >= 3 ? '#22c55e' : totalScore >= 2.5 ? '#eab308' : '#ef4444';
     var h = '';
 
-    // 구분선
-    h += '<div style="margin:30px 0 20px;padding:20px 0 0;border-top:2px solid #334155;">';
-    h += '<h2 style="color:#e2e8f0;margin:0 0 15px;font-size:20px;">📊 CS 전략 대시보드</h2>';
+    h += '<div class="strat-section">';
+    h += '<div class="strat-title">📊 CS 전략 대시보드</div>';
+
+    // === Row 1: 게이지 + 5 서브메트릭 ===
+    h += '<div class="strat-score-row">';
+    // 게이지
+    h += '<div class="strat-gauge-box">';
+    h += '<canvas id="csGauge" width="160" height="100"></canvas>';
+    h += '<div class="strat-gauge-val" style="color:'+scoreColor+';">'+totalScore.toFixed(2)+'</div>';
+    h += '<div class="strat-gauge-label">목표 '+(sc.target||3)+'.0</div>';
     h += '</div>';
-
-    // CS Score 게이지
-    h += '<div class="strat-hero">';
-    h += '<canvas id="csGauge" width="200" height="120" style="display:block;margin:0 auto;"></canvas>';
-    h += '<div style="text-align:center;margin-top:8px;"><span style="font-size:32px;font-weight:800;color:' + (totalScore>=3?'#22c55e':totalScore>=2.5?'#eab308':'#ef4444') + ';">' + totalScore.toFixed(2) + '</span>';
-    h += '<span style="color:#64748b;font-size:14px;"> / 5.0 (목표: ' + (sc.target||3) + ')</span></div></div>';
-
-    // 5 서브 메트릭
+    // 서브메트릭
     function sevClass(s) { return s >= 3 ? 'sev-green' : s >= 2.5 ? 'sev-yellow' : 'sev-red'; }
     var metrics = [
-      {name:'NoReply', score:(bd.noReply||{}).score||0, weight:0.20, detail:'미응답 '+((m.noReplyClose||{}).rate||0)+'% ('+((m.noReplyClose||{}).count||0)+'/'+((m.noReplyClose||{}).total||0)+')'},
-      {name:'FRT', score:(bd.frt||{}).score||0, weight:0.20, detail:'30분내 '+((m.responseTime||{}).within30MinRate||0)+'% | 평균 '+((m.responseTime||{}).avgMinutes||0)+'분'},
-      {name:'FCR', score:(bd.fcr||{}).score||0, weight:0.25, detail:'해결 '+((m.fcr||{}).resolved||0)+'건 | 재문의 '+((m.fcr||{}).reopened||0)+'건'},
-      {name:'CSAT', score:(bd.csat||{}).score||0, weight:0.20, detail:'평균 '+(csat&&csat.average?csat.average.toFixed(1):'N/A')+' | 응답 '+(csat&&csat.total?csat.total:0)+'건'},
-      {name:'CES', score:(bd.ces||{}).score||0, weight:0.15, detail:'평균 '+((m.ces||{}).avgScore||0)+' | 응답 '+((m.ces||{}).count||0)+'건'}
+      {name:'NoReply', score:(bd.noReply||{}).score||0, icon:'⏰', detail:'미응답 '+((m.noReplyClose||{}).rate||0)+'% ('+((m.noReplyClose||{}).count||0)+'/'+((m.noReplyClose||{}).total||0)+')'},
+      {name:'FRT', score:(bd.frt||{}).score||0, icon:'⚡', detail:'30분내 '+((m.responseTime||{}).within30MinRate||0)+'% | 평균 '+((m.responseTime||{}).avgMinutes||0)+'분'},
+      {name:'FCR', score:(bd.fcr||{}).score||0, icon:'✅', detail:'해결 '+((m.fcr||{}).resolved||0)+'건 | 재문의 '+((m.fcr||{}).reopened||0)+'건'},
+      {name:'CSAT', score:(bd.csat||{}).score||0, icon:'⭐', detail:'평균 '+(csat&&csat.average?csat.average.toFixed(1):'N/A')+' | 응답 '+(csat&&csat.total?csat.total:0)+'건'},
+      {name:'CES', score:(bd.ces||{}).score||0, icon:'🎯', detail:'평균 '+((m.ces||{}).avgScore||0)+' | 응답 '+((m.ces||{}).count||0)+'건'}
     ];
     h += '<div class="strat-subs">';
     for (var i=0; i<metrics.length; i++) {
       var met = metrics[i];
-      var icon = met.score >= 3 ? '🟢' : met.score >= 2.5 ? '🟡' : '🔴';
-      h += '<div class="strat-sub ' + sevClass(met.score) + '" onclick="this.classList.toggle(\'expanded\')">';
-      h += '<div class="sub-title">' + icon + ' ' + met.name + ' <span style="float:right;">' + met.score.toFixed(1) + '/5</span></div>';
-      h += '<div class="sub-detail">' + met.detail + ' | 가중치 ' + (met.weight*100) + '%</div></div>';
+      var mc = met.score >= 3 ? '#22c55e' : met.score >= 2.5 ? '#eab308' : '#ef4444';
+      h += '<div class="strat-sub '+sevClass(met.score)+'" onclick="this.classList.toggle(\'expanded\')">';
+      h += '<div class="sub-icon">'+met.icon+'</div>';
+      h += '<div class="sub-name">'+met.name+'</div>';
+      h += '<div class="sub-score" style="color:'+mc+';">'+met.score.toFixed(1)+'</div>';
+      h += '<div class="sub-detail">'+met.detail+'</div>';
+      h += '</div>';
     }
-    h += '</div>';
+    h += '</div></div>';
 
-    // Top 5 문제점
+    // === Row 2: 문제점 + 액션 2열 ===
+    h += '<div class="strat-two-col">';
+    // 문제점
+    h += '<div class="strat-panel"><h3>🔍 핵심 문제 Top 5</h3>';
     var problems = [
-      {rank:1, sev:'CRITICAL', title:'에스컬레이션 47%', cause:'other 46건 AI 분류 불가', impact:'매니저 부하 → FRT 악화', icon:'🔺'},
-      {rank:2, sev:'CRITICAL', title:'NoReply 미응답 33%', cause:'오프시간 50%, 피크 10-12시', impact:'고객 이탈, CS Score 하락', icon:'⏰'},
-      {rank:3, sev:'WARNING', title:'CSAT 평균 2.3/5', cause:'응답 10건, 70% ≤ 2점', impact:'불만족 집중, 재구매율 영향', icon:'📉'},
-      {rank:4, sev:'WARNING', title:'CES/FCR 데이터 부족', cause:'CES '+((m.ces||{}).count||0)+'건, FCR '+((m.fcr||{}).resolved||0)+'건', impact:'CS Score 정확도 낮음', icon:'📊'},
-      {rank:5, sev:'INFO', title:'매니저 업무 편중', cause:'vida 77채팅/152응답, 나머지 최소', impact:'번아웃 위험, 품질 저하', icon:'👥'}
+      {sev:'crit', title:'에스컬레이션 47%', sub:'other 46건 AI 분류 불가 → 매니저 부하'},
+      {sev:'crit', title:'NoReply 미응답 33%', sub:'오프시간 50%, 피크 10-12시 80건+'},
+      {sev:'warn', title:'CSAT 평균 2.3/5', sub:'응답 10건 중 70%가 2점 이하'},
+      {sev:'warn', title:'CES/FCR 데이터 부족', sub:'CES '+((m.ces||{}).count||0)+'건, FCR '+((m.fcr||{}).resolved||0)+'건'},
+      {sev:'info', title:'매니저 업무 편중', sub:'vida 77채팅/152응답, 나머지 최소'}
     ];
-    h += '<div class="strat-problems"><h2>🔍 핵심 문제점 Top 5</h2><div class="prob-cards">';
     for (var p=0; p<problems.length; p++) {
       var pr = problems[p];
-      h += '<div class="prob-card" onclick="this.classList.toggle(\'expanded\')">';
-      h += '<div class="prob-header"><span class="prob-sev prob-'+pr.sev.toLowerCase()+'">'+pr.sev+'</span> '+pr.icon+' #'+pr.rank+' '+pr.title+'</div>';
-      h += '<div class="prob-body"><b>원인:</b> '+pr.cause+'<br><b>영향:</b> '+pr.impact+'</div></div>';
+      h += '<div class="prob-item" onclick="this.classList.toggle(\'expanded\')">';
+      h += '<div class="prob-rank '+pr.sev+'">'+(p+1)+'</div>';
+      h += '<div class="prob-text"><div class="prob-title">'+pr.title+'</div>';
+      h += '<div class="prob-sub">'+pr.sub+'</div></div></div>';
     }
-    h += '</div></div>';
-
-    // 액션 플랜
+    h += '</div>';
+    // 액션
+    h += '<div class="strat-panel"><h3>🎯 액션 플랜</h3>';
     var actions = [
-      {step:1, status:'s-active', title:'AI 에스컬레이션 ↓ 47%→30%', desc:'주문상태 AI해석, 필터 간결화, FAQ 8건', target:'AI처리 <b>70%→85%</b>'},
-      {step:2, status:'s-active', title:'FRT 42%→80% | NoReply 33%→15%', desc:'오프시간 AI선응답, 대기 20분, 주말제외, 알림', target:'NoReply 1.5→3.0 | FRT 2.5→3.0'},
-      {step:3, status:'s-active', title:'CSAT 2.3→3.5', desc:'응답 템플릿 150자, 설문 응답률 15-20%', target:'CSAT <b>2.5→3.5</b>'},
-      {step:4, status:'s-wait', title:'CES/FCR 데이터 수집', desc:'CES 20건+, FCR 10건+ 확보', target:'CS Score 정확도 향상'},
-      {step:5, status:'s-wait', title:'비즈니스 KPI 연동', desc:'재구매율, 환불율, 인건비 연동', target:'CS→매출 상관분석'}
+      {st:'done', title:'AI 에스컬레이션 47%→30%', desc:'분류 개선, FAQ 8건 추가', target:'AI처리 85%'},
+      {st:'done', title:'FRT 42%→80%', desc:'오프시간 AI선응답, 알림 체계', target:'NoReply 15%'},
+      {st:'prog', title:'CSAT 2.3→3.5', desc:'응답 템플릿, 설문률 20%', target:'CSAT 3.5'},
+      {st:'wait', title:'CES/FCR 데이터 수집', desc:'CES 20건+, FCR 10건+', target:'정확도 향상'},
+      {st:'wait', title:'비즈니스 KPI 연동', desc:'재구매율, 환불율 연동', target:'매출 상관분석'}
     ];
-    h += '<div class="strat-actions"><h2>🎯 액션 플랜</h2><div class="action-timeline">';
     for (var a=0; a<actions.length; a++) {
       var act = actions[a];
-      h += '<div class="action-step '+act.status+'"><div class="step-num">'+act.step+'</div>';
-      h += '<div class="step-body"><div class="step-title">'+act.title+'</div>';
-      h += '<div class="step-desc">'+act.desc+'</div>';
-      h += '<div class="step-target">→ '+act.target+'</div></div></div>';
+      h += '<div class="act-item"><div class="act-num '+act.st+'">'+(a+1)+'</div>';
+      h += '<div class="act-body"><div class="act-title">'+act.title+'</div>';
+      h += '<div class="act-desc">'+act.desc+'</div>';
+      h += '<div class="act-target">→ '+act.target+'</div></div></div>';
     }
     h += '</div></div>';
 
-    // 매니저 현황
+    // === Row 3: 매니저 테이블 + 목표 예측 ===
     var mgrData = (mgr && mgr.success && mgr.managers) ? mgr.managers : [];
-    if (mgrData.length > 0) {
-      h += '<div class="strat-mgr"><h2>👥 매니저 현황</h2><div class="mgr-grid">';
-      for (var mi=0; mi<mgrData.length; mi++) {
-        var mg = mgrData[mi];
-        var n = mg.name || ('Manager '+mg.managerId);
-        var avg = mg.avgResponseMin || 0;
-        var w30 = mg.within30Rate || 0;
-        var replies = mg.totalReplies || 0;
-        var col = avg <= 30 ? '#22c55e' : avg <= 60 ? '#eab308' : '#ef4444';
-        h += '<div class="mgr-card"><div class="mgr-name">'+n+'</div>';
-        h += '<div style="color:'+col+';font-size:20px;font-weight:bold;">'+avg+'분</div>';
-        h += '<div style="font-size:11px;color:#94a3b8;">평균응답 | 30분내 '+w30+'% | '+replies+'건</div></div>';
-      }
-      h += '</div></div>';
+    h += '<div class="strat-bottom-row">';
+    // 매니저 테이블
+    h += '<div class="strat-panel"><h3>👥 매니저 성과</h3>';
+    h += '<table class="mgr-table"><thead><tr><th>매니저</th><th>등급</th><th>응답</th><th>채팅</th><th>평균응답</th><th>CSAT</th></tr></thead><tbody>';
+    for (var mi=0; mi<mgrData.length; mi++) {
+      var mg = mgrData[mi];
+      var name = (mg.name || '').split('@')[0];
+      if (name.length > 10) name = name.substring(0, 10);
+      var grade = mg.qualityScore ? mg.qualityScore.grade : '-';
+      var avgMin = mg.avgResponseTimeMin || 0;
+      var avgColor = avgMin <= 30 ? '#22c55e' : avgMin <= 120 ? '#eab308' : '#ef4444';
+      var csatVal = (mg.qualityScore && mg.qualityScore.breakdown && mg.qualityScore.breakdown.csat) ? mg.qualityScore.breakdown.csat.avgCSAT : 0;
+      h += '<tr>';
+      h += '<td>'+name+'</td>';
+      h += '<td><span class="mgr-badge '+grade+'">'+grade+'</span></td>';
+      h += '<td>'+(mg.totalReplies||0)+'건</td>';
+      h += '<td>'+(mg.uniqueChats||0)+'건</td>';
+      h += '<td style="color:'+avgColor+';">'+avgMin+'분</td>';
+      h += '<td>'+(csatVal > 0 ? csatVal.toFixed(1) : '-')+'</td>';
+      h += '</tr>';
     }
-
+    h += '</tbody></table></div>';
     // 목표 예측
-    h += '<div class="strat-forecast"><h2>📈 목표 예측</h2><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:12px;">';
-    h += '<div style="text-align:center;padding:12px;background:rgba(239,68,68,0.1);border-radius:8px;"><div style="font-size:11px;color:#94a3b8;">현재</div><div style="font-size:28px;font-weight:800;color:#ef4444;">'+totalScore.toFixed(2)+'</div></div>';
-    h += '<div style="text-align:center;padding:12px;background:rgba(234,179,8,0.1);border-radius:8px;"><div style="font-size:11px;color:#94a3b8;">2주후</div><div style="font-size:28px;font-weight:800;color:#eab308;">2.72</div><div style="font-size:10px;color:#64748b;">AI개선</div></div>';
-    h += '<div style="text-align:center;padding:12px;background:rgba(34,197,94,0.1);border-radius:8px;"><div style="font-size:11px;color:#94a3b8;">4주후</div><div style="font-size:28px;font-weight:800;color:#22c55e;">3.12</div><div style="font-size:10px;color:#64748b;">데이터확보</div></div>';
-    h += '<div style="text-align:center;padding:12px;background:rgba(56,189,248,0.1);border-radius:8px;"><div style="font-size:11px;color:#94a3b8;">목표</div><div style="font-size:28px;font-weight:800;color:#38bdf8;">'+(sc.target||3).toFixed(1)+'</div></div>';
-    h += '</div></div>';
+    h += '<div class="strat-panel"><h3>📈 목표 예측</h3>';
+    h += '<div class="forecast-row">';
+    var forecasts = [
+      {label:'현재', val:totalScore.toFixed(2), color:'#ef4444', bg:'rgba(239,68,68,0.1)', note:''},
+      {label:'2주후', val:'2.72', color:'#eab308', bg:'rgba(234,179,8,0.1)', note:'AI개선'},
+      {label:'4주후', val:'3.12', color:'#22c55e', bg:'rgba(34,197,94,0.1)', note:'데이터확보'},
+      {label:'목표', val:(sc.target||3).toFixed(1), color:'#38bdf8', bg:'rgba(56,189,248,0.1)', note:''}
+    ];
+    for (var fi=0; fi<forecasts.length; fi++) {
+      var fc = forecasts[fi];
+      h += '<div class="forecast-item" style="background:'+fc.bg+';">';
+      h += '<div class="fc-label">'+fc.label+'</div>';
+      h += '<div class="fc-val" style="color:'+fc.color+';">'+fc.val+'</div>';
+      if (fc.note) h += '<div class="fc-note">'+fc.note+'</div>';
+      h += '</div>';
+    }
+    h += '</div></div></div>';
 
+    h += '</div>'; // close strat-section
     el.innerHTML = h;
 
-    // 게이지 그리기
     setTimeout(function() { drawGauge(totalScore, sc.target||3); }, 50);
-
   }).catch(function(e) {
     var el = document.getElementById('strategySection');
-    if (el) el.innerHTML = '<div class="loading" style="color:#eab308;">전략 섹션 로딩 실패: ' + e.message + '</div>';
+    if (el) el.innerHTML = '<div style="padding:20px;color:#eab308;text-align:center;">전략 섹션 로딩 실패: '+e.message+'</div>';
   });
 }
 
