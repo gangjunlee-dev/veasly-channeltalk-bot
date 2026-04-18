@@ -807,24 +807,15 @@ function loadAIData() {
       html += card('유형 분포', Object.keys(types).length, '가지', 'purple', typeStr);
       html += '</div>';
 
-      // Escalation reason analysis
-      var escReasons = {};
-      (aiConv.conversations || []).filter(function(c) { return c.escalated; }).forEach(function(c) {
-        var msg = (c.userMessage || '').toLowerCase();
-        if (msg.indexOf('合併') > -1 || msg.indexOf('一起寄') > -1) escReasons['합배송'] = (escReasons['합배송'] || 0) + 1;
-        else if (msg.indexOf('取消') > -1) escReasons['취소관련'] = (escReasons['취소관련'] || 0) + 1;
-        else if (msg.indexOf('客服') > -1 || msg.indexOf('人工') > -1 || msg.indexOf('轉') > -1) escReasons['직접요청'] = (escReasons['직접요청'] || 0) + 1;
-        else if (msg.indexOf('沒收到') > -1 || msg.indexOf('還沒到') > -1 || msg.indexOf('出貨') > -1) escReasons['배송지연'] = (escReasons['배송지연'] || 0) + 1;
-        else if (msg.indexOf('不滿') > -1 || msg.indexOf('太差') > -1 || msg.indexOf('投訴') > -1) escReasons['불만'] = (escReasons['불만'] || 0) + 1;
-        else escReasons['기타'] = (escReasons['기타'] || 0) + 1;
-      });
+      // Escalation reason analysis (API reasons 사용)
+      var escReasons = (escData && escData.reasons) ? escData.reasons : {};
 
       if (Object.keys(escReasons).length > 0) {
         html += '<div class="charts">';
         html += '<div class="chart-card"><h3>에스컬레이션 사유 분석</h3><div class="bar-chart">';
         var escMax = 1;
         Object.values(escReasons).forEach(function(v) { if (v > escMax) escMax = v; });
-        var escColors = { '합배송': '#3b82f6', '취소관련': '#ef4444', '직접요청': '#eab308', '배송지연': '#f97316', '불만': '#ef4444', '기타': '#64748b' };
+        var escColors = { '주문조회': '#3b82f6', '직접요청': '#eab308', '결제/금액': '#8b5cf6', '배송/물류': '#f97316', '상품문의': '#10b981', '상담사전환': '#ec4899', '국제운임': '#06b6d4', '이용방법': '#14b8a6', '계정/회원': '#6366f1', '취소/환불': '#ef4444', '클레임/불만': '#dc2626', '기타': '#64748b' };
         Object.keys(escReasons).sort(function(a, b) { return escReasons[b] - escReasons[a]; }).forEach(function(k) {
           var pct = Math.round((escReasons[k] / escMax) * 100);
           html += '<div class="bar-row"><div class="bar-label">' + k + '</div><div class="bar-track"><div class="bar-fill" style="width:' + pct + '%;background:' + (escColors[k] || '#64748b') + ';"></div><span class="bar-count">' + escReasons[k] + '</span></div></div>';
