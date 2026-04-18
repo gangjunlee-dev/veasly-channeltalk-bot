@@ -876,7 +876,7 @@ function loadAIData() {
         html += '<span style="color:var(--text-primary);font-weight:600;margin-left:8px">' + (userName || chatId.substring(0,8) + '...') + '</span> ';
         html += '<span class="pill" style="background:rgba(59,130,246,0.15);color:#3b82f6;margin-left:4px">' + langBadge + '</span> ';
         html += '<span style="color:var(--text-secondary);font-size:12px;margin-left:8px">' + msgs.length + '건 대화</span></div>';
-        html += '<div>' + escBadge + ' <span style="color:var(--text-faint);font-size:10px;margin-left:4px">▼</span></div></div>';
+        html += '<div>' + escBadge + ' <span style="color:var(--text-secondary);font-size:10px;margin-left:4px">▼</span></div></div>';
 
         // 첫 번째 메시지 미리보기
         var previewMsg = '';
@@ -1479,7 +1479,7 @@ async function loadDataHealth() {
     // 에스컬레이션율
     if (checks.aiConversations) {
       html += '<div style="margin-top:12px;padding:10px;background:var(--bg-primary);border-radius:8px;">';
-      html += '<span style="font-size:11px;color:var(--text-faint);">AI 에스컬레이션율 (7일):</span> ';
+      html += '<span style="font-size:11px;color:var(--text-secondary);">AI 에스컬레이션율 (7일):</span> ';
       var escColor = checks.aiConversations.escalationRate > 40 ? '#ef4444' : checks.aiConversations.escalationRate > 25 ? '#eab308' : '#22c55e';
       html += '<span style="color:' + escColor + ';font-weight:bold;">' + checks.aiConversations.escalationRate + '%</span>';
       html += ' (' + checks.aiConversations.escalated7days + '/' + checks.aiConversations.last7days + '건)';
