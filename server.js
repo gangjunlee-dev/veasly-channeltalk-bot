@@ -15,6 +15,7 @@ process.on('unhandledRejection', function(reason) {
 });
 
 var app = express();
+app.use(express.static("public"));
 app.use(express.json());
 // Dashboard password protection
 app.get("/dashboard", function(req, res) {
