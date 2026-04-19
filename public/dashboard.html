@@ -457,6 +457,16 @@ function loadUnrepliedData() {
   });
 }
 
+// 미응답 필터 함수
+function filterUnreplied(btn, type) {
+  document.querySelectorAll(".unreplied-filter").forEach(function(b) { b.classList.remove("active"); });
+  btn.classList.add("active");
+  document.querySelectorAll(".unreplied-card").forEach(function(card) {
+    if (type === "all") { card.style.display = ""; }
+    else { card.style.display = card.getAttribute("data-type") === type ? "" : "none"; }
+  });
+}
+
 // Overview 로드 시 미응답 배지도 업데이트
 function loadUnrepliedBadge() {
   fetch('/api/analytics/unreplied-chats').then(function(r){return r.json();}).then(function(data){
