@@ -190,6 +190,10 @@ td { padding: 10px 8px; border-bottom: 1px solid var(--border-secondary); font-s
 .unreplied-card.high { border-left-color:#f97316; background:rgba(249,115,22,0.05); }
 .unreplied-card.medium { border-left-color:#eab308; }
 .unreplied-card.low { border-left-color:#22c55e; }
+.unreplied-filter { background:var(--bg-secondary); border:1px solid var(--border-primary); color:var(--text-secondary); padding:6px 14px; border-radius:20px; cursor:pointer; font-size:12px; font-weight:500; transition:all 0.2s; }
+.unreplied-filter:hover { border-color:var(--accent); color:var(--accent); }
+.unreplied-filter.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+.unreplied-card[data-type='abandoned_closed'] { border-left-color:#7c3aed; background:rgba(124,58,237,0.03); }
 .urgency-badge { display:inline-block; padding:2px 8px; border-radius:4px; font-size:11px; font-weight:700; color:#fff; }
 .urgency-badge.critical { background:#ef4444; }
 .urgency-badge.high { background:#f97316; }
@@ -386,12 +390,20 @@ function loadUnrepliedData() {
     var urgColors = {critical:'#ef4444',high:'#f97316',medium:'#eab308',low:'#22c55e'};
     sumEl.innerHTML =
       '<div class="unreplied-summary-card"><div class="num" style="color:var(--text-primary)">' + s.totalOpened + '</div><div class="label">열린 채팅</div></div>' +
-      '<div class="unreplied-summary-card"><div class="num" style="color:' + (s.unreplied > 5 ? '#ef4444' : s.unreplied > 0 ? '#f97316' : '#22c55e') + '">' + s.unreplied + '</div><div class="label">미응답</div></div>' +
-      '<div class="unreplied-summary-card"><div class="num" style="color:#ef4444">' + s.critical + '</div><div class="label">긴급 (24h+)</div></div>' +
-      '<div class="unreplied-summary-card"><div class="num" style="color:#f97316">' + s.high + '</div><div class="label">높음 (8h+)</div></div>' +
-      '<div class="unreplied-summary-card"><div class="num" style="color:#eab308">' + s.medium + '</div><div class="label">보통 (2h+)</div></div>' +
-      '<div class="unreplied-summary-card"><div class="num" style="color:#22c55e">' + s.low + '</div><div class="label">낮음</div></div>' +
+      '<div class="unreplied-summary-card"><div class="num" style="color:' + (s.unreplied > 5 ? '#ef4444' : s.unreplied > 0 ? '#f97316' : '#22c55e') + '">' + s.unreplied + '</div><div class="label">미응답 합계</div></div>' +
+      '<div class="unreplied-summary-card"><div class="num" style="color:#dc2626">' + (s.noResponse || 0) + '</div><div class="label">🔴 고객 무응답</div></div>' +
+      '<div class="unreplied-summary-card"><div class="num" style="color:#ea580c">' + (s.escalationPending || 0) + '</div><div class="label">🟠 에스컬레이션 대기</div></div>' +
+      '<div class="unreplied-summary-card"><div class="num" style="color:#7c3aed">' + (s.abandonedClosed || 0) + '</div><div class="label">🟣 방치 종료</div></div>' +
       '<div class="unreplied-summary-card"><div class="num" style="color:var(--text-primary)">' + s.avgWaitHours + 'h</div><div class="label">평균 대기</div></div>';
+
+    // 필터 버튼
+    var filterHtml = '<div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">';
+    filterHtml += '<button class="unreplied-filter active" data-filter="all" onclick="filterUnreplied(this,\'all\')">전체 (' + s.unreplied + ')</button>';
+    if (s.noResponse) filterHtml += '<button class="unreplied-filter" data-filter="no_response" onclick="filterUnreplied(this,\'no_response\')">🔴 고객 무응답 (' + s.noResponse + ')</button>';
+    if (s.escalationPending) filterHtml += '<button class="unreplied-filter" data-filter="escalation_pending" onclick="filterUnreplied(this,\'escalation_pending\')">🟠 에스컬레이션 대기 (' + s.escalationPending + ')</button>';
+    if (s.abandonedClosed) filterHtml += '<button class="unreplied-filter" data-filter="abandoned_closed" onclick="filterUnreplied(this,\'abandoned_closed\')">🟣 방치 종료 (' + s.abandonedClosed + ')</button>';
+    filterHtml += '</div>';
+    sumEl.innerHTML += filterHtml;
 
     document.getElementById('unrepliedLastUpdate').textContent = '마지막 업데이트: ' + new Date(data.timestamp).toLocaleString('ko-KR', {timeZone:'Asia/Seoul'});
 
@@ -410,10 +422,16 @@ function loadUnrepliedData() {
       var msg = c.lastUserMessage || '(내용 없음)';
       if (msg.length > 120) msg = msg.substring(0, 120) + '...';
 
-      h += '<div class="unreplied-card ' + c.urgency + '" onclick="window.open(\'' + deskUrl + '\', \'_blank\')">';
+      h += '<div class="unreplied-card ' + c.urgency + '" data-type="' + (c.unrepliedType || 'unknown') + '" onclick="window.open(\'' + deskUrl + '\', \'_blank\')">';
       h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">';
       h += '<div style="display:flex;align-items:center;gap:8px;">';
+      var typeLabels = {no_response:'🔴 무응답',escalation_pending:'🟠 에스컬 대기',abandoned_closed:'🟣 방치종료'};
+      var typeBadge = typeLabels[c.unrepliedType] || c.unrepliedType || '';
+      var hasKorean = /[가-힣]/.test(c.lastUserMessage || '');
       h += '<span class="urgency-badge ' + c.urgency + '">' + urgLabels[c.urgency] + '</span>';
+      h += '<span style="font-size:11px;padding:2px 8px;border-radius:4px;background:rgba(124,58,237,0.1);color:#7c3aed;font-weight:500;">' + typeBadge + '</span>';
+      if (c.state === "closed") h += '<span style="font-size:11px;padding:2px 6px;border-radius:4px;background:rgba(107,114,128,0.15);color:#6b7280;">종료됨</span>';
+      if (hasKorean) h += '<span style="font-size:11px;padding:2px 6px;border-radius:4px;background:rgba(239,68,68,0.15);color:#ef4444;">⚠ 한국어 답변</span>';
       h += '<span style="font-weight:600;color:var(--text-primary);font-size:14px;">' + (c.name || '이름없음') + '</span>';
       h += '</div>';
       h += '<span style="font-size:12px;color:var(--text-secondary);">' + timeStr + '</span>';
