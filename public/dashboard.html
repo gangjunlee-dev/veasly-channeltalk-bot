@@ -182,6 +182,25 @@ td { padding: 10px 8px; border-bottom: 1px solid var(--border-secondary); font-s
 .forecast-item .fc-val { font-size:22px; font-weight:800; margin:4px 0 2px; }
 .forecast-item .fc-note { font-size:9px; color:var(--text-muted); }
 
+
+/* 미응답 채팅 스타일 */
+.unreplied-card { background:var(--bg-secondary); border-radius:12px; padding:16px; margin-bottom:12px; border-left:4px solid #666; cursor:pointer; transition:all 0.2s; box-shadow:var(--shadow-sm); }
+.unreplied-card:hover { transform:translateY(-2px); box-shadow:0 4px 12px rgba(0,0,0,0.15); }
+.unreplied-card.critical { border-left-color:#ef4444; background:rgba(239,68,68,0.05); }
+.unreplied-card.high { border-left-color:#f97316; background:rgba(249,115,22,0.05); }
+.unreplied-card.medium { border-left-color:#eab308; }
+.unreplied-card.low { border-left-color:#22c55e; }
+.urgency-badge { display:inline-block; padding:2px 8px; border-radius:4px; font-size:11px; font-weight:700; color:#fff; }
+.urgency-badge.critical { background:#ef4444; }
+.urgency-badge.high { background:#f97316; }
+.urgency-badge.medium { background:#eab308; color:#000; }
+.urgency-badge.low { background:#22c55e; }
+.unreplied-summary-card { background:var(--bg-secondary); border-radius:10px; padding:12px 16px; min-width:100px; text-align:center; border:1px solid var(--border-primary); }
+.unreplied-summary-card .num { font-size:28px; font-weight:700; }
+.unreplied-summary-card .label { font-size:11px; color:var(--text-secondary); margin-top:4px; }
+.chat-link-btn { display:inline-block; background:var(--accent); color:#fff; padding:6px 14px; border-radius:6px; text-decoration:none; font-size:12px; font-weight:600; margin-top:8px; transition:opacity 0.2s; }
+.chat-link-btn:hover { opacity:0.85; }
+
 </style>
 </head>
 <body>
@@ -203,6 +222,7 @@ td { padding: 10px 8px; border-bottom: 1px solid var(--border-secondary); font-s
   <div class="tab" onclick="switchTab('ai')">AI 모니터링</div>
   <div class="tab" onclick="switchTab('csat')">CSAT</div>
   <div class="tab" onclick="switchTab('csscore')">CS Score</div>
+  <div class="tab" onclick="switchTab('unreplied')" id="unreplied-tab">🚨 미응답</div>
 </div>
 
 <div class="controls">
@@ -262,6 +282,18 @@ td { padding: 10px 8px; border-bottom: 1px solid var(--border-secondary); font-s
 </div>
 </div>
 
+<!-- TAB: 미응답 알림 -->
+<div id="tab-unreplied" class="tab-content">
+  <div class="section-title">🚨 미응답 채팅 관리</div>
+  <div style="padding:0 32px 16px;">
+    <div id="unrepliedSummary" style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+      <span style="font-size:13px;color:var(--text-secondary);" id="unrepliedLastUpdate">마지막 업데이트: -</span>
+      <button onclick="loadUnrepliedData()" style="background:var(--accent);color:#fff;border:none;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px;">🔄 새로고침</button>
+    </div>
+    <div id="unrepliedList"><div class="loading">미응답 채팅 로딩 중...</div></div>
+  </div>
+</div>
 <!-- TAB: CSAT -->
 <div id="tab-csat" class="tab-content">
   <div id="csatContent"><div class="loading">CSAT 데이터 로딩 중...</div></div>
@@ -292,6 +324,7 @@ function switchTab(name) {
   if (name === 'ai' && !cachedData.ai) loadAIData();
   if (name === 'csat' && !cachedData.csat) loadCSATData();
   if (name === 'csscore' && !cachedData.csscore) loadCSScoreData();
+  if (name === 'unreplied' && !cachedData.unreplied) loadUnrepliedData();
   if (name === 'csscore') { setTimeout(function(){ loadCSScoreTrend(); loadFAQRecommendations(); }, 500); }
 }
 
@@ -336,6 +369,88 @@ function toggleTheme() {
     if (btn) btn.innerHTML = '☀️ <span>Light</span>';
   }
 })();
+
+
+// === 미응답 채팅 ===
+function loadUnrepliedData() {
+  var listEl = document.getElementById('unrepliedList');
+  var sumEl = document.getElementById('unrepliedSummary');
+  listEl.innerHTML = '<div class="loading">채널톡 API 조회 중... (약 10초 소요)</div>';
+
+  fetch('/api/analytics/unreplied-chats').then(function(r) { return r.json(); }).then(function(data) {
+    if (!data.success) { listEl.innerHTML = '<div class="loading">데이터 로드 실패</div>'; return; }
+    cachedData.unreplied = data;
+    var s = data.summary;
+
+    // 요약 카드
+    var urgColors = {critical:'#ef4444',high:'#f97316',medium:'#eab308',low:'#22c55e'};
+    sumEl.innerHTML =
+      '<div class="unreplied-summary-card"><div class="num" style="color:var(--text-primary)">' + s.totalOpened + '</div><div class="label">열린 채팅</div></div>' +
+      '<div class="unreplied-summary-card"><div class="num" style="color:' + (s.unreplied > 5 ? '#ef4444' : s.unreplied > 0 ? '#f97316' : '#22c55e') + '">' + s.unreplied + '</div><div class="label">미응답</div></div>' +
+      '<div class="unreplied-summary-card"><div class="num" style="color:#ef4444">' + s.critical + '</div><div class="label">긴급 (24h+)</div></div>' +
+      '<div class="unreplied-summary-card"><div class="num" style="color:#f97316">' + s.high + '</div><div class="label">높음 (8h+)</div></div>' +
+      '<div class="unreplied-summary-card"><div class="num" style="color:#eab308">' + s.medium + '</div><div class="label">보통 (2h+)</div></div>' +
+      '<div class="unreplied-summary-card"><div class="num" style="color:#22c55e">' + s.low + '</div><div class="label">낮음</div></div>' +
+      '<div class="unreplied-summary-card"><div class="num" style="color:var(--text-primary)">' + s.avgWaitHours + 'h</div><div class="label">평균 대기</div></div>';
+
+    document.getElementById('unrepliedLastUpdate').textContent = '마지막 업데이트: ' + new Date(data.timestamp).toLocaleString('ko-KR', {timeZone:'Asia/Seoul'});
+
+    // 채팅 목록
+    var chats = data.chats || [];
+    if (chats.length === 0) {
+      listEl.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-secondary);font-size:16px;">✅ 모든 채팅에 응답 완료! 미응답 건이 없습니다.</div>';
+      return;
+    }
+
+    var urgLabels = {critical:'긴급',high:'높음',medium:'보통',low:'낮음'};
+    var h = '';
+    chats.forEach(function(c, i) {
+      var deskUrl = 'https://desk.channel.io/channels/138710/user-chats/' + c.chatId;
+      var timeStr = new Date(c.lastMessageTime).toLocaleString('ko-KR', {timeZone:'Asia/Seoul', month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit'});
+      var msg = c.lastUserMessage || '(내용 없음)';
+      if (msg.length > 120) msg = msg.substring(0, 120) + '...';
+
+      h += '<div class="unreplied-card ' + c.urgency + '" onclick="window.open(\'' + deskUrl + '\', \'_blank\')">';
+      h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">';
+      h += '<div style="display:flex;align-items:center;gap:8px;">';
+      h += '<span class="urgency-badge ' + c.urgency + '">' + urgLabels[c.urgency] + '</span>';
+      h += '<span style="font-weight:600;color:var(--text-primary);font-size:14px;">' + (c.name || '이름없음') + '</span>';
+      h += '</div>';
+      h += '<span style="font-size:12px;color:var(--text-secondary);">' + timeStr + '</span>';
+      h += '</div>';
+      h += '<div style="font-size:13px;color:var(--text-secondary);margin-bottom:8px;line-height:1.4;">' + msg.replace(/</g,'&lt;') + '</div>';
+      h += '<div style="display:flex;justify-content:space-between;align-items:center;">';
+      h += '<span style="font-size:12px;color:var(--text-secondary);">⏱ 대기 ' + c.waitingHours + '시간 | 담당: ' + (c.assigneeName || '미배정') + '</span>';
+      h += '<a href="' + deskUrl + '" target="_blank" class="chat-link-btn" onclick="event.stopPropagation();">채널톡에서 답변하기 →</a>';
+      h += '</div>';
+      h += '</div>';
+    });
+    listEl.innerHTML = h;
+
+    // 탭 배지 업데이트
+    var tabBtn = document.getElementById('unreplied-tab');
+    if (tabBtn && s.unreplied > 0) {
+      tabBtn.innerHTML = '🚨 미응답 <span style="background:#ef4444;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:4px;">' + s.unreplied + '</span>';
+    } else if (tabBtn) {
+      tabBtn.innerHTML = '✅ 미응답';
+    }
+  }).catch(function(err) {
+    listEl.innerHTML = '<div class="loading">에러: ' + err.message + '</div>';
+  });
+}
+
+// Overview 로드 시 미응답 배지도 업데이트
+function loadUnrepliedBadge() {
+  fetch('/api/analytics/unreplied-chats').then(function(r){return r.json();}).then(function(data){
+    if (!data.success) return;
+    var tabBtn = document.getElementById('unreplied-tab');
+    if (tabBtn && data.summary.unreplied > 0) {
+      tabBtn.innerHTML = '🚨 미응답 <span style="background:#ef4444;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:4px;">' + data.summary.unreplied + '</span>';
+    } else if (tabBtn) {
+      tabBtn.innerHTML = '✅ 미응답';
+    }
+  }).catch(function(){});
+}
 
 function loadAllData() {
   cachedData = {};
@@ -411,6 +526,7 @@ function loadOverview() {
 
     // === PHASE 2: v3 전략 대시보드 (비동기 append) ===
     loadStrategySection(days);
+    loadUnrepliedBadge();
 
   }).catch(function(e) {
     document.getElementById('overviewContent').innerHTML = '<div class="loading" style="color:#ef4444;">오류: ' + e.message + '</div>';
