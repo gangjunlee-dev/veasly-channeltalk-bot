@@ -1123,4 +1123,164 @@ router.get('/auto-upgrade/report', function(req, res) {
   }
 });
 
+
+// TEMP: file upload endpoint
+router.post('/upload-file', function(req, res) {
+  var chunks = [];
+  req.on('data', function(c) { chunks.push(c); });
+  req.on('end', function() {
+    var buf = Buffer.concat(chunks);
+    require('fs').writeFileSync(require('path').join(__dirname, '..', 'data', 'export.xlsx'), buf);
+    res.json({ success: true, bytes: buf.length });
+    console.log('[UPLOAD] File saved:', buf.length, 'bytes');
+  });
+});
+
+
+// 미응답 opened 채팅 목록
+router.get('/unreplied-chats', async function(req, res) {
+  try {
+    var https = require('https');
+    var results = [];
+    var states = ['opened'];
+    
+    function fetchChats(state, after) {
+      return new Promise(function(resolve, reject) {
+        var path = '/open/v5/user-chats?limit=50&sortOrder=desc&state=' + state + (after ? '&after=' + after : '');
+        https.get({
+          hostname: 'api.channel.io',
+          path: path,
+          headers: {
+            'x-access-key': process.env.CHANNEL_ACCESS_KEY || '69d224cf1096da048a55',
+            'x-access-secret': process.env.CHANNEL_ACCESS_SECRET || '4c6c9ab20f5be3dd319eec0a8d583c93'
+          }
+        }, function(r) {
+          var b = '';
+          r.on('data', function(d) { b += d; });
+          r.on('end', function() {
+            try { resolve(JSON.parse(b)); } catch(e) { reject(e); }
+          });
+        }).on('error', reject);
+      });
+    }
+
+    function fetchMessages(chatId) {
+      return new Promise(function(resolve, reject) {
+        https.get({
+          hostname: 'api.channel.io',
+          path: '/open/v5/user-chats/' + chatId + '/messages?limit=5&sortOrder=desc',
+          headers: {
+            'x-access-key': process.env.CHANNEL_ACCESS_KEY || '69d224cf1096da048a55',
+            'x-access-secret': process.env.CHANNEL_ACCESS_SECRET || '4c6c9ab20f5be3dd319eec0a8d583c93'
+          }
+        }, function(r) {
+          var b = '';
+          r.on('data', function(d) { b += d; });
+          r.on('end', function() {
+            try { resolve(JSON.parse(b)); } catch(e) { reject(e); }
+          });
+        }).on('error', reject);
+      });
+    }
+
+    // opened 채팅 수집 (최대 200건)
+    var allChats = [];
+    var after = null;
+    for (var page = 0; page < 4; page++) {
+      var data = await fetchChats('opened', after);
+      var chats = data.userChats || [];
+      allChats = allChats.concat(chats);
+      if (chats.length < 50 || !data.next) break;
+      after = data.next;
+      await new Promise(function(r) { setTimeout(r, 200); });
+    }
+
+    // 각 채팅의 마지막 메시지 확인
+    var unreplied = [];
+    for (var i = 0; i < allChats.length; i++) {
+      var chat = allChats[i];
+      if (!chat.userLastMessageId) continue;
+
+      try {
+        var msgData = await fetchMessages(chat.id);
+        var msgs = msgData.messages || [];
+        if (msgs.length === 0) continue;
+
+        var lastMsg = msgs[0];
+        var lastPersonType = lastMsg.personType || '';
+
+        // 마지막 메시지가 유저인 경우 = 미응답
+        if (lastPersonType === 'user' || lastPersonType === 'endUser') {
+          var text = '';
+          if (lastMsg.blocks && lastMsg.blocks.length > 0) {
+            text = lastMsg.blocks.map(function(bl) { return bl.value || ''; }).join(' ').substring(0, 150);
+          } else if (lastMsg.plainText) {
+            text = String(lastMsg.plainText).substring(0, 150);
+          }
+
+          var waitMinutes = Math.round((Date.now() - (lastMsg.createdAt || chat.updatedAt || Date.now())) / 60000);
+
+          unreplied.push({
+            chatId: chat.id,
+            name: chat.name || '(이름없음)',
+            state: chat.state,
+            assigneeId: chat.assigneeId || null,
+            lastUserMessage: text || '(이미지/스티커)',
+            lastMessageTime: new Date(lastMsg.createdAt || chat.updatedAt).toISOString(),
+            waitingMinutes: waitMinutes,
+            waitingHours: Math.round(waitMinutes / 60 * 10) / 10,
+            createdAt: new Date(chat.createdAt).toISOString(),
+            priority: chat.priority || 'medium',
+            page: chat.source ? chat.source.url : ''
+          });
+        }
+      } catch(e) { /* skip */ }
+
+      if (i % 10 === 9) await new Promise(function(r) { setTimeout(r, 150); });
+    }
+
+    // 대기시간 순 정렬 (오래 기다린 순)
+    // 중복 제거
+var seen = {};
+unreplied = unreplied.filter(function(u) { if (seen[u.chatId]) return false; seen[u.chatId] = true; return true; });
+unreplied.sort(function(a, b) { return b.waitingMinutes - a.waitingMinutes; });
+
+    // 매니저 매핑
+    var mgrMap = {};
+    try {
+      var mgrData = JSON.parse(fs.readFileSync(require('path').join(__dirname, '..', 'data', 'managers.json'), 'utf8'));
+      if (Array.isArray(mgrData)) {
+        mgrData.forEach(function(m) { mgrMap[m.id] = m.name; });
+      }
+    } catch(e) {}
+
+    unreplied.forEach(function(u) {
+      u.assigneeName = mgrMap[u.assigneeId] || u.assigneeId || '미배정';
+      // 긴급도
+      if (u.waitingMinutes > 1440) u.urgency = 'critical';
+      else if (u.waitingMinutes > 480) u.urgency = 'high';
+      else if (u.waitingMinutes > 120) u.urgency = 'medium';
+      else u.urgency = 'low';
+    });
+
+    res.json({
+      success: true,
+      timestamp: new Date().toISOString(),
+      summary: {
+        totalOpened: allChats.length,
+        unreplied: unreplied.length,
+        critical: unreplied.filter(function(u) { return u.urgency === 'critical'; }).length,
+        high: unreplied.filter(function(u) { return u.urgency === 'high'; }).length,
+        medium: unreplied.filter(function(u) { return u.urgency === 'medium'; }).length,
+        low: unreplied.filter(function(u) { return u.urgency === 'low'; }).length,
+        avgWaitHours: unreplied.length > 0 ? Math.round(unreplied.reduce(function(s, u) { return s + u.waitingHours; }, 0) / unreplied.length * 10) / 10 : 0
+      },
+      chats: unreplied
+    });
+  } catch(err) {
+    console.error('[UnrepliedChats] Error:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 module.exports = router;
