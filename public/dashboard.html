@@ -322,6 +322,9 @@ var cachedData = {};
 function switchTab(name) {
   document.querySelectorAll('.tab').forEach(function(t) { t.classList.remove('active'); });
   document.querySelectorAll('.tab-content').forEach(function(t) { t.classList.remove('active'); });
+  // 미응답 탭에서는 기간 선택 숨기기
+  var periodBar = document.getElementById('periodBar');
+  if (periodBar) periodBar.style.display = (name === 'unreplied') ? 'none' : 'flex';
   event.target.classList.add('active');
   document.getElementById('tab-' + name).classList.add('active');
   if (name === 'managers' && !cachedData.mgr) loadManagerData();
