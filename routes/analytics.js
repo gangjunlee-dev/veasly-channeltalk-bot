@@ -1183,10 +1183,31 @@ router.get('/unreplied-chats', async function(req, res) {
       });
     }
 
+
+    function fetchChats2(state2, after2) {
+      return new Promise(function(resolve, reject) {
+        var path2 = '/open/v5/user-chats?limit=50&sortOrder=desc&state=' + state2 + (after2 ? '&after=' + after2 : '');
+        https.get({
+          hostname: 'api.channel.io',
+          path: path2,
+          headers: {
+            'x-access-key': process.env.CHANNEL_ACCESS_KEY || '69d224cf1096da048a55',
+            'x-access-secret': process.env.CHANNEL_ACCESS_SECRET || '4c6c9ab20f5be3dd319eec0a8d583c93'
+          }
+        }, function(r) {
+          var b = '';
+          r.on('data', function(d) { b += d; });
+          r.on('end', function() {
+            try { resolve(JSON.parse(b)); } catch(e) { reject(e); }
+          });
+        }).on('error', reject);
+      });
+    }
+
     // opened 채팅 수집 (최대 200건)
     var allChats = [];
     var after = null;
-    for (var page = 0; page < 4; page++) {
+    for (var page = 0; page < 10; page++) {
       var data = await fetchChats('opened', after);
       var chats = data.userChats || [];
       allChats = allChats.concat(chats);
@@ -1199,7 +1220,8 @@ router.get('/unreplied-chats', async function(req, res) {
     var unreplied = [];
     for (var i = 0; i < allChats.length; i++) {
       var chat = allChats[i];
-      if (!chat.userLastMessageId) continue;
+      // 에스컬레이션 건도 체크하기 위해 조건 완화
+      // if (!chat.userLastMessageId) continue;
 
       try {
         var msgData = await fetchMessages(chat.id);
@@ -1209,8 +1231,33 @@ router.get('/unreplied-chats', async function(req, res) {
         var lastMsg = msgs[0];
         var lastPersonType = lastMsg.personType || '';
 
-        // 마지막 메시지가 유저인 경우 = 미응답
+        // === 미응답 판단 로직 (확장) ===
+        var isUnreplied = false;
+        var unrepliedType = '';
+        
+        // 케이스1: 마지막 메시지가 고객 → 아무도 응답 안 함
         if (lastPersonType === 'user' || lastPersonType === 'endUser') {
+          isUnreplied = true;
+          unrepliedType = 'no_response';
+        }
+        // 케이스2: 봇이 에스컬레이션 안내 후 매니저 미응답
+        else if (lastPersonType === 'bot') {
+          var botText = '';
+          if (lastMsg.blocks && lastMsg.blocks.length > 0) {
+            botText = lastMsg.blocks.map(function(bl) { return bl.value || ''; }).join(' ');
+          } else if (lastMsg.plainText) {
+            botText = String(lastMsg.plainText);
+          }
+          var escKeywords = ['轉接客服', '轉接', '客服人員', '確認一下', '先為您轉接', '담당자', '연결해', 'connect you', 'support team', '正在為您轉接', '幫您確認'];
+          var hasEscalation = escKeywords.some(function(kw) { return botText.includes(kw); });
+          var hasManagerReply = msgs.some(function(m) { return m.personType === 'manager'; });
+          if (hasEscalation && !hasManagerReply) {
+            isUnreplied = true;
+            unrepliedType = 'escalation_pending';
+          }
+        }
+        
+        if (isUnreplied) {
           var text = '';
           if (lastMsg.blocks && lastMsg.blocks.length > 0) {
             text = lastMsg.blocks.map(function(bl) { return bl.value || ''; }).join(' ').substring(0, 150);
@@ -1225,6 +1272,7 @@ router.get('/unreplied-chats', async function(req, res) {
             name: chat.name || '(이름없음)',
             state: chat.state,
             assigneeId: chat.assigneeId || null,
+            unrepliedType: unrepliedType || 'no_response',
             lastUserMessage: text || '(이미지/스티커)',
             lastMessageTime: new Date(lastMsg.createdAt || chat.updatedAt).toISOString(),
             waitingMinutes: waitMinutes,
@@ -1242,6 +1290,66 @@ router.get('/unreplied-chats', async function(req, res) {
     // 대기시간 순 정렬 (오래 기다린 순)
     // 중복 제거
 var seen = {};
+
+    // === 방치 자동종료 건 수집 (최근 closed 중 고객 메시지 방치 후 종료) ===
+    try {
+      var closedChats = [];
+      var closedAfter = null;
+      for (var cp = 0; cp < 3; cp++) {
+        var cPath = '/open/v5/user-chats?limit=50&sortOrder=desc&state=closed' + (closedAfter ? '&after=' + closedAfter : '');
+        var cData = await fetchChats2('closed', closedAfter);
+        var cList = cData.userChats || [];
+        closedChats = closedChats.concat(cList);
+        if (cList.length < 50 || !cData.next) break;
+        closedAfter = cData.next;
+        await new Promise(function(r) { setTimeout(r, 200); });
+      }
+      // 최근 7일 내 종료건만 (168시간)
+      var sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+      closedChats = closedChats.filter(function(c) { return (c.updatedAt || 0) > sevenDaysAgo; });
+      
+      for (var ci = 0; ci < closedChats.length; ci++) {
+        var cc = closedChats[ci];
+        try {
+          var cmData = await fetchMessages(cc.id);
+          var cMsgs = cmData.messages || [];
+          if (cMsgs.length === 0) continue;
+          var lastReal = null;
+          for (var cj = 0; cj < cMsgs.length; cj++) {
+            if (cMsgs[cj].personType !== 'system') { lastReal = cMsgs[cj]; break; }
+          }
+          if (!lastReal) continue;
+          if (lastReal.personType === 'user' || lastReal.personType === 'endUser') {
+            var cText = '';
+            if (lastReal.blocks && lastReal.blocks.length > 0) {
+              cText = lastReal.blocks.map(function(bl) { return bl.value || ''; }).join(' ').substring(0, 150);
+            } else if (lastReal.plainText) {
+              cText = String(lastReal.plainText).substring(0, 150);
+            }
+            unreplied.push({
+              chatId: cc.id,
+              name: cc.name || '(이름없음)',
+              state: 'closed',
+              unrepliedType: 'abandoned_closed',
+              assigneeId: cc.assigneeId || null,
+              lastUserMessage: cText || '(이미지/스티커)',
+              lastMessageTime: new Date(lastReal.createdAt || cc.updatedAt).toISOString(),
+              waitingMinutes: Math.round((cc.updatedAt - (lastReal.createdAt || cc.updatedAt)) / 60000),
+              waitingHours: Math.round((cc.updatedAt - (lastReal.createdAt || cc.updatedAt)) / 3600000 * 10) / 10,
+              createdAt: new Date(cc.createdAt).toISOString(),
+              closedAt: new Date(cc.updatedAt).toISOString(),
+              priority: 'high',
+              page: cc.source ? cc.source.url : ''
+            });
+          }
+          if (ci % 10 === 9) await new Promise(function(r) { setTimeout(r, 150); });
+        } catch(e) {}
+      }
+      console.log('[Unreplied] Found', closedChats.length, 'recent closed chats, abandoned:', unreplied.filter(function(u){return u.unrepliedType==='abandoned_closed'}).length);
+    } catch(abandonErr) {
+      console.error('[Unreplied] Abandoned closed scan error:', abandonErr.message);
+    }
+
 unreplied = unreplied.filter(function(u) { if (seen[u.chatId]) return false; seen[u.chatId] = true; return true; });
 unreplied.sort(function(a, b) { return b.waitingMinutes - a.waitingMinutes; });
 
@@ -1273,6 +1381,9 @@ unreplied.sort(function(a, b) { return b.waitingMinutes - a.waitingMinutes; });
         high: unreplied.filter(function(u) { return u.urgency === 'high'; }).length,
         medium: unreplied.filter(function(u) { return u.urgency === 'medium'; }).length,
         low: unreplied.filter(function(u) { return u.urgency === 'low'; }).length,
+        escalationPending: unreplied.filter(function(u) { return u.unrepliedType === 'escalation_pending'; }).length,
+        noResponse: unreplied.filter(function(u) { return u.unrepliedType === 'no_response'; }).length,
+        abandonedClosed: unreplied.filter(function(u) { return u.unrepliedType === 'abandoned_closed'; }).length,
         avgWaitHours: unreplied.length > 0 ? Math.round(unreplied.reduce(function(s, u) { return s + u.waitingHours; }, 0) / unreplied.length * 10) / 10 : 0
       },
       chats: unreplied
