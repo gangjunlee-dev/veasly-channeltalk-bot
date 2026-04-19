@@ -1207,7 +1207,7 @@ router.get('/unreplied-chats', async function(req, res) {
     // opened 채팅 수집 (최대 200건)
     var allChats = [];
     var after = null;
-    for (var page = 0; page < 10; page++) {
+    for (var page = 0; page < 4; page++) {
       var data = await fetchChats('opened', after);
       var chats = data.userChats || [];
       allChats = allChats.concat(chats);
@@ -1225,6 +1225,7 @@ router.get('/unreplied-chats', async function(req, res) {
 
       try {
         var msgData = await fetchMessages(chat.id);
+        await new Promise(function(r) { setTimeout(r, 300); });
         var msgs = msgData.messages || [];
         if (msgs.length === 0) continue;
 
