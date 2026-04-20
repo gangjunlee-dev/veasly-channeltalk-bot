@@ -6,6 +6,10 @@ var mgrStats = require('../lib/manager-stats');
 var bizHours = require('../lib/business-hours');
 var aiLog = require('../lib/ai-log');
 var router = express.Router();
+
+// === 미응답 캐시 (5분) ===
+var unrepliedCache = { data: null, timestamp: 0 };
+var UNREPLIED_CACHE_TTL = 5 * 60 * 1000; // 5분
 var analytics = require('../lib/analytics');
 var channeltalk = require('../lib/channeltalk');
 
@@ -1174,6 +1178,12 @@ router.post('/upload-file', function(req, res) {
 
 // 미응답 opened 채팅 목록
 router.get('/unreplied-chats', async function(req, res) {
+  // 캐시 체크
+  var forceRefresh = req.query.refresh === 'true';
+  if (!forceRefresh && unrepliedCache.data && (Date.now() - unrepliedCache.timestamp) < UNREPLIED_CACHE_TTL) {
+    return res.json(unrepliedCache.data);
+  }
+
   try {
     var https = require('https');
     var results = [];
