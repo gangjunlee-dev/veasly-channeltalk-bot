@@ -176,24 +176,42 @@ router.get('/faq-log', async function(req, res) {
 router.get('/auto-close', async function(req, res) {
   try {
     var csatSentFile = require('path').join(__dirname, '..', 'data', 'csat-sent.json');
+    var csatResultsFile = require('path').join(__dirname, '..', 'data', 'csat-results.json');
     var csatSent = {};
-    if (fs.existsSync(csatSentFile)) {
-      csatSent = JSON.parse(fs.readFileSync(csatSentFile, 'utf8'));
-    }
+    var csatResults = [];
+    if (fs.existsSync(csatSentFile)) csatSent = JSON.parse(fs.readFileSync(csatSentFile, 'utf8'));
+    try { csatResults = JSON.parse(fs.readFileSync(csatResultsFile, 'utf8')); } catch(e2) {}
+
+    var respondedIds = {};
+    csatResults.forEach(function(r) { respondedIds[r.chatId] = true; });
+
+    var now = Date.now();
     var pendingChats = [];
+    var expiredCount = 0;
+    var respondedCount = 0;
+
     Object.keys(csatSent).forEach(function(k) {
-      try {
-        var val = csatSent[k];
-        var ts = typeof val === 'object' ? (val.sentAt || val.timestamp || JSON.stringify(val)) : val;
-        var d = new Date(ts);
-        pendingChats.push({ chatId: k, sentAt: isNaN(d.getTime()) ? String(ts) : d.toISOString() });
-      } catch(e2) {
-        pendingChats.push({ chatId: k, sentAt: String(csatSent[k]) });
-      }
+      if (respondedIds[k]) { respondedCount++; return; }
+      var ts = csatSent[k];
+      var age = now - ts;
+      if (age > 172800000) { expiredCount++; return; } // 48시간 초과 = 만료
+      var d = new Date(ts);
+      var waitH = Math.round(age / 3600000 * 10) / 10;
+      pendingChats.push({
+        chatId: k,
+        sentAt: d.toISOString(),
+        waitingHours: waitH,
+        autoCloseAt: new Date(ts + 172800000).toISOString()
+      });
     });
+
+    pendingChats.sort(function(a, b) { return b.waitingHours - a.waitingHours; });
+
     res.json({
       success: true,
       csatPending: pendingChats.length,
+      responded: respondedCount,
+      expired: expiredCount,
       pendingChats: pendingChats
     });
   } catch(e) {
