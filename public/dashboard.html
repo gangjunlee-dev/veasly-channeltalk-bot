@@ -677,24 +677,103 @@ function loadStrategySection(days) {
       h += '<div class="prob-sub">'+pr.sub+'</div></div></div>';
     }
     h += '</div>';
-    // 액션
+    // 액션 플랜 (실시간 데이터 기반 자동 생성)
     h += '<div class="strat-panel"><h3>🎯 액션 플랜</h3>';
-    // 실시간 데이터 기반 액션 플랜
     var actions = [];
-    // 1. 에스컬레이션
-    var escSt = escRate <= 30 ? 'done' : escRate <= 40 ? 'prog' : 'wait';
-    actions.push({st:escSt, title:'에스컬레이션 '+escRate+'%→30%', desc:'FAQ 강화, AI confidence 튜닝', target:'AI처리 70%+'});
-    // 2. FRT/NoReply
-    var frtSt = frtRateD >= 80 ? 'done' : frtRateD >= 50 ? 'prog' : 'wait';
-    actions.push({st:frtSt, title:'FRT '+frtRateD+'%→80%', desc:'오프시간 AI선응답, 알림 체계', target:'NoReply '+noReplyR+'%→15%'});
-    // 3. CSAT
-    var csatSt = (csatAvgD >= 4.0) ? 'done' : (csatAvgD >= 3.0) ? 'prog' : 'wait';
-    actions.push({st:csatSt, title:'CSAT '+(csatAvgD>0?csatAvgD.toFixed(1):'N/A')+'→4.0', desc:'응답 품질 강화, 설문률 확대 (현재 '+csatTotalD+'건)', target:'CSAT 4.0 이상'});
-    // 4. CES/FCR
-    var dataSt = (cesCountD >= 20 && fcrResolvedD >= 10) ? 'done' : (cesCountD >= 5 || fcrResolvedD >= 5) ? 'prog' : 'wait';
-    actions.push({st:dataSt, title:'CES/FCR 데이터 수집', desc:'CES '+cesCountD+'/20건, FCR '+fcrResolvedD+'/10건', target:'측정 정확도 향상'});
-    // 5. 비즈니스 KPI
-    actions.push({st:'wait', title:'비즈니스 KPI 연동', desc:'재구매율, 환불율 연동', target:'매출 상관분석'});
+
+    // --- 에스컬레이션 ---
+    if (escRate > 30) {
+      var escSt = escRate > 40 ? 'wait' : 'prog';
+      var escGap = escRate - 30;
+      actions.push({st:escSt, priority: escRate > 40 ? 0 : 1, title:'에스컬레이션 '+escRate+'%→30%',
+        desc:'현재 '+escRate+'%로 목표 대비 '+escGap+'%p 초과. FAQ 미커버 주제 보강, AI confidence threshold 조정 필요',
+        target:'AI 자동처리율 70%+ 달성'});
+    } else {
+      actions.push({st:'done', priority:9, title:'에스컬레이션 '+escRate+'% ✅', desc:'목표 30% 이하 달성', target:'유지 관리'});
+    }
+
+    // --- FRT (첫 응답 속도) ---
+    var bizFrt = (m.responseTime||{}).bizWithin30MinRate || 0;
+    var avgMin24 = (m.responseTime||{}).avgMinutes || 0;
+    var bizAvgMin = (m.responseTime||{}).bizAvgMinutes || 0;
+    if (frtRateD < 50) {
+      actions.push({st:'wait', priority:0, title:'FRT 30분내 '+frtRateD+'%→80%',
+        desc:'24h 평균 '+avgMin24+'분 / 영업시간 평균 '+bizAvgMin+'분. 오프시간(18~10시) AI 선응답 체계 구축 시급',
+        target:'영업시간 FRT '+bizFrt+'%→90%, 24h FRT→80%'});
+    } else if (frtRateD < 80) {
+      actions.push({st:'prog', priority:1, title:'FRT 30분내 '+frtRateD+'%→80%',
+        desc:'개선 중. 영업 '+bizFrt+'% / 24h '+frtRateD+'%. 알림 체계 강화',
+        target:'영업시간 FRT→90%'});
+    } else {
+      actions.push({st:'done', priority:9, title:'FRT '+frtRateD+'% ✅', desc:'목표 80% 달성', target:'유지 관리'});
+    }
+
+    // --- NoReply (미응답) ---
+    if (noReplyR > 15) {
+      var nrSt = noReplyR > 25 ? 'wait' : 'prog';
+      actions.push({st:nrSt, priority: noReplyR > 25 ? 0 : 2, title:'미응답(NoReply) '+noReplyR+'%→15%',
+        desc:'오프시간 자동응답 미적용 구간 점검. 현재 '+((m.noReplyClose||{}).count||0)+'/'+((m.noReplyClose||{}).total||0)+'건 미응답',
+        target:'야간/주말 AI 커버리지 100%'});
+    } else if (noReplyR > 10) {
+      actions.push({st:'prog', priority:3, title:'미응답 '+noReplyR+'%→10%',
+        desc:'목표 근접. 잔여 미응답 패턴 분석 필요', target:'미응답 10% 이하'});
+    } else {
+      actions.push({st:'done', priority:9, title:'미응답 '+noReplyR+'% ✅', desc:'목표 달성', target:'유지 관리'});
+    }
+
+    // --- CSAT ---
+    if (csatAvgD > 0 && csatAvgD < 3.0) {
+      actions.push({st:'wait', priority:0, title:'CSAT '+csatAvgD.toFixed(1)+'/5.0→4.0',
+        desc:'심각 수준. 응답 품질 전면 점검 필요. 현재 '+csatTotalD+'건 응답',
+        target:'불만족 원인 TOP3 파악 → 개별 개선'});
+    } else if (csatAvgD > 0 && csatAvgD < 4.0) {
+      actions.push({st:'prog', priority:1, title:'CSAT '+csatAvgD.toFixed(1)+'/5.0→4.0',
+        desc:'개선 중. '+(4.0-csatAvgD).toFixed(1)+'점 부족. 응답 '+csatTotalD+'건',
+        target:'응답 톤/정확도 개선, 설문 20건+ 확보'});
+    } else if (csatAvgD >= 4.0) {
+      actions.push({st:'done', priority:9, title:'CSAT '+csatAvgD.toFixed(1)+' ✅', desc:'목표 달성', target:'유지 관리'});
+    }
+    if (csatTotalD < 20 && csatTotalD > 0) {
+      actions.push({st:'prog', priority:3, title:'CSAT 설문 확대 ('+csatTotalD+'/20건)',
+        desc:'샘플 부족으로 신뢰도 낮음. 자동 설문 발송률 확대',
+        target:'주간 20건+ 확보'});
+    }
+
+    // --- FCR (첫 해결률) ---
+    var fcrRateD = (m.fcr||{}).rate || 0;
+    var fcrResolvedD = (m.fcr||{}).resolved || 0;
+    var fcrReopenedD = (m.fcr||{}).reopened || 0;
+    if (fcrResolvedD >= 10) {
+      if (fcrRateD < 70) {
+        actions.push({st:'wait', priority:1, title:'FCR '+fcrRateD+'%→80%',
+          desc:'재문의 '+fcrReopenedD+'건 발생. 한번에 해결 못하는 유형 분석 필요',
+          target:'재문의율 20% 이하'});
+      } else if (fcrRateD < 80) {
+        actions.push({st:'prog', priority:2, title:'FCR '+fcrRateD+'%→80%',
+          desc:'해결 '+fcrResolvedD+'건 / 재문의 '+fcrReopenedD+'건',
+          target:'FCR 80% 달성'});
+      } else {
+        actions.push({st:'done', priority:9, title:'FCR '+fcrRateD+'% ✅', desc:'목표 달성', target:'유지 관리'});
+      }
+    }
+
+    // --- CES ---
+    if (cesCountD < 10) {
+      actions.push({st:'prog', priority:3, title:'CES 설문 수집 ('+cesCountD+'/10건)',
+        desc:'고객 노력도 측정 데이터 부족. CES 설문 자동 발송 설정 필요',
+        target:'주간 10건+ → 고객 노력도 분석 가능'});
+    } else {
+      var cesAvg = (m.ces||{}).avgScore || 0;
+      if (cesAvg > 3) {
+        actions.push({st:'wait', priority:1, title:'CES '+cesAvg.toFixed(1)+'→3.0 이하',
+          desc:'고객이 문제 해결에 많은 노력을 들이고 있음', target:'셀프서비스 강화'});
+      }
+    }
+
+    // 우선순위 정렬 (wait→prog→done)
+    actions.sort(function(a,b) { return a.priority - b.priority; });
+    actions = actions.slice(0, 5);
+
     for (var a=0; a<actions.length; a++) {
       var act = actions[a];
       h += '<div class="act-item"><div class="act-num '+act.st+'">'+(a+1)+'</div>';
