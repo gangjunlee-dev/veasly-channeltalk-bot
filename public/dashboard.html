@@ -1740,44 +1740,71 @@ function insightsCard(r) {
   return h;
 }
 
+var _reviewData = null; // 전역 리뷰 데이터 저장
+
 function showReview(encoded) {
-  var c = JSON.parse(decodeURIComponent(encoded));
-  var html = '';
-  html += '<div style="margin-bottom:16px;padding:12px;background:var(--bg-primary);border-radius:8px;border-left:3px solid #3b82f6;">';
-  html += '<div style="color:var(--text-secondary);font-size:12px;margin-bottom:4px;">고객 질문 (' + (c.lang || '-') + ') | ' + (c.timestamp || '').substring(0, 19).replace('T', ' ') + '</div>';
-  html += '<div style="color:var(--text-primary);font-size:15px;">' + (c.userMessage || '-') + '</div>';
-  if (c.userName) html += '<div style="color:var(--text-secondary);font-size:11px;margin-top:4px;">고객: ' + c.userName + '</div>';
-  html += '</div>';
-  html += '<div style="margin-bottom:16px;padding:12px;background:var(--bg-primary);border-radius:8px;border-left:3px solid ' + (c.escalated ? '#ef4444' : '#22c55e') + ';">';
-  html += '<div style="color:var(--text-secondary);font-size:12px;margin-bottom:4px;">AI 답변 (' + (c.type || '-') + ')' + (c.escalated ? ' <span style="color:#ef4444">에스컬레이션</span>' : '') + '</div>';
-  html += '<div style="color:var(--text-primary);font-size:14px;white-space:pre-wrap;line-height:1.6;">' + (c.aiResponse || '-') + '</div>';
-  html += '</div>';
-  html += '<div style="margin-bottom:12px;color:var(--text-secondary);font-size:13px;">이 AI 답변의 품질을 평가해주세요:</div>';
-  html += '<div style="display:flex;gap:8px;margin-bottom:16px;">';
-  html += '<button onclick="submitReview(\'' + encodeURIComponent(JSON.stringify(c)) + '\', \'good\')" style="flex:1;padding:12px;background:#166534;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:14px;">✅ 정확함</button>';
-  html += '<button onclick="submitReview(\'' + encodeURIComponent(JSON.stringify(c)) + '\', \'bad\')" style="flex:1;padding:12px;background:#991b1b;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:14px;">❌ 부정확</button>';
-  html += '<button onclick="submitReview(\'' + encodeURIComponent(JSON.stringify(c)) + '\', \'fix\')" style="flex:1;padding:12px;background:#92400e;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:14px;">🔧 수정필요</button>';
-  html += '</div>';
-  html += '<textarea id="reviewComment" placeholder="(선택) 코멘트" style="width:100%;height:60px;background:var(--bg-primary);color:var(--text-primary);border:1px solid var(--border-primary);border-radius:8px;padding:8px;font-size:13px;resize:none;box-sizing:border-box;"></textarea>';
-  document.getElementById('reviewContent').innerHTML = html;
+  try {
+    _reviewData = JSON.parse(decodeURIComponent(encoded));
+  } catch(e) {
+    console.error('showReview parse error:', e);
+    return;
+  }
+  var c = _reviewData;
+  var h = '';
+  h += '<div style="margin-bottom:16px;padding:12px;background:var(--bg-primary);border-radius:8px;border-left:3px solid #3b82f6;">';
+  h += '<div style="color:var(--text-secondary);font-size:12px;margin-bottom:4px;">고객 질문 (' + (c.lang || '-') + ') | ' + (c.timestamp || '').substring(0, 19).replace('T', ' ') + '</div>';
+  h += '<div style="color:var(--text-primary);font-size:15px;white-space:pre-wrap;">' + (c.userMessage || '-') + '</div>';
+  if (c.userName) h += '<div style="color:var(--text-secondary);font-size:11px;margin-top:4px;">고객: ' + c.userName + '</div>';
+  h += '</div>';
+  h += '<div style="margin-bottom:16px;padding:12px;background:var(--bg-primary);border-radius:8px;border-left:3px solid ' + (c.escalated ? '#ef4444' : '#22c55e') + ';">';
+  h += '<div style="color:var(--text-secondary);font-size:12px;margin-bottom:4px;">AI 답변 (' + (c.type || '-') + ')' + (c.escalated ? ' <span style="color:#ef4444">에스컬레이션</span>' : '') + '</div>';
+  h += '<div style="color:var(--text-primary);font-size:14px;white-space:pre-wrap;line-height:1.6;">' + (c.aiResponse || '-') + '</div>';
+  if (c.confidence > 0) h += '<div style="color:var(--text-secondary);font-size:11px;margin-top:6px;">Confidence: ' + c.confidence.toFixed(2) + '</div>';
+  h += '</div>';
+  h += '<div style="margin-bottom:12px;color:var(--text-secondary);font-size:13px;">이 AI 답변의 품질을 평가해주세요:</div>';
+  h += '<div style="display:flex;gap:8px;margin-bottom:16px;">';
+  h += '<button onclick="doReview(\x27good\x27)" style="flex:1;padding:12px;background:#166534;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:14px;">✅ 정확함</button>';
+  h += '<button onclick="doReview(\x27bad\x27)" style="flex:1;padding:12px;background:#991b1b;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:14px;">❌ 부정확</button>';
+  h += '<button onclick="doReview(\x27fix\x27)" style="flex:1;padding:12px;background:#92400e;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:14px;">🔧 수정필요</button>';
+  h += '</div>';
+  h += '<textarea id="reviewComment" placeholder="(선택) 코멘트 - 어떤 점이 잘못되었는지 적어주세요" style="width:100%;height:70px;background:var(--bg-primary);color:var(--text-primary);border:1px solid var(--border-primary);border-radius:8px;padding:10px;font-size:13px;resize:none;box-sizing:border-box;"></textarea>';
+  document.getElementById('reviewContent').innerHTML = h;
   document.getElementById('reviewModal').style.display = 'block';
 }
+
 function closeReview() { document.getElementById('reviewModal').style.display = 'none'; }
-function submitReview(encoded, rating) {
-  var c = JSON.parse(decodeURIComponent(encoded));
-  var comment = document.getElementById('reviewComment').value;
+
+function doReview(rating) {
+  if (!_reviewData) return;
+  var c = _reviewData;
+  var comment = document.getElementById('reviewComment') ? document.getElementById('reviewComment').value : '';
+  var btn = event.target;
+  btn.disabled = true;
+  btn.textContent = '처리중...';
   fetch('/api/analytics/ai-review', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ chatId: c.chatId, timestamp: c.timestamp, rating: rating, comment: comment, userMessage: c.userMessage, aiResponse: c.aiResponse })
   }).then(function(r) { return r.json(); }).then(function(d) {
     if (d.success) {
-      var msgs = { good: '✅ 정확함으로 평가됨', bad: '❌ 부정확으로 평가됨', fix: '🔧 수정필요로 평가됨' };
-      document.getElementById('reviewContent').innerHTML = '<div style="text-align:center;padding:40px;"><div style="font-size:48px;margin-bottom:16px;">' + (rating === 'good' ? '✅' : rating === 'bad' ? '❌' : '🔧') + '</div><div style="color:var(--text-primary);font-size:18px;">' + msgs[rating] + '</div></div>';
-      setTimeout(closeReview, 1500);
+      var msgs = { good: '✅ 정확함으로 평가 완료', bad: '❌ 부정확으로 평가 완료', fix: '🔧 수정필요로 평가 완료' };
+      var emojis = { good: '✅', bad: '❌', fix: '🔧' };
+      document.getElementById('reviewContent').innerHTML = '<div style="text-align:center;padding:40px;"><div style="font-size:48px;margin-bottom:16px;">' + emojis[rating] + '</div><div style="color:var(--text-primary);font-size:18px;font-weight:600;">' + msgs[rating] + '</div><div style="color:var(--text-secondary);font-size:13px;margin-top:8px;">AI 학습에 반영됩니다</div></div>';
+      setTimeout(closeReview, 1800);
+      _reviewData = null;
+    } else {
+      btn.disabled = false;
+      btn.textContent = '재시도';
+      alert('저장 실패: ' + (d.error || '서버 오류'));
     }
-  }).catch(function(e) { alert('Error: ' + e.message); });
+  }).catch(function(e) {
+    btn.disabled = false;
+    btn.textContent = '재시도';
+    alert('네트워크 오류: ' + e.message);
+  });
 }
+
+function submitReview(encoded, rating) { doReview(rating); }
 
 // Card detail toggle
 function toggleMetricTip(el) {
