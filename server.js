@@ -19,8 +19,6 @@ app.use(express.static("public"));
 app.use(express.json());
 // Dashboard password protection
 app.get("/dashboard", function(req, res) {
-  res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
-  res.set('Pragma', 'no-cache');
   var auth = req.headers.authorization;
   if (!auth || auth.indexOf("Basic ") !== 0) {
     res.setHeader("WWW-Authenticate", 'Basic realm="VEASLY Dashboard"');
@@ -31,6 +29,8 @@ app.get("/dashboard", function(req, res) {
   var user = parts[0];
   var pass = parts.slice(1).join(":");
   if (user === (process.env.DASHBOARD_USER || "admin") && pass === (process.env.DASHBOARD_PASS || "veasly2026!")) {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+    res.set('Pragma', 'no-cache');
     return res.sendFile(require('path').join(__dirname, 'public', 'dashboard.html'));
   }
   res.setHeader("WWW-Authenticate", 'Basic realm="VEASLY Dashboard"');
