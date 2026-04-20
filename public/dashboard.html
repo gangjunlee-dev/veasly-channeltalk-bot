@@ -599,7 +599,7 @@ function loadStrategySection(days) {
     function sevClass(s) { return s >= 3 ? 'sev-green' : s >= 2.5 ? 'sev-yellow' : 'sev-red'; }
     var metrics = [
       {name:'NoReply', score:(bd.noReply||{}).score||0, icon:'⏰', detail:'미응답 '+((m.noReplyClose||{}).rate||0)+'% ('+((m.noReplyClose||{}).count||0)+'/'+((m.noReplyClose||{}).total||0)+')'},
-      {name:'FRT', score:(bd.frt||{}).score||0, icon:'⚡', detail:'30분내 '+((m.responseTime||{}).within30MinRate||0)+'% | 평균 '+((m.responseTime||{}).avgMinutes||0)+'분'},
+      {name:'FRT (24h)', score:(bd.frt||{}).score||0, icon:'⚡', detail:'30분내 '+((m.responseTime||{}).within30MinRate||0)+'% | 평균 '+((m.responseTime||{}).avgMinutes||0)+'분'},{name:'FRT (영업)', score:(bd.frt||{}).bizScore||0, icon:'🏢', detail:'30분내 '+((m.responseTime||{}).bizWithin30MinRate||0)+'% | 평균 '+((m.responseTime||{}).bizAvgMinutes||0)+'분'},
       {name:'FCR', score:(bd.fcr||{}).score||0, icon:'✅', detail:'해결 '+((m.fcr||{}).resolved||0)+'건 | 재문의 '+((m.fcr||{}).reopened||0)+'건'},
       {name:'CSAT', score:(bd.csat||{}).score||0, icon:'⭐', detail:'평균 '+(csatData&&(csatData.averageScore||csatData.average)?((csatData.averageScore||csatData.average)).toFixed(1):'N/A')+' | 응답 '+(csatData&&(csatData.totalResponses||csatData.total)?(csatData.totalResponses||csatData.total):0)+'건'},
       {name:'CES', score:(bd.ces||{}).score||0, icon:'🎯', detail:'평균 '+((m.ces||{}).avgScore||0)+' | 응답 '+((m.ces||{}).totalResponses||(m.ces||{}).count||0)+'건'}
@@ -638,7 +638,7 @@ function loadStrategySection(days) {
     if (noReplyR > 25) problems.push({sev:'crit', title:'NoReply 미응답 '+noReplyR+'%', sub:'목표 15% 이하. 오프시간 AI 강화 필요'});
     else if (noReplyR > 15) problems.push({sev:'warn', title:'NoReply 미응답 '+noReplyR+'%', sub:'목표 15%에 근접 중'});
     // FRT
-    if (frtRateD < 50) problems.push({sev:'crit', title:'FRT 30분내 '+frtRateD+'%', sub:'목표 80%. 평균 '+ ((m.responseTime||{}).avgMinutes||0) +'분'});
+    if (frtRateD < 50) problems.push({sev:'crit', title:'FRT 30분내 '+frtRateD+'% (영업: '+((m.responseTime||{}).bizWithin30MinRate||0)+'%)', sub:'목표 80%. 24h평균 '+ ((m.responseTime||{}).avgMinutes||0) +'분 / 영업평균 '+((m.responseTime||{}).bizAvgMinutes||0)+'분'});
     else if (frtRateD < 80) problems.push({sev:'warn', title:'FRT 30분내 '+frtRateD+'%', sub:'목표 80%. 개선 진행 중'});
     // CSAT
     if (csatAvgD > 0 && csatAvgD > 2.5) problems.push({sev:'crit', title:'CSAT 평균 '+csatAvgD.toFixed(1)+' (1=최고)', sub:'응답 '+csatTotalD+'건. 목표 2.0 이하'});
@@ -1333,7 +1333,8 @@ function loadCSScoreData() {
       // 5 Metric Breakdown
       html += '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:24px">';
       var metrics = [
-        { label: '첫 응답 속도', icon: '&#9889;', value: (d.responseTime ? d.responseTime.within30MinRate + '%' : 'N/A'), detail: '30분 내 응답 비율 (평균 ' + (d.responseTime ? d.responseTime.avgMinutes + '분' : '?') + ')', target: '>=80%', score: bd.frt ? bd.frt.score : 0 },
+        { label: '첫 응답 속도 (24h)', icon: '&#9889;', value: (d.responseTime ? d.responseTime.within30MinRate + '%' : 'N/A'), detail: '30분 내 응답 (평균 ' + (d.responseTime ? d.responseTime.avgMinutes + '분' : '?') + ')', target: '>=80%', score: bd.frt ? bd.frt.score : 0 },
+        { label: '첫 응답 속도 (영업시간)', icon: '&#127970;', value: (d.responseTime ? (d.responseTime.bizWithin30MinRate || 0) + '%' : 'N/A'), detail: '영업시간 기준 30분 내 (평균 ' + (d.responseTime ? (d.responseTime.bizAvgMinutes || 0) + '분' : '?') + ')', target: '>=80%', score: bd.frt ? (bd.frt.bizScore || 0) : 0 },
         { label: '첫 접촉 해결률', icon: '&#127919;', value: (d.fcr ? d.fcr.rate + '%' : 'N/A'), detail: d.fcr ? d.fcr.resolved + '건 해결 / ' + d.fcr.reopened + '건 재문의' : '', target: '>=70%', score: bd.fcr ? bd.fcr.score : 0 },
         { label: '고객 만족도', icon: '&#11088;', value: (bd.csat ? bd.csat.score.toFixed(1) : 'N/A'), detail: '/5.0', target: '>=3.5', score: bd.csat ? bd.csat.score : 0 },
         { label: '고객 노력 점수', icon: '&#128170;', value: (d.ces && d.ces.totalResponses > 0 ? d.ces.avgScore.toFixed(1) : '수집 중...'), detail: d.ces ? d.ces.totalResponses + '건 응답' : '데이터 수집 중', target: '>=3.5', score: bd.ces ? bd.ces.score : 0 },
@@ -1346,7 +1347,7 @@ function loadCSScoreData() {
         html += '<div style="font-size:11px;color:var(--text-secondary);margin-bottom:8px">' + m.label + '</div>';
         html += '<div style="font-size:28px;font-weight:700;color:var(--text-primary)">' + m.value + '</div>';
         html += '<div style="font-size:10px;color:var(--text-secondary)">' + m.detail + '</div>';
-        var csMetricTips = {'첫 응답 속도':'⚡ FRT: 고객 메시지 후 매니저 첫 응답까지 시간. 30분 이내 80% 목표. 가중치 20%','첫 접촉 해결률':'🎯 FCR: 1회 상담으로 해결된 비율. 72시간 내 재문의 시 미해결 집계. 70% 목표. 가중치 25%','고객 만족도':'⭐ CSAT: 1~5점 만족도. 1=최고. 3.5 이상 목표. 가중치 20%','고객 노력 점수':'💪 CES: 문제 해결 용이성. 높을수록 좋음. 3.5 이상 목표. 가중치 15%','미응답 종료율':'📭 매니저 미응답으로 자동 종료된 비율. 10% 이하 목표. 가중치 20%'};
+        var csMetricTips = {'첫 응답 속도 (24h)':'⚡ FRT(24h): 실시간 기준 첫 응답 시간. 고객 체감 대기시간. 30분 이내 80% 목표. 가중치 20%','첫 응답 속도 (영업시간)':'🏢 FRT(영업): 영업시간만 계산한 첫 응답 시간. 매니저 성과 평가용. 오프시간 문의는 다음 영업일부터 계산.','첫 접촉 해결률':'🎯 FCR: 1회 상담으로 해결된 비율. 72시간 내 재문의 시 미해결 집계. 70% 목표. 가중치 25%','고객 만족도':'⭐ CSAT: 1~5점 만족도. 1=최고. 3.5 이상 목표. 가중치 20%','고객 노력 점수':'💪 CES: 문제 해결 용이성. 높을수록 좋음. 3.5 이상 목표. 가중치 15%','미응답 종료율':'📭 매니저 미응답으로 자동 종료된 비율. 10% 이하 목표. 가중치 20%'};
         var tipText = csMetricTips[m.label] || '';
         html += '<div style="margin-top:8px;font-size:11px;color:' + mColor + ';font-weight:600">점수: ' + m.score.toFixed(1) + '/5 (목표 ' + m.target + ')</div>';
         if (tipText) { html += '<div style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid var(--border-primary);font-size:10px;color:var(--text-secondary);line-height:1.5" class="metric-tip">' + tipText + '</div>'; }
