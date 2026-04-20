@@ -192,7 +192,7 @@ router.get('/auto-close', async function(req, res) {
 
     Object.keys(csatSent).forEach(function(k) {
       if (respondedIds[k]) { respondedCount++; return; }
-      var ts = csatSent[k]; if (typeof ts === "string") ts = new Date(ts).getTime();
+      var ts = csatSent[k]; if (typeof ts === "object" && ts.sentAt) ts = ts.sentAt; if (typeof ts === "string") ts = new Date(ts).getTime(); if (typeof ts !== "number" || isNaN(ts)) return;
       var age = now - ts;
       if (age > 172800000) { expiredCount++; return; } // 48시간 초과 = 만료
       var d = new Date(ts);
