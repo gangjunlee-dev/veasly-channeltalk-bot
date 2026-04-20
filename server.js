@@ -19,6 +19,8 @@ app.use(express.static("public"));
 app.use(express.json());
 // Dashboard password protection
 app.get("/dashboard", function(req, res) {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.set('Pragma', 'no-cache');
   var auth = req.headers.authorization;
   if (!auth || auth.indexOf("Basic ") !== 0) {
     res.setHeader("WWW-Authenticate", 'Basic realm="VEASLY Dashboard"');
