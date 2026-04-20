@@ -1190,7 +1190,7 @@ function categoryChart(cats) {
   var items = [];
   var catKeys = Object.keys(cats);
   for (var i = 0; i < catKeys.length; i++) {
-    if (cats[catKeys[i]].count > 0) items.push({ key: catKeys[i], name: cats[catKeys[i]].nameKo || cats[catKeys[i]].name, count: cats[catKeys[i]].count });
+    if (cats[catKeys[i]].count > 0 && catKeys[i] !== 'sticker') items.push({ key: catKeys[i], name: cats[catKeys[i]].nameKo || cats[catKeys[i]].name, count: cats[catKeys[i]].count });
   }
   items.sort(function(a, b) { return b.count - a.count; });
   var max = items.length > 0 ? items[0].count : 1;
