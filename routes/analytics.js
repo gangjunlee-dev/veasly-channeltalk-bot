@@ -33,6 +33,7 @@ router.get('/report', async function(req, res) {
       userMessages: results.userMessages,
       botMessages: results.botMessages,
       managerMessages: results.managerMessages,
+      systemMessages: results.systemMessages,
       categories: results.categories,
       topKeywords: results.topKeywords,
       channelStats: results.channelStats,
