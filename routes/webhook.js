@@ -556,7 +556,7 @@ router.post('/channeltalk', async function(req, res) {
     var detectedLang = lang.detectLanguage(userText);
     // Override with ChannelTalk user language if text is ambiguous (numbers, order numbers, etc.)
     if (userLang && /^[a-zA-Z0-9\s\-\.\,\/\@\#]+$/.test(userText)) {
-      var langMap = {"ko": "ko", "ja": "ja", "en": "en", "zh": "zh-TW", "zh-TW": "zh-TW", "zh-CN": "zh-TW"};
+      var langMap = {"ko": "zh-TW", "ja": "ja", "en": "en", "zh": "zh-TW", "zh-TW": "zh-TW", "zh-CN": "zh-TW"};
       if (langMap[userLang]) detectedLang = langMap[userLang];
     }
     chatLanguage[chatId] = detectedLang;
