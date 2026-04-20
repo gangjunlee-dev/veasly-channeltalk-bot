@@ -477,6 +477,29 @@ router.get('/cs-score-metrics', async function(req, res) {
     var avgRT = 0;
     if (totalRT > 0) { var sum = 0; responseTimes.forEach(function(t) { sum += t; }); avgRT = Math.round(sum / totalRT / 60000); }
 
+    // 영업시간 기준 FRT 계산
+    var bizResponseTimes = [];
+    chatKeys.forEach(function(cid) {
+      var chat = stats.chats[cid];
+      if (chat.firstUserMsg && chat.firstUserMsg >= cutoffMs && chat.firstMgrReply) {
+        var bizRT = bizHours.getBusinessHoursElapsedInHours(chat.firstUserMsg, chat.firstMgrReply) * 60;
+        if (bizRT > 0 && bizRT < 1440) bizResponseTimes.push(bizRT);
+      }
+    });
+    var bizBuckets = { under5: 0, under15: 0, under30: 0, under60: 0, over60: 0 };
+    bizResponseTimes.forEach(function(rt) {
+      if (rt <= 5) bizBuckets.under5++;
+      else if (rt <= 15) bizBuckets.under15++;
+      else if (rt <= 30) bizBuckets.under30++;
+      else if (rt <= 60) bizBuckets.under60++;
+      else bizBuckets.over60++;
+    });
+    var bizTotalRT = bizResponseTimes.length;
+    var bizWithin30 = bizBuckets.under5 + bizBuckets.under15 + bizBuckets.under30;
+    var bizWithin30Rate = bizTotalRT > 0 ? Math.round((bizWithin30 / bizTotalRT) * 100) : 0;
+    var bizAvgRT = 0;
+    if (bizTotalRT > 0) { var bizSum = 0; bizResponseTimes.forEach(function(t) { bizSum += t; }); bizAvgRT = Math.round(bizSum / bizTotalRT); }
+
     // 2. No-reply close rate
     var noReplyRate = totalMgrChats > 0 ? Math.round((noReplyChats / totalMgrChats) * 100) : 0;
 
@@ -570,6 +593,12 @@ router.get('/cs-score-metrics', async function(req, res) {
   else if (within30Rate >= 40) frtScore = 2.5;
   else frtScore = 1.5;
 
+  var bizFrtScore = 0;
+  if (bizWithin30Rate >= 80) bizFrtScore = 5;
+  else if (bizWithin30Rate >= 60) bizFrtScore = 3.5;
+  else if (bizWithin30Rate >= 40) bizFrtScore = 2.5;
+  else bizFrtScore = 1.5;
+
   var fcrScore = 0;
   var fcrSampleCount = recentResolved.length + recentReopened.length;
   if (fcrSampleCount < 10) {
@@ -621,6 +650,9 @@ router.get('/cs-score-metrics', async function(req, res) {
       period: days + ' days',
       responseTime: {
         avgMinutes: avgRT,
+        bizAvgMinutes: bizAvgRT,
+        bizWithin30MinRate: bizWithin30Rate,
+        bizDistribution: bizBuckets,
         within30MinRate: within30Rate,
         distribution: buckets,
         totalSamples: totalRT
@@ -649,7 +681,7 @@ router.get('/cs-score-metrics', async function(req, res) {
     ,
       ces: { avgScore: cesAvg, totalResponses: recentCES.length },
       fcr: { rate: fcrRate, resolved: recentResolved.length, reopened: recentReopened.length },
-      integratedScore: { score: integratedScore, breakdown: { frt: { score: frtScore, weight: 0.20 }, fcr: { score: fcrScore, weight: 0.25 }, csat: { score: csatScore, weight: 0.20 }, ces: { score: cesScoreVal, weight: 0.15 }, noReply: { score: noReplyScore, weight: 0.20 } }, target: 3.0 }
+      integratedScore: { score: integratedScore, breakdown: { frt: { score: frtScore, weight: 0.20, bizScore: bizFrtScore }, fcr: { score: fcrScore, weight: 0.25 }, csat: { score: csatScore, weight: 0.20 }, ces: { score: cesScoreVal, weight: 0.15 }, noReply: { score: noReplyScore, weight: 0.20 } }, target: 3.0 }
   });
   } catch(e) {
     res.status(500).json({ success: false, error: e.message });
