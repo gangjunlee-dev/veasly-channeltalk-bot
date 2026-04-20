@@ -700,7 +700,7 @@ function loadStrategySection(days) {
     h += '<div class="strat-bottom-row">';
     // 매니저 테이블
     h += '<div class="strat-panel"><h3>👥 매니저 성과</h3>';
-    h += '<table class="mgr-table"><thead><tr><th>매니저</th><th>등급</th><th>응답</th><th>채팅</th><th>평균응답</th><th>CSAT</th></tr></thead><tbody>';
+    h += '<table class="mgr-table"><thead><tr><th>매니저</th><th>등급</th><th>응답</th><th>채팅</th><th>응답(24h)</th><th>응답(영업)</th><th>CSAT</th></tr></thead><tbody>';
     for (var mi=0; mi<mgrData.length; mi++) {
       var mg = mgrData[mi];
       var name = (mg.name || '').split('@')[0];
@@ -714,7 +714,10 @@ function loadStrategySection(days) {
       h += '<td><span class="mgr-badge '+grade+'">'+grade+'</span></td>';
       h += '<td>'+(mg.totalReplies||0)+'건</td>';
       h += '<td>'+(mg.uniqueChats||0)+'건</td>';
-      h += '<td style="color:'+avgColor+';">'+avgMin+'분</td>';
+      h += '<td style="color:'+avgColor+';">'+(mg.avgResponseTimeMin||0)+'분</td>';
+      var bizAvgMin2 = mg.bizAvgResponseTimeMin || 0;
+      var bizAvgColor2 = bizAvgMin2 <= 30 ? '#22c55e' : bizAvgMin2 <= 120 ? '#eab308' : '#ef4444';
+      h += '<td style="color:'+bizAvgColor2+';">'+(bizAvgMin2||0)+'분</td>';
       h += '<td>'+(csatVal > 0 ? csatVal.toFixed(1) : '-')+'</td>';
       h += '</tr>';
     }
@@ -847,8 +850,32 @@ function loadManagerData() {
       html += miniCard('담당 채팅', m.uniqueChats, 'purple', '🗂️ 해당 매니저가 참여한 고유 채팅 수입니다. 한 채팅에 여러 메시지를 보내도 1건으로 집계됩니다.');
       html += miniCard('평균 답변길이', m.avgReplyLength + '자', 'cyan', '📏 매니저 답변의 평균 글자 수입니다. 너무 짧으면 정보 부족, 너무 길면 가독성 저하. 50~200자가 적정 범위입니다.');
       var rtColor = m.avgResponseTimeMin > 60 ? 'red' : m.avgResponseTimeMin > 30 ? 'yellow' : 'green';
-      html += miniCard('평균 응답시간', m.avgResponseTimeMin > 0 ? m.avgResponseTimeMin + '분' : '-', rtColor, '⏱️ 고객 메시지 후 매니저가 첫 응답하기까지 평균 시간입니다. 30분 이내가 목표이며, 60분 초과 시 개선이 필요합니다.');
+      html += miniCard('응답시간 (24h)', m.avgResponseTimeMin > 0 ? m.avgResponseTimeMin + '분' : '-', rtColor, '⏱️ 24시간 기준 평균 첫 응답시간입니다.');
+      var bizRtColor = (m.bizAvgResponseTimeMin||0) > 60 ? 'red' : (m.bizAvgResponseTimeMin||0) > 30 ? 'yellow' : 'green';
+      html += miniCard('응답시간 (영업)', (m.bizAvgResponseTimeMin||0) > 0 ? m.bizAvgResponseTimeMin + '분' : '-', bizRtColor, '🏢 영업시간 기준 평균 첫 응답시간입니다. 야간/주말 문의 대기시간이 제외됩니다.');
       html += '</div>';
+
+      
+      // Daily Trend Chart
+      if (m.dailyTrend && m.dailyTrend.length > 1) {
+        html += '<div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border-primary);">';
+        html += '<div style="color:var(--text-secondary);font-size:13px;margin-bottom:12px;">📈 일별 추이 (답변수 / 평균응답시간)</div>';
+        html += '<div style="display:flex;gap:4px;align-items:flex-end;height:80px;">';
+        var maxReplies = 0; var maxRT = 0;
+        m.dailyTrend.forEach(function(t) { if (t.replies > maxReplies) maxReplies = t.replies; if (t.avgRT > maxRT) maxRT = t.avgRT; });
+        m.dailyTrend.forEach(function(t) {
+          var barH = maxReplies > 0 ? Math.max(4, Math.round(t.replies / maxReplies * 70)) : 4;
+          var rtColor2 = t.avgRT > 120 ? '#ef4444' : t.avgRT > 60 ? '#f59e0b' : '#22c55e';
+          var dateLabel = t.date.substring(5);
+          html += '<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;">';
+          html += '<span style="font-size:10px;color:'+rtColor2+';">' + t.avgRT + '분</span>';
+          html += '<div style="width:100%;height:'+barH+'px;background:linear-gradient(180deg,#3b82f6,#1d4ed8);border-radius:3px;" title="'+t.replies+'건"></div>';
+          html += '<span style="font-size:10px;color:var(--text-secondary);">' + dateLabel + '</span>';
+          html += '<span style="font-size:9px;color:var(--text-secondary);">' + t.replies + '건</span>';
+          html += '</div>';
+        });
+        html += '</div></div>';
+      }
 
       // AI Quality Scores (if available)
       if (rd && rd.count > 0) {

@@ -277,7 +277,10 @@ router.get('/manager-performance', async function(req, res) {
         uniqueChats: r.uniqueChats,
         avgReplyLength: r.avgReplyLength,
         avgResponseTimeMin: r.avgResponseTimeMin,
-        responseSamples: r.responseSamples
+        bizAvgResponseTimeMin: r.bizAvgResponseTimeMin || 0,
+        responseSamples: r.responseSamples,
+        bizResponseSamples: r.bizResponseSamples || 0,
+        dailyTrend: r.dailyTrend || []
       };
     });
 
