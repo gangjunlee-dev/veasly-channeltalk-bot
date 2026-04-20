@@ -513,14 +513,16 @@ function loadOverview() {
     var r = data.raw;
     cachedData.overview = r;
 
-    var botRate = r.totalMessages > 0 ? Math.round((r.botMessages / r.totalMessages) * 100) : 0;
-    var aiResolveRate = (r.botMessages + r.managerMessages) > 0 ? Math.round((r.botMessages / (r.botMessages + r.managerMessages)) * 100) : 0;
+    var sysMsg = r.systemMessages || 0;
+    var realBot = r.botMessages || 0;
+    var botRate = r.totalMessages > 0 ? Math.round((realBot / r.totalMessages) * 100) : 0;
+    var aiResolveRate = (realBot + r.managerMessages) > 0 ? Math.round((realBot / (realBot + r.managerMessages)) * 100) : 0;
     var escalationCount = cachedData.escalationTotal || ((r.categories.agent_direct ? r.categories.agent_direct.count : 0) + (r.categories.agent_request ? r.categories.agent_request.count : 0));
     var escalationRate = cachedData.escalationRate || (r.userMessages > 0 ? Math.round((escalationCount / r.userMessages) * 100) : 0);
 
     var html = '<div class="grid">';
     html += card('총 상담', r.totalChats, '건', 'blue', r.period, '📊 선택한 기간 동안 접수된 전체 상담 건수입니다.');
-    html += card('AI 봇 응답', r.botMessages, '건', 'green', '응답률 ' + botRate + '%', '🤖 AI가 자동으로 처리한 메시지 수입니다.');
+    html += card('AI 봇 응답', realBot, '건', 'green', '응답률 ' + botRate + '%', '🤖 AI가 자동으로 처리한 메시지 (시스템 메시지 ' + sysMsg + '건 제외)');
     html += card('매니저 응답', r.managerMessages, '건', 'yellow', 'AI 해결률 ' + aiResolveRate + '%', '👨‍💼 매니저가 직접 응답한 건수입니다.');
     html += card('에스컬레이션', escalationCount, '건', escalationRate > 20 ? 'red' : 'yellow', '비율 ' + escalationRate + '%', '🔺 AI가 처리하지 못해 매니저에게 전달된 건수입니다.');
     html += card('미해결 상담', r.unresolvedChats, '건', r.unresolvedChats > 10 ? 'red' : 'green', r.unresolvedChats > 10 ? '우선 처리 필요' : '양호', '⏳ 아직 종료되지 않은 열린 상담입니다.');
@@ -1247,19 +1249,25 @@ function hourChart(dist) {
   return h;
 }
 function messageBreakdown(r) {
-  var total = r.botMessages + r.managerMessages;
-  var botPct = total > 0 ? Math.round((r.botMessages / total) * 100) : 0;
+  var realBot = r.botMessages || 0;
+  var sysMsg = r.systemMessages || 0;
+  var mgr = r.managerMessages || 0;
+  var respTotal = realBot + mgr;
+  var allTotal = realBot + mgr + sysMsg;
+  var botPct = respTotal > 0 ? Math.round((realBot / respTotal) * 100) : 0;
   var mgrPct = 100 - botPct;
+  var sysPct = allTotal > 0 ? Math.round((sysMsg / allTotal) * 100) : 0;
   var h = '<div class="chart-card"><h3>AI vs 매니저 응답 비율</h3>';
   h += '<div style="display:flex;height:24px;border-radius:12px;overflow:hidden;margin:20px 0;">';
   h += '<div style="width:' + botPct + '%;background:#22c55e;"></div>';
   h += '<div style="width:' + mgrPct + '%;background:#eab308;"></div>';
   h += '</div>';
   h += '<div style="display:flex;justify-content:space-between;font-size:14px;">';
-  h += '<span style="color:#22c55e;">AI 봇 ' + botPct + '% (' + r.botMessages + '건)</span>';
-  h += '<span style="color:#eab308;">매니저 ' + mgrPct + '% (' + r.managerMessages + '건)</span>';
+  h += '<span style="color:#22c55e;">AI 응답 ' + botPct + '% (' + realBot + '건)</span>';
+  h += '<span style="color:#eab308;">매니저 ' + mgrPct + '% (' + mgr + '건)</span>';
   h += '</div>';
-  h += '<div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border-primary);font-size:13px;color:var(--text-secondary);">목표: AI 응답률 70% 이상</div></div>';
+  h += '<div style="margin-top:12px;font-size:13px;color:var(--text-secondary);">시스템 메시지 ' + sysMsg + '건 제외 (CSAT 설문·자동종료·대기안내 등)</div>';
+  h += '<div style="margin-top:8px;padding-top:12px;border-top:1px solid var(--border-primary);font-size:13px;color:var(--text-secondary);">목표: AI 응답률 70% 이상 ✅ 현재 ' + botPct + '%</div></div>';
   return h;
 }
 function insightsCard(r) {
