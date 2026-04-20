@@ -1270,7 +1270,7 @@ router.get('/unreplied-chats', async function(req, res) {
 
       try {
         var msgData = await fetchMessages(chat.id);
-        await new Promise(function(r) { setTimeout(r, 300); });
+        await new Promise(function(r) { setTimeout(r, 100); });
         var msgs = msgData.messages || [];
         if (msgs.length === 0) continue;
 
@@ -1330,7 +1330,7 @@ router.get('/unreplied-chats', async function(req, res) {
         }
       } catch(e) { /* skip */ }
 
-      if (i % 10 === 9) await new Promise(function(r) { setTimeout(r, 150); });
+      if (i % 10 === 9) await new Promise(function(r) { setTimeout(r, 50); });
     }
 
     // 대기시간 순 정렬 (오래 기다린 순)
@@ -1388,7 +1388,7 @@ var seen = {};
               page: cc.source ? cc.source.url : ''
             });
           }
-          if (ci % 10 === 9) await new Promise(function(r) { setTimeout(r, 150); });
+          if (ci % 10 === 9) await new Promise(function(r) { setTimeout(r, 50); });
         } catch(e) {}
       }
       console.log('[Unreplied] Found', closedChats.length, 'recent closed chats, abandoned:', unreplied.filter(function(u){return u.unrepliedType==='abandoned_closed'}).length);
@@ -1417,7 +1417,7 @@ unreplied.sort(function(a, b) { return b.waitingMinutes - a.waitingMinutes; });
       else u.urgency = 'low';
     });
 
-    res.json({
+    var _unrepliedResp = {
       success: true,
       timestamp: new Date().toISOString(),
       summary: {
@@ -1433,7 +1433,10 @@ unreplied.sort(function(a, b) { return b.waitingMinutes - a.waitingMinutes; });
         avgWaitHours: unreplied.length > 0 ? Math.round(unreplied.reduce(function(s, u) { return s + u.waitingHours; }, 0) / unreplied.length * 10) / 10 : 0
       },
       chats: unreplied
-    });
+    };
+    unrepliedCache.data = _unrepliedResp;
+    unrepliedCache.timestamp = Date.now();
+    res.json(_unrepliedResp);
   } catch(err) {
     console.error('[UnrepliedChats] Error:', err.message);
     res.status(500).json({ success: false, error: err.message });
