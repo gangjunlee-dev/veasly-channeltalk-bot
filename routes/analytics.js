@@ -1232,7 +1232,7 @@ router.get('/unreplied-chats', async function(req, res) {
       return new Promise(function(resolve, reject) {
         https.get({
           hostname: 'api.channel.io',
-          path: '/open/v5/user-chats/' + chatId + '/messages?limit=5&sortOrder=desc',
+          path: '/open/v5/user-chats/' + chatId + '/messages?limit=20&sortOrder=desc',
           headers: {
             'x-access-key': process.env.CHANNEL_ACCESS_KEY || '69d224cf1096da048a55',
             'x-access-secret': process.env.CHANNEL_ACCESS_SECRET || '4c6c9ab20f5be3dd319eec0a8d583c93'
