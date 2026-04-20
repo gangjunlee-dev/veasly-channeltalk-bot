@@ -1451,7 +1451,7 @@ var seen = {};
               name: cc.name || '(이름없음)',
               state: 'closed',
               unrepliedType: abType,
-              noManagerReply: !hasManagerMsg,
+              noManagerReply: !hasManagerMsg, customerLeftHanging: customerLeftHanging,
               assigneeId: cc.assigneeId || null,
               lastUserMessage: cText2 || '(이미지/스티커)',
               lastMessageTime: new Date(customerMsgTime).toISOString(),
