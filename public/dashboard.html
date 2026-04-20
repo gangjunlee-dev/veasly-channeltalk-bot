@@ -1008,20 +1008,30 @@ function loadManagerData() {
       html += '</table></div></div>';
     }
 
-    // CS 직원 자동 품질 리뷰 (스케줄러)
+    // CS 직원 자동 품질 리뷰 (스케줄러) - 고객 정보 + 채널톡 링크 포함
     var autoRevs = (aiReviews && aiReviews.recent) ? aiReviews.recent.filter(function(r){return r.scores && r.scores.totalScore;}) : [];
     if (autoRevs.length > 0) {
       html += '<div class="section-title">CS 직원 자동 품질 리뷰</div>';
       html += '<div style="padding:0 32px 16px;"><div class="chart-card">';
-      html += '<div style="max-height:400px;overflow-y:auto;">';
-      html += '<table><tr><th>시간</th><th>매니저</th><th>점수</th><th>평가 요약</th></tr>';
+      html += '<div style="max-height:500px;overflow-y:auto;">';
+      html += '<table style="width:100%;"><tr><th>시간</th><th>고객</th><th>매니저</th><th>점수</th><th>평가 요약</th><th></th></tr>';
       autoRevs.slice(0, 20).forEach(function(rev) {
         var time = rev.timestamp ? rev.timestamp.substring(5, 16).replace("T", " ") : "-";
         var sc = rev.scores.totalScore || 0;
         var scClass = sc >= 20 ? "score-high" : sc >= 15 ? "score-mid" : "score-low";
         var mgr = mgrPerf && mgrPerf.managers ? mgrPerf.managers.find(function(m){return m.managerId === rev.managerId;}) : null;
         var mgrName = mgr ? mgr.name : (rev.managerId || "").substring(0, 8);
-        html += '<tr><td style="color:var(--text-secondary);white-space:nowrap;">' + time + '</td><td style="color:var(--text-primary);">' + mgrName + '</td><td><span class="score-badge ' + scClass + '">' + sc + '/25</span></td><td style="color:var(--text-secondary);max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + (rev.scores.summary || "") + '</td></tr>';
+        var custName = rev.customerName || "-";
+        var deskUrl = "https://desk.channel.io/5d7z2/user-chats/" + encodeURIComponent((custName !== "-" ? custName : "chat").replace(/\s+/g, "-")) + "-" + rev.chatId;
+
+        html += '<tr style="border-bottom:1px solid var(--border-primary);">';
+        html += '<td style="color:var(--text-secondary);white-space:nowrap;padding:10px 6px;">' + time + '</td>';
+        html += '<td style="color:var(--text-primary);padding:10px 6px;font-weight:600;">' + custName + '</td>';
+        html += '<td style="color:var(--text-primary);padding:10px 6px;">' + mgrName + '</td>';
+        html += '<td style="padding:10px 6px;"><span class="score-badge ' + scClass + '">' + sc + '/25</span></td>';
+        html += '<td style="color:var(--text-secondary);max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:10px 6px;">' + (rev.scores.summary || "") + '</td>';
+        html += '<td style="padding:10px 6px;"><a href="' + deskUrl + '" target="_blank" class="chat-link-btn" style="font-size:11px;padding:4px 10px;">채팅보기</a></td>';
+        html += '</tr>';
       });
       html += '</table></div></div></div>';
     }
