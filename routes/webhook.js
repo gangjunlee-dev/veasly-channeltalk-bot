@@ -1227,6 +1227,7 @@ router.post('/channeltalk', async function(req, res) {
         }
       } catch(aiErr) {
         console.error("[AI] Error:", aiErr.message);
+        aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "ai_error", userMessage: userText.substring(0, 200), aiResponse: "AI Error: " + aiErr.message, escalated: false, confidence: 0 });
       }
     }
     if (aiAnswer) {
