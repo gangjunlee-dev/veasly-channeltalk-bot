@@ -643,8 +643,8 @@ function loadStrategySection(days) {
     if (frtRateD < 50) problems.push({sev:'crit', title:'FRT 30분내 '+frtRateD+'% (영업: '+((m.responseTime||{}).bizWithin30MinRate||0)+'%)', sub:'목표 80%. 24h평균 '+ ((m.responseTime||{}).avgMinutes||0) +'분 / 영업평균 '+((m.responseTime||{}).bizAvgMinutes||0)+'분'});
     else if (frtRateD < 80) problems.push({sev:'warn', title:'FRT 30분내 '+frtRateD+'%', sub:'목표 80%. 개선 진행 중'});
     // CSAT
-    if (csatAvgD > 0 && csatAvgD > 2.5) problems.push({sev:'crit', title:'CSAT 평균 '+csatAvgD.toFixed(1)+' (1=최고)', sub:'응답 '+csatTotalD+'건. 목표 2.0 이하'});
-    else if (csatAvgD > 0 && csatAvgD > 2.0) problems.push({sev:'warn', title:'CSAT 평균 '+csatAvgD.toFixed(1)+' (1=최고)', sub:'응답 '+csatTotalD+'건. 양호하지만 개선 여지'});
+    if (csatAvgD > 0 && csatAvgD < 3.0) problems.push({sev:'crit', title:'CSAT 평균 '+csatAvgD.toFixed(1)+'/5.0', sub:'응답 '+csatTotalD+'건. 목표 4.0 이상'});
+    else if (csatAvgD > 0 && csatAvgD < 4.0) problems.push({sev:'warn', title:'CSAT 평균 '+csatAvgD.toFixed(1)+'/5.0', sub:'응답 '+csatTotalD+'건. 목표 4.0까지 '+(4.0-csatAvgD).toFixed(1)+' 부족'});
     else if (csatTotalD < 10) problems.push({sev:'warn', title:'CSAT 응답 '+csatTotalD+'건', sub:'샘플 부족. 최소 20건 이상 필요'});
     // CES/FCR 데이터
     if (cesCountD < 10) problems.push({sev:'warn', title:'CES 데이터 부족 ('+cesCountD+'건)', sub:'최소 10건 필요. CES 설문 발송 확대 필요'});
@@ -682,8 +682,8 @@ function loadStrategySection(days) {
     var frtSt = frtRateD >= 80 ? 'done' : frtRateD >= 50 ? 'prog' : 'wait';
     actions.push({st:frtSt, title:'FRT '+frtRateD+'%→80%', desc:'오프시간 AI선응답, 알림 체계', target:'NoReply '+noReplyR+'%→15%'});
     // 3. CSAT
-    var csatSt = (csatAvgD > 0 && csatAvgD <= 2.0) ? 'done' : (csatAvgD > 0 && csatAvgD <= 2.5) ? 'prog' : 'wait';
-    actions.push({st:csatSt, title:'CSAT '+(csatAvgD>0?csatAvgD.toFixed(1):'N/A')+'→2.0', desc:'응답 품질 강화, 설문률 확대 (현재 '+csatTotalD+'건)', target:'CSAT 2.0 이하'});
+    var csatSt = (csatAvgD >= 4.0) ? 'done' : (csatAvgD >= 3.0) ? 'prog' : 'wait';
+    actions.push({st:csatSt, title:'CSAT '+(csatAvgD>0?csatAvgD.toFixed(1):'N/A')+'→4.0', desc:'응답 품질 강화, 설문률 확대 (현재 '+csatTotalD+'건)', target:'CSAT 4.0 이상'});
     // 4. CES/FCR
     var dataSt = (cesCountD >= 20 && fcrResolvedD >= 10) ? 'done' : (cesCountD >= 5 || fcrResolvedD >= 5) ? 'prog' : 'wait';
     actions.push({st:dataSt, title:'CES/FCR 데이터 수집', desc:'CES '+cesCountD+'/20건, FCR '+fcrResolvedD+'/10건', target:'측정 정확도 향상'});
