@@ -1008,63 +1008,22 @@ function loadManagerData() {
       html += '</table></div></div>';
     }
 
-    // Recent AI Reviews (자동 + 수동 통합)
-    if (aiReviews && aiReviews.recent && aiReviews.recent.length > 0) {
-      // 수동 리뷰 (rating 방식)
-      var manualRevs = aiReviews.recent.filter(function(r){return r.rating;});
-      // 자동 리뷰 (scores 방식)
-      var autoRevs = aiReviews.recent.filter(function(r){return r.scores && r.scores.totalScore;});
-
-      // 수동 리뷰 섹션
-      if (manualRevs.length > 0) {
-        html += '<div class="section-title">매니저 수동 평가</div>';
-        html += '<div style="padding:0 32px 16px;"><div class="chart-card">';
-        // 요약 카드
-        var mGood = manualRevs.filter(function(r){return r.rating==="good";}).length;
-        var mBad = manualRevs.filter(function(r){return r.rating==="bad";}).length;
-        var mFix = manualRevs.filter(function(r){return r.rating==="fix";}).length;
-        html += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px;">';
-        html += '<div style="background:var(--bg-primary);border-radius:8px;padding:10px;text-align:center;"><div style="font-size:20px;font-weight:700;color:var(--text-primary);">' + manualRevs.length + '</div><div style="font-size:11px;color:var(--text-secondary);">총 평가</div></div>';
-        html += '<div style="background:var(--bg-primary);border-radius:8px;padding:10px;text-align:center;"><div style="font-size:20px;font-weight:700;color:#22c55e;">' + mGood + '</div><div style="font-size:11px;color:var(--text-secondary);">정확</div></div>';
-        html += '<div style="background:var(--bg-primary);border-radius:8px;padding:10px;text-align:center;"><div style="font-size:20px;font-weight:700;color:#ef4444;">' + mBad + '</div><div style="font-size:11px;color:var(--text-secondary);">부정확</div></div>';
-        html += '<div style="background:var(--bg-primary);border-radius:8px;padding:10px;text-align:center;"><div style="font-size:20px;font-weight:700;color:#eab308;">' + mFix + '</div><div style="font-size:11px;color:var(--text-secondary);">수정필요</div></div>';
-        html += '</div>';
-        // 리스트
-        html += '<div style="max-height:400px;overflow-y:auto;">';
-        manualRevs.slice(0, 20).forEach(function(rev) {
-          var time = rev.reviewedAt ? rev.reviewedAt.substring(5, 16).replace("T", " ") : (rev.originalTimestamp || "").substring(5, 16).replace("T", " ");
-          var ratingEmoji = rev.rating === "good" ? "✅" : rev.rating === "bad" ? "❌" : "🔧";
-          var ratingText = rev.rating === "good" ? "정확" : rev.rating === "bad" ? "부정확" : "수정필요";
-          var ratingColor = rev.rating === "good" ? "#22c55e" : rev.rating === "bad" ? "#ef4444" : "#eab308";
-          html += '<div style="padding:12px;border-bottom:1px solid var(--border-primary);">';
-          html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">';
-          html += '<div><span style="font-size:11px;color:var(--text-secondary);font-family:monospace;">' + time + '</span>';
-          html += '<span style="margin-left:8px;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;color:#fff;background:' + ratingColor + ';">' + ratingEmoji + ' ' + ratingText + '</span></div>';
-          html += '</div>';
-          if (rev.userMessage) html += '<div style="font-size:12px;color:var(--text-secondary);margin-bottom:4px;">💬 고객: ' + (rev.userMessage || "").substring(0, 80) + '</div>';
-          if (rev.aiResponse) html += '<div style="font-size:12px;color:var(--text-secondary);margin-bottom:4px;">🤖 AI: ' + (rev.aiResponse || "").substring(0, 80) + '</div>';
-          if (rev.comment) html += '<div style="font-size:12px;color:#eab308;margin-top:4px;">📝 ' + rev.comment + '</div>';
-          html += '</div>';
-        });
-        html += '</div></div></div>';
-      }
-
-      // 자동 AI 리뷰 섹션
-      if (autoRevs.length > 0) {
-        html += '<div class="section-title">AI 자동 품질 리뷰 (스케줄러)</div>';
-        html += '<div style="padding:0 32px 16px;"><div class="chart-card">';
-        html += '<div style="max-height:400px;overflow-y:auto;">';
-        html += '<table><tr><th>시간</th><th>매니저</th><th>점수</th><th>평가 요약</th></tr>';
-        autoRevs.slice(0, 20).forEach(function(rev) {
-          var time = rev.timestamp ? rev.timestamp.substring(5, 16).replace("T", " ") : "-";
-          var sc = rev.scores.totalScore || 0;
-          var scClass = sc >= 20 ? "score-high" : sc >= 15 ? "score-mid" : "score-low";
-          var mgr = mgrPerf && mgrPerf.managers ? mgrPerf.managers.find(function(m){return m.managerId === rev.managerId;}) : null;
-          var mgrName = mgr ? mgr.name : (rev.managerId || "").substring(0, 8);
-          html += '<tr><td style="color:var(--text-secondary);white-space:nowrap;">' + time + '</td><td style="color:var(--text-primary);">' + mgrName + '</td><td><span class="score-badge ' + scClass + '">' + sc + '/25</span></td><td style="color:var(--text-secondary);max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + (rev.scores.summary || "") + '</td></tr>';
-        });
-        html += '</table></div></div></div>';
-      }
+    // CS 직원 자동 품질 리뷰 (스케줄러)
+    var autoRevs = (aiReviews && aiReviews.recent) ? aiReviews.recent.filter(function(r){return r.scores && r.scores.totalScore;}) : [];
+    if (autoRevs.length > 0) {
+      html += '<div class="section-title">CS 직원 자동 품질 리뷰</div>';
+      html += '<div style="padding:0 32px 16px;"><div class="chart-card">';
+      html += '<div style="max-height:400px;overflow-y:auto;">';
+      html += '<table><tr><th>시간</th><th>매니저</th><th>점수</th><th>평가 요약</th></tr>';
+      autoRevs.slice(0, 20).forEach(function(rev) {
+        var time = rev.timestamp ? rev.timestamp.substring(5, 16).replace("T", " ") : "-";
+        var sc = rev.scores.totalScore || 0;
+        var scClass = sc >= 20 ? "score-high" : sc >= 15 ? "score-mid" : "score-low";
+        var mgr = mgrPerf && mgrPerf.managers ? mgrPerf.managers.find(function(m){return m.managerId === rev.managerId;}) : null;
+        var mgrName = mgr ? mgr.name : (rev.managerId || "").substring(0, 8);
+        html += '<tr><td style="color:var(--text-secondary);white-space:nowrap;">' + time + '</td><td style="color:var(--text-primary);">' + mgrName + '</td><td><span class="score-badge ' + scClass + '">' + sc + '/25</span></td><td style="color:var(--text-secondary);max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + (rev.scores.summary || "") + '</td></tr>';
+      });
+      html += '</table></div></div></div>';
     }
 
     document.getElementById('managersContent').innerHTML = html;
@@ -1346,6 +1305,59 @@ function loadAIData() {
     if (insights.length === 0) insights.push('<span style="color:#22c55e;">OK</span> 현재 AI 성능 양호');
     insights.forEach(function(ins) { h += '<div style="padding:4px 0;">' + ins + '</div>'; });
     h += '</div></div>';
+
+    // === AI 챗봇 수동 평가 (매니저가 평가한 AI 답변) ===
+    var manualRevs = (aiReviews && aiReviews.recent) ? aiReviews.recent.filter(function(r){return r.rating;}) : [];
+    if (manualRevs.length > 0) {
+      var mGood = manualRevs.filter(function(r){return r.rating==="good";}).length;
+      var mBad = manualRevs.filter(function(r){return r.rating==="bad";}).length;
+      var mFix = manualRevs.filter(function(r){return r.rating==="fix";}).length;
+      var accuracy = manualRevs.length > 0 ? Math.round((mGood / manualRevs.length) * 100) : 0;
+
+      h += '<div class="section-title">AI 답변 수동 평가</div>';
+      h += '<div style="padding:0 32px 16px;"><div class="chart-card">';
+
+      // 요약 카드
+      h += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px;">';
+      h += '<div style="background:var(--bg-primary);border-radius:8px;padding:12px;text-align:center;"><div style="font-size:22px;font-weight:700;color:var(--text-primary);">' + manualRevs.length + '</div><div style="font-size:11px;color:var(--text-secondary);">총 평가</div></div>';
+      h += '<div style="background:var(--bg-primary);border-radius:8px;padding:12px;text-align:center;"><div style="font-size:22px;font-weight:700;color:#22c55e;">' + mGood + '</div><div style="font-size:11px;color:var(--text-secondary);">✅ 정확</div></div>';
+      h += '<div style="background:var(--bg-primary);border-radius:8px;padding:12px;text-align:center;"><div style="font-size:22px;font-weight:700;color:#ef4444;">' + mBad + '</div><div style="font-size:11px;color:var(--text-secondary);">❌ 부정확</div></div>';
+      h += '<div style="background:var(--bg-primary);border-radius:8px;padding:12px;text-align:center;"><div style="font-size:22px;font-weight:700;color:#eab308;">' + mFix + '</div><div style="font-size:11px;color:var(--text-secondary);">🔧 수정필요</div></div>';
+      h += '</div>';
+
+      // 정확도 바
+      h += '<div style="margin-bottom:16px;">';
+      h += '<div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span style="font-size:12px;color:var(--text-secondary);">AI 정확도</span><span style="font-size:12px;font-weight:700;color:' + (accuracy >= 80 ? '#22c55e' : accuracy >= 60 ? '#eab308' : '#ef4444') + ';">' + accuracy + '%</span></div>';
+      h += '<div style="height:8px;background:var(--bg-primary);border-radius:4px;overflow:hidden;">';
+      if (manualRevs.length > 0) {
+        h += '<div style="display:flex;height:100%;">';
+        h += '<div style="width:' + Math.round((mGood/manualRevs.length)*100) + '%;background:#22c55e;"></div>';
+        h += '<div style="width:' + Math.round((mFix/manualRevs.length)*100) + '%;background:#eab308;"></div>';
+        h += '<div style="width:' + Math.round((mBad/manualRevs.length)*100) + '%;background:#ef4444;"></div>';
+        h += '</div>';
+      }
+      h += '</div></div>';
+
+      // 평가 리스트
+      h += '<div style="max-height:400px;overflow-y:auto;">';
+      manualRevs.slice(0, 20).forEach(function(rev) {
+        var time = rev.reviewedAt ? rev.reviewedAt.substring(5, 16).replace("T", " ") : (rev.originalTimestamp || "").substring(5, 16).replace("T", " ");
+        var ratingEmoji = rev.rating === "good" ? "✅" : rev.rating === "bad" ? "❌" : "🔧";
+        var ratingText = rev.rating === "good" ? "정확" : rev.rating === "bad" ? "부정확" : "수정필요";
+        var ratingColor = rev.rating === "good" ? "#22c55e" : rev.rating === "bad" ? "#ef4444" : "#eab308";
+        h += '<div style="padding:10px 12px;border-bottom:1px solid var(--border-primary);">';
+        h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">';
+        h += '<div style="display:flex;align-items:center;gap:8px;">';
+        h += '<span style="font-size:11px;color:var(--text-secondary);font-family:monospace;">' + time + '</span>';
+        h += '<span style="padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;color:#fff;background:' + ratingColor + ';">' + ratingEmoji + ' ' + ratingText + '</span>';
+        h += '</div></div>';
+        if (rev.userMessage) h += '<div style="font-size:12px;color:var(--text-secondary);margin-bottom:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">💬 ' + (rev.userMessage || "").substring(0, 100) + '</div>';
+        if (rev.aiResponse) h += '<div style="font-size:12px;color:var(--text-secondary);margin-bottom:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">🤖 ' + (rev.aiResponse || "").substring(0, 100) + '</div>';
+        if (rev.comment) h += '<div style="font-size:12px;color:#eab308;margin-top:3px;">📝 ' + rev.comment + '</div>';
+        h += '</div>';
+      });
+      h += '</div></div></div>';
+    }
 
     // === AI 대화 로그 (필터링 + UX 개선) ===
     var html = h;
