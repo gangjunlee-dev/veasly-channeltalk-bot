@@ -1008,21 +1008,63 @@ function loadManagerData() {
       html += '</table></div></div>';
     }
 
-    // Recent AI Reviews
+    // Recent AI Reviews (자동 + 수동 통합)
     if (aiReviews && aiReviews.recent && aiReviews.recent.length > 0) {
-      html += '<div class="section-title">최근 AI 품질 리뷰</div>';
-      html += '<div style="padding:0 32px 16px;"><div class="chart-card">';
-      html += '<div style="max-height:400px;overflow-y:auto;">';
-      html += '<table><tr><th>시간</th><th>매니저</th><th>점수</th><th>평가 요약</th></tr>';
-      aiReviews.recent.slice(0, 20).forEach(function(rev) {
-        var time = rev.timestamp ? rev.timestamp.substring(5, 16).replace('T', ' ') : '-';
-        var sc = rev.scores ? rev.scores.totalScore : 0;
-        var scClass = sc >= 20 ? 'score-high' : sc >= 15 ? 'score-mid' : 'score-low';
-        var mgr = mgrPerf.managers.find(function(m) { return m.managerId === rev.managerId; });
-        var mgrName = mgr ? mgr.name : (rev.managerId || '').substring(0, 8);
-        html += '<tr><td style="color:var(--text-secondary);white-space:nowrap;">' + time + '</td><td style="color:var(--text-primary);">' + mgrName + '</td><td><span class="score-badge ' + scClass + '">' + sc + '/25</span></td><td style="color:var(--text-secondary);max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + (rev.scores ? rev.scores.summary || '' : '') + '</td></tr>';
-      });
-      html += '</table></div></div></div>';
+      // 수동 리뷰 (rating 방식)
+      var manualRevs = aiReviews.recent.filter(function(r){return r.rating;});
+      // 자동 리뷰 (scores 방식)
+      var autoRevs = aiReviews.recent.filter(function(r){return r.scores && r.scores.totalScore;});
+
+      // 수동 리뷰 섹션
+      if (manualRevs.length > 0) {
+        html += '<div class="section-title">매니저 수동 평가</div>';
+        html += '<div style="padding:0 32px 16px;"><div class="chart-card">';
+        // 요약 카드
+        var mGood = manualRevs.filter(function(r){return r.rating==="good";}).length;
+        var mBad = manualRevs.filter(function(r){return r.rating==="bad";}).length;
+        var mFix = manualRevs.filter(function(r){return r.rating==="fix";}).length;
+        html += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px;">';
+        html += '<div style="background:var(--bg-primary);border-radius:8px;padding:10px;text-align:center;"><div style="font-size:20px;font-weight:700;color:var(--text-primary);">' + manualRevs.length + '</div><div style="font-size:11px;color:var(--text-secondary);">총 평가</div></div>';
+        html += '<div style="background:var(--bg-primary);border-radius:8px;padding:10px;text-align:center;"><div style="font-size:20px;font-weight:700;color:#22c55e;">' + mGood + '</div><div style="font-size:11px;color:var(--text-secondary);">정확</div></div>';
+        html += '<div style="background:var(--bg-primary);border-radius:8px;padding:10px;text-align:center;"><div style="font-size:20px;font-weight:700;color:#ef4444;">' + mBad + '</div><div style="font-size:11px;color:var(--text-secondary);">부정확</div></div>';
+        html += '<div style="background:var(--bg-primary);border-radius:8px;padding:10px;text-align:center;"><div style="font-size:20px;font-weight:700;color:#eab308;">' + mFix + '</div><div style="font-size:11px;color:var(--text-secondary);">수정필요</div></div>';
+        html += '</div>';
+        // 리스트
+        html += '<div style="max-height:400px;overflow-y:auto;">';
+        manualRevs.slice(0, 20).forEach(function(rev) {
+          var time = rev.reviewedAt ? rev.reviewedAt.substring(5, 16).replace("T", " ") : (rev.originalTimestamp || "").substring(5, 16).replace("T", " ");
+          var ratingEmoji = rev.rating === "good" ? "✅" : rev.rating === "bad" ? "❌" : "🔧";
+          var ratingText = rev.rating === "good" ? "정확" : rev.rating === "bad" ? "부정확" : "수정필요";
+          var ratingColor = rev.rating === "good" ? "#22c55e" : rev.rating === "bad" ? "#ef4444" : "#eab308";
+          html += '<div style="padding:12px;border-bottom:1px solid var(--border-primary);">';
+          html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">';
+          html += '<div><span style="font-size:11px;color:var(--text-secondary);font-family:monospace;">' + time + '</span>';
+          html += '<span style="margin-left:8px;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;color:#fff;background:' + ratingColor + ';">' + ratingEmoji + ' ' + ratingText + '</span></div>';
+          html += '</div>';
+          if (rev.userMessage) html += '<div style="font-size:12px;color:var(--text-secondary);margin-bottom:4px;">💬 고객: ' + (rev.userMessage || "").substring(0, 80) + '</div>';
+          if (rev.aiResponse) html += '<div style="font-size:12px;color:var(--text-secondary);margin-bottom:4px;">🤖 AI: ' + (rev.aiResponse || "").substring(0, 80) + '</div>';
+          if (rev.comment) html += '<div style="font-size:12px;color:#eab308;margin-top:4px;">📝 ' + rev.comment + '</div>';
+          html += '</div>';
+        });
+        html += '</div></div></div>';
+      }
+
+      // 자동 AI 리뷰 섹션
+      if (autoRevs.length > 0) {
+        html += '<div class="section-title">AI 자동 품질 리뷰 (스케줄러)</div>';
+        html += '<div style="padding:0 32px 16px;"><div class="chart-card">';
+        html += '<div style="max-height:400px;overflow-y:auto;">';
+        html += '<table><tr><th>시간</th><th>매니저</th><th>점수</th><th>평가 요약</th></tr>';
+        autoRevs.slice(0, 20).forEach(function(rev) {
+          var time = rev.timestamp ? rev.timestamp.substring(5, 16).replace("T", " ") : "-";
+          var sc = rev.scores.totalScore || 0;
+          var scClass = sc >= 20 ? "score-high" : sc >= 15 ? "score-mid" : "score-low";
+          var mgr = mgrPerf && mgrPerf.managers ? mgrPerf.managers.find(function(m){return m.managerId === rev.managerId;}) : null;
+          var mgrName = mgr ? mgr.name : (rev.managerId || "").substring(0, 8);
+          html += '<tr><td style="color:var(--text-secondary);white-space:nowrap;">' + time + '</td><td style="color:var(--text-primary);">' + mgrName + '</td><td><span class="score-badge ' + scClass + '">' + sc + '/25</span></td><td style="color:var(--text-secondary);max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + (rev.scores.summary || "") + '</td></tr>';
+        });
+        html += '</table></div></div></div>';
+      }
     }
 
     document.getElementById('managersContent').innerHTML = html;
