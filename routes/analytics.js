@@ -1369,12 +1369,11 @@ router.get('/unreplied-chats', async function(req, res) {
     // 중복 제거
 var seen = {};
 
-    // === 방치 자동종료 건 수집 (최근 closed 중 고객 메시지 방치 후 종료) ===
+    // === 방치 자동종료 건 수집 (매니저 미응답 포함) ===
     try {
       var closedChats = [];
       var closedAfter = null;
       for (var cp = 0; cp < 3; cp++) {
-        var cPath = '/open/v5/user-chats?limit=50&sortOrder=desc&state=closed' + (closedAfter ? '&after=' + closedAfter : '');
         var cData = await fetchChats2('closed', closedAfter);
         var cList = cData.userChats || [];
         closedChats = closedChats.concat(cList);
@@ -1382,48 +1381,93 @@ var seen = {};
         closedAfter = cData.next;
         await new Promise(function(r) { setTimeout(r, 200); });
       }
-      // 최근 7일 내 종료건만 (168시간)
+      // 최근 7일 내 종료건만
       var sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
       closedChats = closedChats.filter(function(c) { return (c.updatedAt || 0) > sevenDaysAgo; });
-      
+
       for (var ci = 0; ci < closedChats.length; ci++) {
         var cc = closedChats[ci];
         try {
           var cmData = await fetchMessages(cc.id);
           var cMsgs = cmData.messages || [];
           if (cMsgs.length === 0) continue;
-          var lastReal = null;
+
+          // 매니저가 한 번이라도 응답했는지 확인
+          var hasManagerMsg = cMsgs.some(function(m) { return m.personType === 'manager'; });
+
+          // 고객의 실제 마지막 메시지 찾기 (봇/시스템 제외)
+          var lastUserMsg = null;
           for (var cj = 0; cj < cMsgs.length; cj++) {
-            if (cMsgs[cj].personType !== 'system') { lastReal = cMsgs[cj]; break; }
-          }
-          if (!lastReal) continue;
-          if (lastReal.personType === 'user' || lastReal.personType === 'endUser') {
-            var cText = '';
-            if (lastReal.blocks && lastReal.blocks.length > 0) {
-              cText = lastReal.blocks.map(function(bl) { return bl.value || ''; }).join(' ').substring(0, 150);
-            } else if (lastReal.plainText) {
-              cText = String(lastReal.plainText).substring(0, 150);
+            if (cMsgs[cj].personType === 'user' || cMsgs[cj].personType === 'endUser') {
+              lastUserMsg = cMsgs[cj];
+              break;
             }
+          }
+
+          var shouldAdd = false;
+          var abType = 'abandoned_closed';
+
+          // 케이스1: 매니저 응답 0건 (가장 심각)
+          if (!hasManagerMsg && lastUserMsg) {
+            shouldAdd = true;
+            abType = 'abandoned_closed';
+          }
+          // 케이스2: 마지막 실제 메시지가 고객 (매니저 답변 후 추가 질문에 미응답)
+          else if (hasManagerMsg) {
+            var lastReal = null;
+            var sysKW2 = ['想聽聽您的寶貴意見','自動結束','自動種了','48小時','장시간','자동 종료'];
+            for (var ck = 0; ck < cMsgs.length; ck++) {
+              var cm = cMsgs[ck];
+              if (cm.personType === 'bot' || cm.personType === 'system') {
+                var bTxt2 = '';
+                if (cm.blocks && cm.blocks.length > 0) bTxt2 = cm.blocks.map(function(bl){return bl.value||'';}).join(' ');
+                else if (cm.plainText) bTxt2 = String(cm.plainText);
+                if (sysKW2.some(function(kw){return bTxt2.indexOf(kw)>=0;})) continue;
+              }
+              lastReal = cm;
+              break;
+            }
+            if (lastReal && (lastReal.personType === 'user' || lastReal.personType === 'endUser')) {
+              shouldAdd = true;
+              abType = 'abandoned_closed';
+            }
+          }
+
+          if (shouldAdd && lastUserMsg) {
+            var cText2 = '';
+            if (lastUserMsg.blocks && lastUserMsg.blocks.length > 0) {
+              cText2 = lastUserMsg.blocks.map(function(bl){return bl.value||'';}).join(' ').substring(0, 150);
+            } else if (lastUserMsg.plainText) {
+              cText2 = String(lastUserMsg.plainText).substring(0, 150);
+            }
+
+            // 대기시간: 고객 메시지 ~ 종료 시각
+            var customerMsgTime = lastUserMsg.createdAt || cc.openedAt;
+            var closeTime = cc.closedAt || cc.updatedAt;
+            var waitMin = Math.round((closeTime - customerMsgTime) / 60000);
+
             unreplied.push({
               chatId: cc.id,
               name: cc.name || '(이름없음)',
               state: 'closed',
-              unrepliedType: 'abandoned_closed',
+              unrepliedType: abType,
+              noManagerReply: !hasManagerMsg,
               assigneeId: cc.assigneeId || null,
-              lastUserMessage: cText || '(이미지/스티커)',
-              lastMessageTime: new Date(lastReal.createdAt || cc.updatedAt).toISOString(),
-              waitingMinutes: Math.round((cc.updatedAt - (lastReal.createdAt || cc.updatedAt)) / 60000),
-              waitingHours: Math.round((cc.updatedAt - (lastReal.createdAt || cc.updatedAt)) / 3600000 * 10) / 10,
+              lastUserMessage: cText2 || '(이미지/스티커)',
+              lastMessageTime: new Date(customerMsgTime).toISOString(),
+              waitingMinutes: waitMin,
+              waitingHours: Math.round(waitMin / 60 * 10) / 10,
               createdAt: new Date(cc.createdAt).toISOString(),
-              closedAt: new Date(cc.updatedAt).toISOString(),
-              priority: 'high',
+              closedAt: new Date(closeTime).toISOString(),
+              priority: !hasManagerMsg ? 'critical' : 'high',
               page: cc.source ? cc.source.url : ''
             });
           }
+
           if (ci % 10 === 9) await new Promise(function(r) { setTimeout(r, 50); });
         } catch(e) {}
       }
-      console.log('[Unreplied] Found', closedChats.length, 'recent closed chats, abandoned:', unreplied.filter(function(u){return u.unrepliedType==='abandoned_closed'}).length);
+      console.log('[Unreplied] Found', closedChats.length, 'recent closed chats, abandoned:', unreplied.filter(function(u){return u.unrepliedType==='abandoned_closed';}).length);
     } catch(abandonErr) {
       console.error('[Unreplied] Abandoned closed scan error:', abandonErr.message);
     }
