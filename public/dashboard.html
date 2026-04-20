@@ -1142,25 +1142,124 @@ function loadAIData() {
     }
     h += '</div><div style="font-size:11px;color:var(--text-secondary);margin-top:8px;">녹색=영업시간(09~18) | 회색=오프시간</div></div>';
 
-    // 4-2. 카테고리별 AI 해결률
+    // 4-2. 카테고리별 AI 해결률 (한국어 세분화)
+    var catNameKo = {
+      'agent_direct':'상담사 직접요청','order_status':'주문 상태/조회','order':'주문 관련',
+      'shipping':'배송/물류','shipping_fee':'국제배송비/운임','cancel_refund':'취소/환불/반품',
+      'cancel':'취소/환불','payment':'결제/금액','product':'상품문의/불량/교환',
+      'account':'계정/로그인','howto':'사이트이용/주문방법','agent_request':'상담사 전환요청',
+      'complaint':'클레임/불만','greeting':'인사/감사','points':'포인트/쿠폰',
+      'sticker':'스티커/이모지','address':'주소/수령','fee':'국제배송비/운임',
+      'escalation':'에스컬레이션','other':'기타','unknown':'미분류'
+    };
     var catStats = {};
     convs.forEach(function(c) {
       var cat = c.category || 'unknown';
       if (typeof cat === 'object') cat = cat.category || 'unknown';
-      if (!catStats[cat]) catStats[cat] = {total:0, resolved:0};
+      if (!catStats[cat]) catStats[cat] = {total:0, resolved:0, escalated:0, confSum:0, confCount:0};
       catStats[cat].total++;
       if (!c.escalated) catStats[cat].resolved++;
+      else catStats[cat].escalated++;
+      if (c.confidence && c.confidence > 0) { catStats[cat].confSum += c.confidence; catStats[cat].confCount++; }
     });
-    var catArr = Object.keys(catStats).filter(function(k){return catStats[k].total >= 3;}).sort(function(a,b){return catStats[b].total - catStats[a].total;});
+
+    // 유사 카테고리 병합
+    var mergeMap = {'cancel':'cancel_refund','fee':'shipping_fee','escalation':'agent_request'};
+    Object.keys(mergeMap).forEach(function(from) {
+      var to = mergeMap[from];
+      if (catStats[from] && catStats[to]) {
+        catStats[to].total += catStats[from].total;
+        catStats[to].resolved += catStats[from].resolved;
+        catStats[to].escalated += catStats[from].escalated;
+        catStats[to].confSum += catStats[from].confSum;
+        catStats[to].confCount += catStats[from].confCount;
+        delete catStats[from];
+      } else if (catStats[from] && !catStats[to]) {
+        catStats[to] = catStats[from];
+        delete catStats[from];
+      }
+    });
+
+    var catArr = Object.keys(catStats).filter(function(k){return catStats[k].total >= 2;}).sort(function(a,b){return catStats[b].total - catStats[a].total;});
     if (catArr.length > 0) {
-      h += '<div class="chart-card"><h3>카테고리별 AI 해결률</h3><div class="bar-chart">';
-      catArr.slice(0, 10).forEach(function(k) {
+      // 전체 요약 카드
+      var totalCats = catArr.length;
+      var goodCats = catArr.filter(function(k){return Math.round((catStats[k].resolved/catStats[k].total)*100) >= 70;}).length;
+      var badCats = catArr.filter(function(k){return Math.round((catStats[k].resolved/catStats[k].total)*100) < 50;}).length;
+
+      h += '<div class="chart-card"><h3>카테고리별 AI 해결률 상세</h3>';
+      h += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px;">';
+      h += '<div style="background:var(--bg-primary);border-radius:8px;padding:10px;text-align:center;"><div style="font-size:20px;font-weight:700;color:var(--text-primary)">' + totalCats + '</div><div style="font-size:11px;color:var(--text-secondary)">분석 카테고리</div></div>';
+      h += '<div style="background:var(--bg-primary);border-radius:8px;padding:10px;text-align:center;"><div style="font-size:20px;font-weight:700;color:#22c55e">' + goodCats + '</div><div style="font-size:11px;color:var(--text-secondary)">양호 (70%+)</div></div>';
+      h += '<div style="background:var(--bg-primary);border-radius:8px;padding:10px;text-align:center;"><div style="font-size:20px;font-weight:700;color:#ef4444">' + badCats + '</div><div style="font-size:11px;color:var(--text-secondary)">개선필요 (50%-)</div></div>';
+      h += '</div>';
+
+      // 테이블 형태 상세
+      h += '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;">';
+      h += '<thead><tr style="border-bottom:2px solid var(--border-primary);text-align:left;">';
+      h += '<th style="padding:8px 6px;color:var(--text-secondary);">카테고리</th>';
+      h += '<th style="padding:8px 6px;color:var(--text-secondary);text-align:center;">총건수</th>';
+      h += '<th style="padding:8px 6px;color:var(--text-secondary);text-align:center;">해결</th>';
+      h += '<th style="padding:8px 6px;color:var(--text-secondary);text-align:center;">에스컬</th>';
+      h += '<th style="padding:8px 6px;color:var(--text-secondary);min-width:120px;">해결률</th>';
+      h += '<th style="padding:8px 6px;color:var(--text-secondary);text-align:center;">평균신뢰도</th>';
+      h += '<th style="padding:8px 6px;color:var(--text-secondary);text-align:center;">상태</th>';
+      h += '</tr></thead><tbody>';
+
+      catArr.slice(0, 15).forEach(function(k, idx) {
         var s = catStats[k];
         var rate = Math.round((s.resolved / s.total) * 100);
+        var avgC = s.confCount > 0 ? (s.confSum / s.confCount).toFixed(2) : '-';
         var color = rate >= 70 ? '#22c55e' : rate >= 50 ? '#eab308' : '#ef4444';
-        h += '<div class="bar-row"><div class="bar-label">' + k + ' (' + s.total + ')</div><div class="bar-track"><div class="bar-fill" style="width:' + rate + '%;background:' + color + ';"></div><span class="bar-count">' + rate + '%</span></div></div>';
+        var statusEmoji = rate >= 70 ? '✅' : rate >= 50 ? '⚠️' : '🔴';
+        var label = catNameKo[k] || k;
+        var bgColor = idx % 2 === 0 ? 'transparent' : 'var(--bg-primary)';
+
+        h += '<tr style="border-bottom:1px solid var(--border-primary);background:' + bgColor + '">';
+        h += '<td style="padding:8px 6px;font-weight:600;color:var(--text-primary);">' + label + '</td>';
+        h += '<td style="padding:8px 6px;text-align:center;color:var(--text-primary);">' + s.total + '</td>';
+        h += '<td style="padding:8px 6px;text-align:center;color:#22c55e;">' + s.resolved + '</td>';
+        h += '<td style="padding:8px 6px;text-align:center;color:#ef4444;">' + s.escalated + '</td>';
+        h += '<td style="padding:8px 6px;"><div style="display:flex;align-items:center;gap:6px;">';
+        h += '<div style="flex:1;height:6px;background:var(--bg-primary);border-radius:3px;overflow:hidden;"><div style="width:' + rate + '%;height:100%;background:' + color + ';border-radius:3px;"></div></div>';
+        h += '<span style="color:' + color + ';font-weight:700;min-width:36px;text-align:right;">' + rate + '%</span></div></td>';
+        h += '<td style="padding:8px 6px;text-align:center;color:var(--text-secondary);">' + avgC + '</td>';
+        h += '<td style="padding:8px 6px;text-align:center;">' + statusEmoji + '</td>';
+        h += '</tr>';
       });
-      h += '</div><div style="font-size:11px;color:var(--text-secondary);margin-top:8px;">녹색=70%+ | 노랑=50~70% | 빨강=50% 미만</div></div>';
+
+      h += '</tbody></table></div>';
+
+      // 하단 개선 포인트
+      var weakCats = catArr.filter(function(k){return Math.round((catStats[k].resolved/catStats[k].total)*100) < 50 && catStats[k].total >= 3;});
+      if (weakCats.length > 0) {
+        h += '<div style="margin-top:12px;padding:12px;background:rgba(239,68,68,0.08);border-radius:8px;border-left:3px solid #ef4444;">';
+        h += '<div style="font-weight:700;color:#ef4444;font-size:12px;margin-bottom:6px;">🔴 즉시 개선 필요 카테고리</div>';
+        weakCats.forEach(function(k) {
+          var s = catStats[k];
+          var rate = Math.round((s.resolved / s.total) * 100);
+          var label = catNameKo[k] || k;
+          h += '<div style="font-size:12px;color:var(--text-secondary);padding:2px 0;">';
+          h += '• <strong>' + label + '</strong>: 해결률 ' + rate + '% (' + s.escalated + '/' + s.total + '건 에스컬) → FAQ/시나리오 보강 시급</div>';
+        });
+        h += '</div>';
+      }
+
+      var strongCats = catArr.filter(function(k){return Math.round((catStats[k].resolved/catStats[k].total)*100) >= 80 && catStats[k].total >= 5;});
+      if (strongCats.length > 0) {
+        h += '<div style="margin-top:8px;padding:12px;background:rgba(34,197,94,0.08);border-radius:8px;border-left:3px solid #22c55e;">';
+        h += '<div style="font-weight:700;color:#22c55e;font-size:12px;margin-bottom:6px;">✅ 우수 카테고리</div>';
+        strongCats.forEach(function(k) {
+          var s = catStats[k];
+          var rate = Math.round((s.resolved / s.total) * 100);
+          var label = catNameKo[k] || k;
+          h += '<div style="font-size:12px;color:var(--text-secondary);padding:2px 0;">';
+          h += '• <strong>' + label + '</strong>: 해결률 ' + rate + '% (' + s.resolved + '/' + s.total + '건 자동해결)</div>';
+        });
+        h += '</div>';
+      }
+
+      h += '</div>';
     }
 
     // 4-3. 언어별 분포
