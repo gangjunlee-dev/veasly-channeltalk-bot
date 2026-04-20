@@ -1392,48 +1392,43 @@ var seen = {};
           var cMsgs = cmData.messages || [];
           if (cMsgs.length === 0) continue;
 
-          // 매니저가 한 번이라도 응답했는지 확인
-          var hasManagerMsg = cMsgs.some(function(m) { return m.personType === 'manager'; });
-
-          // 고객의 실제 마지막 메시지 찾기 (봇/시스템 제외)
+          // 매니저가 한 번이라도 응답했는지 (봇 제외)
+          var hasRealManagerMsg = false;
+          var lastRealMgrTime = 0;
+          var lastUserTime = 0;
           var lastUserMsg = null;
+          
           for (var cj = 0; cj < cMsgs.length; cj++) {
-            if (cMsgs[cj].personType === 'user' || cMsgs[cj].personType === 'endUser') {
-              lastUserMsg = cMsgs[cj];
-              break;
+            var cm = cMsgs[cj];
+            // 실제 매니저 (봇 아닌)
+            if (cm.personType === 'manager' && !cm.botId) {
+              hasRealManagerMsg = true;
+              if (cm.createdAt > lastRealMgrTime) lastRealMgrTime = cm.createdAt;
+            }
+            // 고객 메시지
+            if (cm.personType === 'user' || cm.personType === 'endUser') {
+              if (cm.createdAt > lastUserTime) {
+                lastUserTime = cm.createdAt;
+                lastUserMsg = cm;
+              }
             }
           }
+          
+          if (!lastUserMsg) continue; // 고객 메시지 없으면 스킵
 
           var shouldAdd = false;
-          var abType = 'abandoned_closed';
-
-          // 케이스1: 매니저 응답 0건 (가장 심각)
-          if (!hasManagerMsg && lastUserMsg) {
+          var customerLeftHanging = false;
+          
+          if (!hasRealManagerMsg) {
+            // 케이스1: 실제 매니저 응답 없음 (봇만 응답)
             shouldAdd = true;
-            abType = 'abandoned_closed';
-          }
-          // 케이스2: 마지막 실제 메시지가 고객 (매니저 답변 후 추가 질문에 미응답)
-          else if (hasManagerMsg) {
-            var lastReal = null;
-            var sysKW2 = ['想聽聽您的寶貴意見','自動結束','自動種了','48小時','장시간','자동 종료'];
-            for (var ck = 0; ck < cMsgs.length; ck++) {
-              var cm = cMsgs[ck];
-              if (cm.personType === 'bot' || cm.personType === 'system') {
-                var bTxt2 = '';
-                if (cm.blocks && cm.blocks.length > 0) bTxt2 = cm.blocks.map(function(bl){return bl.value||'';}).join(' ');
-                else if (cm.plainText) bTxt2 = String(cm.plainText);
-                if (sysKW2.some(function(kw){return bTxt2.indexOf(kw)>=0;})) continue;
-              }
-              lastReal = cm;
-              break;
-            }
-            if (lastReal && (lastReal.personType === 'user' || lastReal.personType === 'endUser')) {
-              shouldAdd = true;
-              abType = 'abandoned_closed';
-            }
+          } else if (lastUserTime > lastRealMgrTime) {
+            // 케이스2: 매니저 응답 있지만, 고객이 그 후 추가 질문 → 미응답
+            shouldAdd = true;
+            customerLeftHanging = true;
           }
 
-          if (shouldAdd && lastUserMsg) {
+          if (shouldAdd) {
             var cText2 = '';
             if (lastUserMsg.blocks && lastUserMsg.blocks.length > 0) {
               cText2 = lastUserMsg.blocks.map(function(bl){return bl.value||'';}).join(' ').substring(0, 150);
@@ -1441,7 +1436,6 @@ var seen = {};
               cText2 = String(lastUserMsg.plainText).substring(0, 150);
             }
 
-            // 대기시간: 고객 메시지 ~ 종료 시각
             var customerMsgTime = lastUserMsg.createdAt || cc.openedAt;
             var closeTime = cc.closedAt || cc.updatedAt;
             var waitMin = Math.round((closeTime - customerMsgTime) / 60000);
@@ -1450,8 +1444,10 @@ var seen = {};
               chatId: cc.id,
               name: cc.name || '(이름없음)',
               state: 'closed',
-              unrepliedType: abType,
-              noManagerReply: !hasManagerMsg, customerLeftHanging: customerLeftHanging,
+              unrepliedType: 'abandoned_closed',
+              subType: customerLeftHanging ? '추가질문미응답' : '매니저응답없음',
+              noManagerReply: !hasRealManagerMsg,
+              customerLeftHanging: customerLeftHanging,
               assigneeId: cc.assigneeId || null,
               lastUserMessage: cText2 || '(이미지/스티커)',
               lastMessageTime: new Date(customerMsgTime).toISOString(),
@@ -1459,7 +1455,7 @@ var seen = {};
               waitingHours: Math.round(waitMin / 60 * 10) / 10,
               createdAt: new Date(cc.createdAt).toISOString(),
               closedAt: new Date(closeTime).toISOString(),
-              priority: !hasManagerMsg ? 'critical' : 'high',
+              priority: !hasRealManagerMsg ? 'critical' : 'high',
               page: cc.source ? cc.source.url : ''
             });
           }
