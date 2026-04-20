@@ -1272,17 +1272,29 @@ function messageBreakdown(r) {
 }
 function insightsCard(r) {
   var insights = [];
-  var catKeys = Object.keys(r.categories);
-  var topCat = { key: '', count: 0 };
-  for (var i = 0; i < catKeys.length; i++) {
-    if (catKeys[i] !== 'other' && catKeys[i] !== 'agent_direct' && catKeys[i] !== 'agent_request' && r.categories[catKeys[i]].count > topCat.count) {
-      topCat = { key: catKeys[i], count: r.categories[catKeys[i]].count, name: r.categories[catKeys[i]].nameKo };
-    }
-  }
+  // 카테고리 병합 후 TOP 찾기
+  var mergeMap = {
+    '배송/물류': ['shipping', 'shipping_fee'],
+    '상담사 연결': ['agent_direct', 'agent_request'],
+    '결제/환불': ['cancel_refund', 'payment', 'points'],
+    '계정/이용방법': ['account', 'howto'],
+    '주문 조회': ['order_status'],
+    '상품문의': ['product'],
+    '클레임/불만': ['complaint']
+  };
+  var topCat = { name: '', count: 0 };
+  Object.keys(mergeMap).forEach(function(label) {
+    var total = 0;
+    mergeMap[label].forEach(function(k) {
+      if (r.categories[k] && r.categories[k].count) total += r.categories[k].count;
+    });
+    if (total > topCat.count) topCat = { name: label, count: total };
+  });
   if (topCat.count > 0) insights.push('<span style="color:#3b82f6;">📊</span> 가장 많은 문의: <strong>' + topCat.name + '</strong> (' + topCat.count + '건) — FAQ 강화로 AI 해결률 향상 가능');
   if (r.unresolvedChats > 10) insights.push('<span style="color:#ef4444;">⚠️</span> 미해결 <strong>' + r.unresolvedChats + '건</strong> — 우선 처리 필요');
-  var escCount = (r.categories.agent_direct ? r.categories.agent_direct.count : 0) + (r.categories.agent_request ? r.categories.agent_request.count : 0);
-  var aiRate = Math.round((r.botMessages / (r.botMessages + r.managerMessages)) * 100);
+  var realBot = r.botMessages || 0;
+  var mgr = r.managerMessages || 0;
+  var aiRate = (realBot + mgr) > 0 ? Math.round((realBot / (realBot + mgr)) * 100) : 0;
   if (aiRate >= 70) insights.push('<span style="color:#22c55e;">✅</span> AI 응답률 <strong>' + aiRate + '%</strong> — 목표(70%) 달성');
   else insights.push('<span style="color:#eab308;">📈</span> AI 응답률 <strong>' + aiRate + '%</strong> — 목표 70%까지 ' + (70 - aiRate) + '%p 필요');
 
