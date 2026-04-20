@@ -1406,7 +1406,7 @@ function loadAIData() {
       }
 
       // data 속성으로 필터링 지원
-      html += '<div class="ai-log-card" data-esc="' + (hasEsc?"1":"0") + '" data-lang="' + cm.lang + '" data-name="' + (userName||"").toLowerCase() + '" data-preview="' + (previewMsg||"").toLowerCase().replace(/"/g,"") + '" style="background:var(--bg-secondary);border-radius:12px;padding:14px 16px;margin-bottom:8px;border:1px solid var(--border-primary);border-left:3px solid ' + (hasEsc?'#ef4444':'#22c55e') + ';cursor:pointer;transition:all 0.2s;" onclick="this.querySelector(\'.conv-detail\').style.display=this.querySelector(\'.conv-detail\').style.display===\'none\'?\'block\':\'none\'">';
+      html += '<div class="ai-log-card" data-esc="' + (hasEsc?"1":"0") + '" data-lang="' + cm.lang + '" data-name="' + (userName||"").toLowerCase() + '" data-preview="' + (previewMsg||"").toLowerCase().replace(/"/g,"") + '" style="background:var(--bg-secondary);border-radius:12px;padding:14px 16px;margin-bottom:8px;border:1px solid var(--border-primary);border-left:3px solid ' + (hasEsc?'#ef4444':'#22c55e') + ';cursor:pointer;transition:all 0.2s;" >';
 
       // 헤더 행
       html += '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:4px;">';
@@ -1449,7 +1449,7 @@ function loadAIData() {
           html += '<div style="background:#1a2332;border-radius:8px;padding:10px;color:var(--text-secondary);font-size:13px;line-height:1.6;margin-left:20px;border-left:3px solid ' + tc + ';white-space:pre-wrap;">' + m.aiResponse + '</div>';
           if (m.type === "ai_answer" || m.type === "order_lookup") {
             html += '<div style="margin:4px 0 8px 20px;text-align:right;">';
-            html += '<button style="padding:3px 10px;border-radius:6px;border:1px solid var(--border-primary);background:var(--bg-secondary);color:var(--text-secondary);cursor:pointer;font-size:10px;" onclick="event.stopPropagation();showReview(\'' + encodeURIComponent(JSON.stringify(m)) + '\')">✏️ 평가</button>';
+            html += '<button style="padding:3px 10px;border-radius:6px;border:1px solid var(--border-primary);background:var(--bg-secondary);color:var(--text-secondary);cursor:pointer;font-size:10px;" class="review-btn" data-rv="' + encodeURIComponent(JSON.stringify(m)) + '">✏️ 평가</button>';
             html += '</div>';
           }
           html += '</div>';
@@ -1461,7 +1461,7 @@ function loadAIData() {
       for (var li=msgs.length-1;li>=0;li--){if(msgs[li].type==="ai_answer"){lastAi=msgs[li];break;}}
       if (lastAi) {
         html += '<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border-primary);text-align:right;">';
-        html += '<button style="padding:4px 12px;border-radius:6px;border:1px solid var(--border-primary);background:var(--bg-primary);color:var(--text-secondary);cursor:pointer;font-size:11px;" onclick="event.stopPropagation();showReview(\'' + encodeURIComponent(JSON.stringify(lastAi)) + '\')">📝 평가하기</button>';
+        html += '<button style="padding:4px 12px;border-radius:6px;border:1px solid var(--border-primary);background:var(--bg-primary);color:var(--text-secondary);cursor:pointer;font-size:11px;" class="review-btn" data-rv="' + encodeURIComponent(JSON.stringify(lastAi)) + '">📝 평가하기</button>';
         html += '</div>';
       }
 
@@ -1524,6 +1524,21 @@ function applyAILogFilters() {
 
     card.style.display = show ? '' : 'none';
     if (show) shown++;
+
+// AI 로그: 이벤트 위임 (카드 토글 + 평가 버튼)
+document.addEventListener("click", function(e) {
+  // 평가 버튼
+  var rb = e.target.closest(".review-btn");
+  if (rb) { e.stopPropagation(); showReview(rb.getAttribute("data-rv")); return; }
+  // 카드 토글 (conv-detail 내부 클릭은 무시)
+  if (e.target.closest(".conv-detail")) return;
+  var card = e.target.closest(".ai-log-card");
+  if (card) {
+    var d = card.querySelector(".conv-detail");
+    if (d) d.style.display = d.style.display === "none" ? "block" : "none";
+  }
+});
+
   });
 }
 
