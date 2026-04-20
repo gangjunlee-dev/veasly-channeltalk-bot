@@ -1557,15 +1557,17 @@ async function loadFAQRecommendations() {
 async function loadBusinessMetrics() {
   if (!document.getElementById('bizMetricsPanel') && !document.getElementById('business-metrics')) { return; }
   try {
-    const res = await fetch('/api/analytics/business-metrics?weeks=12');
-    const data = await res.json();
+    const [bizRes, csRes, escRes] = await Promise.all([
+      fetch('/api/analytics/business-metrics?weeks=12').then(r=>r.json()).catch(()=>({success:false})),
+      fetch('/api/analytics/cs-score-metrics?days=7').then(r=>r.json()).catch(()=>({success:false})),
+      fetch('/api/analytics/escalation-analysis?days=7').then(r=>r.json()).catch(()=>({success:false}))
+    ]);
     const el = document.getElementById('biz-metrics-content');
-    if (!data.success || !data.metrics.length) {
-      el.innerHTML = '주간 데이터 축적 중... 매주 월요일 10시 자동 기록됩니다.';
-      return;
-    }
-    
-    const latest = data.metrics[data.metrics.length - 1];
+    // Use realtime CS score, fallback to weekly snapshot
+    const realtimeScore = csRes.success ? csRes.integratedScore.score : null;
+    const realtimeEsc = escRes.success ? escRes.totalEscalated : 0;
+    const weekCount = bizRes.success ? bizRes.totalWeeks : 1;
+    const latest = { csScore: realtimeScore, totalEscalations: realtimeEsc };
     el.innerHTML = `
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;">
         <div style="padding:12px;background:var(--bg-primary);border-radius:8px;text-align:center;">
@@ -1578,7 +1580,7 @@ async function loadBusinessMetrics() {
         </div>
         <div style="padding:12px;background:var(--bg-primary);border-radius:8px;text-align:center;">
           <div style="font-size:11px;color:var(--text-secondary);">데이터 기간</div>
-          <div style="font-size:20px;color:#22c55e;font-weight:bold;margin-top:4px;">${data.totalWeeks}주</div>
+          <div style="font-size:20px;color:#22c55e;font-weight:bold;margin-top:4px;">${weekCount}주</div>
         </div>
       </div>
       <div style="margin-top:12px;font-size:11px;color:var(--text-secondary);">
