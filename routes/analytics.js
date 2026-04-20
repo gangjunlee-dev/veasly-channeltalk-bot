@@ -619,7 +619,7 @@ router.get('/cs-score-metrics', async function(req, res) {
   var csatAvg = 0;
   try {
     var csatData = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'data', 'csat-results.json'), 'utf8'));
-    var recentCSAT = csatData.filter(function(c) { return new Date(c.timestamp) >= cutoff; });
+    var recentCSAT = csatData.filter(function(c) { return c.timestamp >= cutoffMs; });
     if (recentCSAT.length > 0) {
       csatAvg = recentCSAT.reduce(function(sum, c) { return sum + c.score; }, 0) / recentCSAT.length;
     }
@@ -638,7 +638,7 @@ router.get('/cs-score-metrics', async function(req, res) {
     }
 
   var csatScore = csatAvg2 > 0 ? csatAvg2 : (csatAvg > 0 ? csatAvg : 2.5); // csatAvg2 from csat-results.json
-  if (csatAvg === 0) console.log('[CS Score] CSAT no data - using default 2.5');
+  if (csatAvg === 0 && csatAvg2 === 0) console.log('[CS Score] CSAT no data - using default 2.5');
 
   var cesScoreVal = cesAvg > 0 ? cesAvg : 2.5; // default if no data
 
