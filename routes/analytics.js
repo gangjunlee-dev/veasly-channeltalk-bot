@@ -1404,7 +1404,7 @@ unreplied.sort(function(a, b) { return b.waitingMinutes - a.waitingMinutes; });
     try {
       var mgrData = JSON.parse(fs.readFileSync(require('path').join(__dirname, '..', 'data', 'managers.json'), 'utf8'));
       if (Array.isArray(mgrData)) {
-        mgrData.forEach(function(m) { mgrMap[m.id] = m.name; });
+        mgrData.forEach(function(m) { mgrMap[m.id] = m.email ? m.email.split('@')[0] : m.name; });
       }
     } catch(e) {}
 
