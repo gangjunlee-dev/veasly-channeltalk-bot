@@ -1187,11 +1187,32 @@ function radarItem(label, value) {
   return '<div class="radar-item"><div class="radar-val" style="color:' + color + ';">' + value + '</div><div class="radar-lbl">' + label + '</div></div>';
 }
 function categoryChart(cats) {
+  // === 카테고리 병합 ===
+  var mergeMap = {
+    '배송/물류': ['shipping', 'shipping_fee'],
+    '상담사 연결': ['agent_direct', 'agent_request'],
+    '결제/환불': ['cancel_refund', 'payment', 'points'],
+    '계정/이용방법': ['account', 'howto'],
+    '주문 조회': ['order_status'],
+    '상품문의': ['product'],
+    '클레임/불만': ['complaint'],
+    '주소/연락처': ['address'],
+    '웹사이트': [],
+    '기타': ['other']
+  };
+  var merged = {};
+  Object.keys(mergeMap).forEach(function(label) {
+    var total = 0;
+    mergeMap[label].forEach(function(k) {
+      if (cats[k] && cats[k].count) total += cats[k].count;
+    });
+    if (total > 0) merged[label] = total;
+  });
+
   var items = [];
-  var catKeys = Object.keys(cats);
-  for (var i = 0; i < catKeys.length; i++) {
-    if (cats[catKeys[i]].count > 0 && catKeys[i] !== 'sticker' && catKeys[i] !== 'greeting') items.push({ key: catKeys[i], name: cats[catKeys[i]].nameKo || cats[catKeys[i]].name, count: cats[catKeys[i]].count });
-  }
+  Object.keys(merged).forEach(function(label) {
+    items.push({ key: label, name: label, count: merged[label] });
+  });
   items.sort(function(a, b) { return b.count - a.count; });
   var max = items.length > 0 ? items[0].count : 1;
   var colors = ['#3b82f6','#22c55e','#eab308','#ef4444','#a855f7','#06b6d4','#f97316','#ec4899','#84cc16','#6366f1'];
