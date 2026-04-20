@@ -1274,32 +1274,45 @@ router.get('/unreplied-chats', async function(req, res) {
         var msgs = msgData.messages || [];
         if (msgs.length === 0) continue;
 
-        var lastMsg = msgs[0];
-        var lastPersonType = lastMsg.personType || '';
+        // 봇 시스템 메시지(CSAT, 대기안내 등) 건너뛰고 실제 마지막 메시지 찾기
+        var systemKW = ["想聽聽您的寶貴意見","滿意度","服務體驗","만족도","satisfaction","稍等","請稍候","感謝您的耐心","48小時","48시간"];
+        var lastMsg = null;
+        var lastPersonType = "";
+        for (var mi = 0; mi < msgs.length; mi++) {
+          var mm = msgs[mi];
+          if (mm.personType === "bot") {
+            var bTxt = "";
+            if (mm.blocks && mm.blocks.length > 0) { bTxt = mm.blocks.map(function(bl){ return bl.value || ""; }).join(" "); }
+            else if (mm.plainText) { bTxt = String(mm.plainText); }
+            var isSys = systemKW.some(function(kw){ return bTxt.indexOf(kw) >= 0; });
+            if (isSys) continue;
+          }
+          lastMsg = mm;
+          lastPersonType = mm.personType || "";
+          break;
+        }
+        if (!lastMsg) { lastMsg = msgs[0]; lastPersonType = lastMsg.personType || ""; }
 
         // === 미응답 판단 로직 (확장) ===
         var isUnreplied = false;
-        var unrepliedType = '';
-        
-        // 케이스1: 마지막 메시지가 고객 → 아무도 응답 안 함
-        if (lastPersonType === 'user' || lastPersonType === 'endUser') {
+        var unrepliedType = "";
+
+        // 케이스1: 마지막 실제 메시지가 고객
+        if (lastPersonType === "user" || lastPersonType === "endUser") {
           isUnreplied = true;
-          unrepliedType = 'no_response';
+          unrepliedType = "no_response";
         }
         // 케이스2: 봇이 에스컬레이션 안내 후 매니저 미응답
-        else if (lastPersonType === 'bot') {
-          var botText = '';
-          if (lastMsg.blocks && lastMsg.blocks.length > 0) {
-            botText = lastMsg.blocks.map(function(bl) { return bl.value || ''; }).join(' ');
-          } else if (lastMsg.plainText) {
-            botText = String(lastMsg.plainText);
-          }
-          var escKeywords = ['轉接客服', '轉接', '客服人員', '確認一下', '先為您轉接', '담당자', '연결해', 'connect you', 'support team', '正在為您轉接', '幫您確認'];
-          var hasEscalation = escKeywords.some(function(kw) { return botText.includes(kw); });
-          var hasManagerReply = msgs.some(function(m) { return m.personType === 'manager'; });
-          if (hasEscalation && !hasManagerReply) {
+        else if (lastPersonType === "bot") {
+          var botText2 = "";
+          if (lastMsg.blocks && lastMsg.blocks.length > 0) { botText2 = lastMsg.blocks.map(function(bl){ return bl.value || ""; }).join(" "); }
+          else if (lastMsg.plainText) { botText2 = String(lastMsg.plainText); }
+          var escKW = ["轉接客服","轉接","客服人員","確認一下","先為您轉接","담당자","연결해","connect you","support team","正在為您轉接","幫您確認"];
+          var hasEsc = escKW.some(function(kw){ return botText2.indexOf(kw) >= 0; });
+          var hasMgr = msgs.some(function(m){ return m.personType === "manager"; });
+          if (hasEsc && !hasMgr) {
             isUnreplied = true;
-            unrepliedType = 'escalation_pending';
+            unrepliedType = "escalation_pending";
           }
         }
         
