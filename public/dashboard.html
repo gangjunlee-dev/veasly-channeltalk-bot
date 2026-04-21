@@ -307,7 +307,7 @@ td { padding: 10px 8px; border-bottom: 1px solid var(--border-secondary); font-s
     <div id="unrepliedSummary" style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;"></div>
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
       <span style="font-size:13px;color:var(--text-secondary);" id="unrepliedLastUpdate">마지막 업데이트: -</span>
-      <button onclick="loadUnrepliedData()" style="background:var(--accent);color:#fff;border:none;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px;">🔄 새로고침</button>
+      <button onclick="exportUnrepliedData()" style="background:var(--bg-secondary);border:1px solid var(--border-primary);color:var(--text-secondary);padding:8px 14px;border-radius:8px;cursor:pointer;font-size:13px;margin-right:8px;">📥 CSV</button><button onclick="loadUnrepliedData()" style="background:var(--accent);color:#fff;border:none;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px;">🔄 새로고침</button>
     </div>
     <div id="unrepliedList"><div class="loading">미응답 채팅 로딩 중...</div></div>
   </div>
@@ -934,7 +934,7 @@ function loadManagerData() {
     }
 
     // Manager Cards
-    html += '<div class="section-title">매니저별 성과 요약</div>';
+    html += '<div class="section-title" style="display:flex;justify-content:space-between;align-items:center;">매니저별 성과 요약 <button onclick="exportManagerData()" style="background:var(--bg-secondary);border:1px solid var(--border-primary);color:var(--text-secondary);padding:6px 14px;border-radius:8px;cursor:pointer;font-size:12px;">📥 CSV 내보내기</button></div>';
     mgrPerf.managers.filter(function(m) { return m.status === 'active'; }).forEach(function(m) {
       var rd = reviewData[m.managerId];
       html += '<div style="padding:0 32px 16px;">';
@@ -1387,7 +1387,7 @@ function loadAIData() {
 
     // === AI 대화 로그 (필터링 + UX 개선) ===
     var html = h;
-    html += '<div class="section-title">AI 대화 로그</div>';
+    html += '<div class="section-title" style="display:flex;justify-content:space-between;align-items:center;">AI 대화 로그 <button onclick="exportAILogData()" style="background:var(--bg-secondary);border:1px solid var(--border-primary);color:var(--text-secondary);padding:6px 14px;border-radius:8px;cursor:pointer;font-size:12px;">📥 CSV 내보내기</button></div>';
     html += '<div style="padding:0 32px 16px;"><div class="chart-card">';
 
     // chatId별 그룹화
@@ -1908,7 +1908,7 @@ function loadCSATData() {
     var html = '';
 
     // ========== 상단 요약 카드 ==========
-    html += '<div class="section-title">고객 피드백 종합</div>';
+    html += '<div class="section-title" style="display:flex;justify-content:space-between;align-items:center;">고객 피드백 종합 <button onclick="exportCSATData()" style="background:var(--bg-secondary);border:1px solid var(--border-primary);color:var(--text-secondary);padding:6px 14px;border-radius:8px;cursor:pointer;font-size:12px;">📥 CSV 내보내기</button></div>';
     html += '<div class="grid">';
 
     if (csat && csat.success && csat.totalResponses > 0) {
@@ -2665,6 +2665,125 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   });
 })();
+
+
+// ===== CSV 내보내기 유틸 =====
+function downloadCSV(filename, headers, rows) {
+  var BOM = '\uFEFF';
+  var csv = BOM + headers.join(',') + '\n';
+  rows.forEach(function(row) {
+    csv += row.map(function(cell) {
+      var s = String(cell || '').replace(/"/g, '""');
+      if (s.indexOf(',') >= 0 || s.indexOf('\n') >= 0 || s.indexOf('"') >= 0) s = '"' + s + '"';
+      return s;
+    }).join(',') + '\n';
+  });
+  var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  var link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = filename;
+  link.click();
+}
+
+function exportCSATData() {
+  var days = document.getElementById('days').value;
+  fetch('/api/analytics/csat?days=' + days).then(function(r){return r.json();}).then(function(d) {
+    if (!d.success || !d.recent) { alert('내보낼 데이터가 없습니다'); return; }
+    var headers = ['시간', '점수', '평가', 'chatId'];
+    var rows = d.recent.map(function(r) {
+      var labels = {1:'매우만족',2:'만족',3:'보통',4:'불만족',5:'매우불만족'};
+      return [
+        r.timestamp ? new Date(r.timestamp).toLocaleString('ko-KR',{timeZone:'Asia/Seoul'}) : '',
+        r.score,
+        labels[r.score] || '',
+        r.chatId || ''
+      ];
+    });
+    downloadCSV('CSAT_' + new Date().toISOString().slice(0,10) + '.csv', headers, rows);
+  });
+}
+
+function exportAILogData() {
+  fetch('/api/analytics/ai-conversations?limit=500').then(function(r){return r.json();}).then(function(d) {
+    var convs = d.conversations || [];
+    if (convs.length === 0) { alert('내보낼 데이터가 없습니다'); return; }
+    var headers = ['시간', '고객명', '언어', '유형', '고객메시지', 'AI응답', '에스컬레이션', '카테고리', 'Confidence', 'chatId'];
+    var rows = convs.map(function(c) {
+      var cat = c.category || '';
+      if (typeof cat === 'object') cat = cat.category || '';
+      return [
+        c.timestamp ? new Date(c.timestamp).toLocaleString('ko-KR',{timeZone:'Asia/Seoul'}) : '',
+        c.userName || '',
+        c.lang || '',
+        c.type || '',
+        (c.userMessage || '').substring(0, 500),
+        (c.aiResponse || '').substring(0, 500),
+        c.escalated ? 'Y' : 'N',
+        cat,
+        c.confidence || '',
+        c.chatId || ''
+      ];
+    });
+    downloadCSV('AI_대화로그_' + new Date().toISOString().slice(0,10) + '.csv', headers, rows);
+  });
+}
+
+function exportUnrepliedData() {
+  fetch('/api/analytics/unreplied-chats').then(function(r){return r.json();}).then(function(d) {
+    var chats = d.chats || [];
+    if (chats.length === 0) { alert('내보낼 데이터가 없습니다'); return; }
+    var headers = ['고객명', '유형', '긴급도', '대기시간(h)', '마지막메시지', '담당자', '상태', '생성일', '종료일', 'chatId'];
+    var rows = chats.map(function(c) {
+      return [
+        c.name || '',
+        c.unrepliedType || '',
+        c.urgency || '',
+        c.waitingHours || 0,
+        (c.lastUserMessage || '').substring(0, 300),
+        c.assigneeName || c.assigneeId || '',
+        c.state || '',
+        c.createdAt || '',
+        c.closedAt || '',
+        c.chatId || ''
+      ];
+    });
+    downloadCSV('미응답_' + new Date().toISOString().slice(0,10) + '.csv', headers, rows);
+  });
+}
+
+function exportManagerData() {
+  var days = document.getElementById('days').value;
+  fetch('/api/analytics/manager-performance?days=' + days).then(function(r){return r.json();}).then(function(d) {
+    if (!d.success || !d.managers) { alert('내보낼 데이터가 없습니다'); return; }
+    var headers = ['매니저', '이메일', '등급', '점수', '답변수', '채팅수', '평균응답(24h)', '평균응답(영업)', '평균답변길이', '상태'];
+    var rows = d.managers.map(function(m) {
+      return [
+        m.name || '',
+        m.email || '',
+        m.qualityScore ? m.qualityScore.grade : '',
+        m.qualityScore ? m.qualityScore.total : '',
+        m.totalReplies || 0,
+        m.uniqueChats || 0,
+        m.avgResponseTimeMin || 0,
+        m.bizAvgResponseTimeMin || 0,
+        m.avgReplyLength || 0,
+        m.status || ''
+      ];
+    });
+    downloadCSV('매니저성과_' + new Date().toISOString().slice(0,10) + '.csv', headers, rows);
+  });
+}
+
+function exportShippingData() {
+  fetch('/api/analytics/shipping').then(function(r){return r.json();}).then(function(d) {
+    if (!d.success) { alert('내보낼 데이터가 없습니다'); return; }
+    var headers = ['상태', '건수'];
+    var dist = d.statusDistribution || {};
+    var labels = {'PAYMENT_COMPLETED':'결제완료','ORDER_PROCESSING':'주문처리중','SHIPPING_TO_BDJ':'창고배송중','SHIPPING_TO_HOME':'국제배송중','COMPLETED':'배송완료','CANCEL_COMPLETED':'취소'};
+    var rows = Object.keys(dist).map(function(k) { return [labels[k] || k, dist[k]]; });
+    downloadCSV('배송현황_' + new Date().toISOString().slice(0,10) + '.csv', headers, rows);
+  });
+}
 
 </script>
 
