@@ -1589,19 +1589,7 @@ function applyAILogFilters() {
     card.style.display = show ? '' : 'none';
     if (show) shown++;
 
-// AI 로그: 이벤트 위임 (카드 토글 + 평가 버튼)
-document.addEventListener("click", function(e) {
-  // 평가 버튼
-  var rb = e.target.closest(".review-btn");
-  if (rb) { e.stopPropagation(); showReview(rb.getAttribute("data-rv")); return; }
-  // 카드 토글 (conv-detail 내부 클릭은 무시)
-  if (e.target.closest(".conv-detail")) return;
-  var card = e.target.closest(".ai-log-card");
-  if (card) {
-    var d = card.querySelector(".conv-detail");
-    if (d) d.style.display = d.style.display === "none" ? "block" : "none";
-  }
-});
+// 이벤트 위임은 전역에서 1회 등록 (아래 참조)
 
   });
 }
@@ -2249,6 +2237,24 @@ async function loadDataHealth() {
 document.addEventListener('DOMContentLoaded', function() {
   setTimeout(loadDataHealth, 1500);
 });
+
+// AI 로그: 전역 이벤트 위임 (1회만 등록)
+(function() {
+  document.addEventListener("click", function(e) {
+    // 평가 버튼
+    var rb = e.target.closest(".review-btn");
+    if (rb) { e.stopPropagation(); showReview(rb.getAttribute("data-rv")); return; }
+    // conv-detail 내부 클릭은 무시
+    if (e.target.closest(".conv-detail")) return;
+    // 카드 토글
+    var card = e.target.closest(".ai-log-card");
+    if (card) {
+      var d = card.querySelector(".conv-detail");
+      if (d) d.style.display = d.style.display === "none" ? "block" : "none";
+    }
+  });
+})();
+
 </script>
 
 </body>
