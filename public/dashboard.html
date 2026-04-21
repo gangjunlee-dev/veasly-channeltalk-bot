@@ -1597,60 +1597,175 @@ function applyAILogFilters() {
 // ===== CSAT TAB =====
 function loadCSATData() {
   var days = document.getElementById('days').value;
-  document.getElementById('csatContent').innerHTML = '<div class="loading">CSAT 데이터 로딩 중...</div>';
-  
+  document.getElementById('csatContent').innerHTML = '<div class="loading">고객 피드백 데이터 로딩 중...</div>';
+
   Promise.all([
     fetch('/api/analytics/csat?days=' + days).then(function(r) { return r.json(); }),
-    // REMOVED: csat-feedback (추후 CSAT 탭 업그레이드 시 활용)
-    // REMOVED: manager-performance (CSAT 탭에서 미사용)
+    fetch('/api/analytics/ces').then(function(r) { return r.json(); }).catch(function() { return null; }),
+    fetch('/api/analytics/csat-feedback?days=' + days).then(function(r) { return r.json(); }).catch(function() { return null; })
   ]).then(function(results) {
     var csat = results[0];
-    // var csatFeedback = results[1]; // REMOVED
-    // var mgrPerf = results[2]; // REMOVED
+    var ces = results[1];
+    var feedback = results[2];
     cachedData.csat = true;
 
     var html = '';
 
-    if (csat && csat.success) {
-      var starColor = csat.averageScore >= 4 ? 'green' : csat.averageScore >= 3 ? 'yellow' : 'red';
-      html += '<div class="grid">';
-      html += card('CSAT 평균', csat.averageScore || '-', '/ 5', starColor, '목표: 4.0 이상', '⭐ 고객 만족도 평균 점수입니다. 1점=매우만족, 5점=매우불만족. 상담 종료 후 자동 발송되는 설문 기반입니다. 4.0 이상이 업계 우수 기준입니다.');
-      html += card('총 응답', csat.totalResponses, '건', 'blue', '고객 피드백', '📮 CSAT 설문에 실제로 응답한 고객 수입니다. 응답률이 낮으면 설문 시점이나 문구를 조정해볼 수 있습니다.');
+    // ========== 상단 요약 카드 ==========
+    html += '<div class="section-title">고객 피드백 종합</div>';
+    html += '<div class="grid">';
+
+    if (csat && csat.success && csat.totalResponses > 0) {
+      var starColor = csat.averageScore <= 2 ? 'green' : csat.averageScore <= 3 ? 'yellow' : 'red';
       var highSat = (csat.distribution ? (csat.distribution[1] || 0) + (csat.distribution[2] || 0) : 0);
       var lowSat = (csat.distribution ? (csat.distribution[4] || 0) + (csat.distribution[5] || 0) : 0);
-      html += card('만족 (1-2점)', highSat, '건', 'green', '긍정 평가', '😊 1점(매우만족) + 2점(만족) 응답 합계입니다. 전체 응답 대비 비율이 70% 이상이면 서비스 품질이 우수합니다.');
-      html += card('불만 (4-5점)', lowSat, '건', lowSat > 0 ? 'red' : 'green', '개선 필요', '😟 4점(불만족) + 5점(매우불만족) 응답 합계입니다. 불만 고객의 피드백을 분석하여 반복되는 문제를 개선해야 합니다.');
+      var satRate = csat.totalResponses > 0 ? Math.round((highSat / csat.totalResponses) * 100) : 0;
+
+      html += card('CSAT 평균', csat.averageScore.toFixed(1), '/ 5', starColor, '1=최고 5=최저', '⭐ 고객 만족도. 1=매우만족, 5=매우불만족. 2.0 이하가 우수.');
+      html += card('총 응답', csat.totalResponses, '건', 'blue', '설문 응답 수', '📮 상담 종료 시 자동 발송된 CSAT 설문 응답 수');
+      html += card('만족률', satRate + '%', '', satRate >= 70 ? 'green' : satRate >= 50 ? 'yellow' : 'red', '1~2점 비율', '😊 매우만족+만족 응답 비율. 70% 이상 목표');
+      html += card('불만족', lowSat, '건', lowSat > 3 ? 'red' : lowSat > 0 ? 'yellow' : 'green', '4~5점 응답', '😟 불만족+매우불만족 응답. 0건 유지 목표');
+    } else {
+      html += card('CSAT', '-', '', 'yellow', '데이터 수집 중', '아직 CSAT 응답이 없습니다');
+    }
+
+    // CES 카드
+    if (ces && ces.success && ces.total > 0) {
+      var cesColor = ces.average >= 4 ? 'green' : ces.average >= 3 ? 'yellow' : 'red';
+      html += card('CES 평균', ces.average.toFixed(1), '/ 5', cesColor, '고객 노력도', '💪 문제 해결 용이성. 1=매우어려움, 5=매우쉬움. 4.0 이상 목표');
+      html += card('CES 응답', ces.total, '건', 'blue', 'CSAT 후속 질문', '📊 CSAT 1~3점 응답 고객에게 추가 질문한 결과');
+    } else {
+      html += card('CES', '-', '', 'yellow', '데이터 수집 중', '💪 CSAT 응답 후 자동 발송. 데이터 축적 중');
+    }
+
+    html += '</div>';
+
+    // ========== 차트 영역 ==========
+    html += '<div class="charts">';
+
+    // CSAT 점수 분포
+    if (csat && csat.success && csat.totalResponses > 0) {
+      var csatLabels = { 1: '1 - 😍 매우만족', 2: '2 - 😊 만족', 3: '3 - 😐 보통', 4: '4 - 😕 불만족', 5: '5 - 😞 매우불만족' };
+      var csatColors = { 1: '#22c55e', 2: '#84cc16', 3: '#eab308', 4: '#f97316', 5: '#ef4444' };
+      var csatMax = 1;
+      for (var s = 1; s <= 5; s++) { if ((csat.distribution[s] || 0) > csatMax) csatMax = csat.distribution[s]; }
+
+      html += '<div class="chart-card"><h3>CSAT 점수 분포</h3><div class="bar-chart">';
+      for (var s = 1; s <= 5; s++) {
+        var cnt = csat.distribution[s] || 0;
+        var pct = Math.round((cnt / csatMax) * 100);
+        html += '<div class="bar-row"><div class="bar-label" style="width:180px;">' + csatLabels[s] + '</div><div class="bar-track"><div class="bar-fill" style="width:' + pct + '%;background:' + csatColors[s] + ';"></div><span class="bar-count">' + cnt + '</span></div></div>';
+      }
       html += '</div>';
 
-      if (csat.totalResponses > 0) {
-        html += '<div class="charts">';
-        // CSAT distribution
-        html += '<div class="chart-card"><h3>CSAT 점수 분포</h3><div class="bar-chart">';
-        var csatLabels = { 1: '1 - 매우만족 (Best)', 2: '2 - 만족', 3: '3 - 보통', 4: '4 - 불만족', 5: '5 - 매우불만족 (Worst)' };
-        var csatColors = { 1: '#22c55e', 2: '#84cc16', 3: '#eab308', 4: '#f97316', 5: '#ef4444' };
-        var csatMax = 1;
-        for (var s = 1; s <= 5; s++) { if ((csat.distribution[s] || 0) > csatMax) csatMax = csat.distribution[s]; }
-        for (var s = 1; s <= 5; s++) {
-          var cnt = csat.distribution[s] || 0;
-          var pct = Math.round((cnt / csatMax) * 100);
-          html += '<div class="bar-row"><div class="bar-label" style="width:200px;">' + csatLabels[s] + '</div><div class="bar-track"><div class="bar-fill" style="width:' + pct + '%;background:' + csatColors[s] + ';"></div><span class="bar-count">' + cnt + '</span></div></div>';
-        }
-        html += '</div></div>';
+      // 만족/불만족 비율 바
+      var highSat2 = (csat.distribution[1] || 0) + (csat.distribution[2] || 0);
+      var midSat = csat.distribution[3] || 0;
+      var lowSat2 = (csat.distribution[4] || 0) + (csat.distribution[5] || 0);
+      var total2 = csat.totalResponses || 1;
+      html += '<div style="margin-top:16px;">';
+      html += '<div style="display:flex;height:24px;border-radius:12px;overflow:hidden;">';
+      html += '<div style="width:' + Math.round(highSat2/total2*100) + '%;background:#22c55e;" title="만족 ' + highSat2 + '건"></div>';
+      html += '<div style="width:' + Math.round(midSat/total2*100) + '%;background:#eab308;" title="보통 ' + midSat + '건"></div>';
+      html += '<div style="width:' + Math.round(lowSat2/total2*100) + '%;background:#ef4444;" title="불만족 ' + lowSat2 + '건"></div>';
+      html += '</div>';
+      html += '<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-secondary);margin-top:4px;">';
+      html += '<span style="color:#22c55e;">😊 만족 ' + Math.round(highSat2/total2*100) + '%</span>';
+      html += '<span style="color:#eab308;">😐 보통 ' + Math.round(midSat/total2*100) + '%</span>';
+      html += '<span style="color:#ef4444;">😟 불만족 ' + Math.round(lowSat2/total2*100) + '%</span>';
+      html += '</div></div>';
+      html += '</div>';
+    }
 
-        // Manager CSAT (if available)
-        html += '<div class="chart-card"><h3>매니저별 CSAT</h3>';
-        html += '<div style="color:var(--text-secondary);font-size:13px;padding:20px;text-align:center;">매니저별 CSAT 데이터는 매니저 성과 탭에서 확인할 수 있습니다.</div>';
-        html += '</div></div>';
+    // CES 점수 분포
+    if (ces && ces.success && ces.total > 0 && ces.distribution) {
+      var cesLabels = { 1: '1 - 매우 어려움', 2: '2 - 어려움', 3: '3 - 보통', 4: '4 - 쉬움', 5: '5 - 매우 쉬움' };
+      var cesColors = { 1: '#ef4444', 2: '#f97316', 3: '#eab308', 4: '#84cc16', 5: '#22c55e' };
+      var cesMax = 1;
+      for (var cs = 1; cs <= 5; cs++) { if ((ces.distribution[cs] || 0) > cesMax) cesMax = ces.distribution[cs]; }
+
+      html += '<div class="chart-card"><h3>CES 점수 분포 (고객 노력도)</h3><div class="bar-chart">';
+      for (var cs = 1; cs <= 5; cs++) {
+        var cnt = ces.distribution[cs] || 0;
+        var pct = Math.round((cnt / cesMax) * 100);
+        html += '<div class="bar-row"><div class="bar-label" style="width:180px;">' + cesLabels[cs] + '</div><div class="bar-track"><div class="bar-fill" style="width:' + pct + '%;background:' + cesColors[cs] + ';"></div><span class="bar-count">' + cnt + '</span></div></div>';
       }
-    } else {
+      html += '</div>';
+      html += '<div style="margin-top:8px;font-size:12px;color:var(--text-secondary);">CES는 CSAT 1~3점 응답 고객에게 "문제 해결이 쉬웠나요?" 추가 질문. 높을수록 좋음.</div>';
+      html += '</div>';
+    }
+
+    html += '</div>';
+
+    // ========== 불만족 사유 (csat-feedback) ==========
+    if (feedback && feedback.success && feedback.total > 0) {
+      html += '<div style="padding:0 32px 16px;"><div class="chart-card">';
+      html += '<h3>😟 불만족 고객 피드백 (' + feedback.total + '건)</h3>';
+      html += '<div style="max-height:400px;overflow-y:auto;">';
+      (feedback.feedback || []).forEach(function(fb) {
+        var time = fb.timestamp ? new Date(fb.timestamp).toLocaleString('ko-KR', {timeZone:'Asia/Seoul', month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit'}) : '-';
+        var scoreColor = fb.csatScore >= 4 ? '#ef4444' : '#f97316';
+        html += '<div style="padding:12px;border-bottom:1px solid var(--border-primary);">';
+        html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">';
+        html += '<div style="display:flex;align-items:center;gap:8px;">';
+        html += '<span style="padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;color:#fff;background:' + scoreColor + ';">CSAT ' + (fb.csatScore || '?') + '</span>';
+        html += '<span style="font-size:11px;color:var(--text-secondary);">' + time + '</span>';
+        html += '</div></div>';
+        html += '<div style="font-size:13px;color:var(--text-primary);line-height:1.5;">"' + (fb.reason || fb.feedback || '사유 미입력') + '"</div>';
+        html += '</div>';
+      });
+      html += '</div></div></div>';
+    }
+
+    // ========== 최근 CSAT 응답 타임라인 ==========
+    if (csat && csat.success && csat.recent && csat.recent.length > 0) {
+      html += '<div style="padding:0 32px 16px;"><div class="chart-card">';
+      html += '<h3>📋 최근 CSAT 응답</h3>';
+      html += '<div style="max-height:400px;overflow-y:auto;">';
+      csat.recent.forEach(function(r) {
+        var time = r.timestamp ? new Date(r.timestamp).toLocaleString('ko-KR', {timeZone:'Asia/Seoul', month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit'}) : '-';
+        var emoji = r.score === 1 ? '😍' : r.score === 2 ? '😊' : r.score === 3 ? '😐' : r.score === 4 ? '😕' : '😞';
+        var bgColor = r.score <= 2 ? 'rgba(34,197,94,0.08)' : r.score === 3 ? 'rgba(234,179,8,0.08)' : 'rgba(239,68,68,0.08)';
+        var borderColor = r.score <= 2 ? '#22c55e' : r.score === 3 ? '#eab308' : '#ef4444';
+        html += '<div style="padding:10px 12px;margin-bottom:4px;background:' + bgColor + ';border-left:3px solid ' + borderColor + ';border-radius:0 8px 8px 0;">';
+        html += '<div style="display:flex;justify-content:space-between;align-items:center;">';
+        html += '<span style="font-size:20px;">' + emoji + ' ' + r.score + '점</span>';
+        html += '<span style="font-size:11px;color:var(--text-secondary);">' + time + '</span>';
+        html += '</div>';
+        html += '</div>';
+      });
+      html += '</div></div></div>';
+    }
+
+    // ========== CES 최근 응답 ==========
+    if (ces && ces.success && ces.recent && ces.recent.length > 0) {
+      html += '<div style="padding:0 32px 16px;"><div class="chart-card">';
+      html += '<h3>💪 최근 CES 응답</h3>';
+      html += '<div style="max-height:300px;overflow-y:auto;">';
+      ces.recent.forEach(function(r) {
+        var time = r.timestamp ? new Date(r.timestamp).toLocaleString('ko-KR', {timeZone:'Asia/Seoul', month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit'}) : '-';
+        var emoji = r.score >= 4 ? '👍' : r.score === 3 ? '🤷' : '👎';
+        var bgColor = r.score >= 4 ? 'rgba(34,197,94,0.08)' : r.score === 3 ? 'rgba(234,179,8,0.08)' : 'rgba(239,68,68,0.08)';
+        html += '<div style="padding:8px 12px;margin-bottom:4px;background:' + bgColor + ';border-radius:8px;display:flex;justify-content:space-between;align-items:center;">';
+        html += '<span>' + emoji + ' ' + r.score + '점 (1=어려움 ~ 5=쉬움)</span>';
+        html += '<span style="font-size:11px;color:var(--text-secondary);">' + time + '</span>';
+        html += '</div>';
+      });
+      html += '</div></div></div>';
+    }
+
+    // ========== 빈 상태 ==========
+    if (!csat || !csat.success || csat.totalResponses === 0) {
       html += '<div style="padding:32px;text-align:center;">';
       html += '<div style="font-size:48px;margin-bottom:16px;">📊</div>';
-      html += '<div style="color:var(--text-secondary);font-size:16px;">CSAT 데이터가 아직 없습니다</div>';
-      html += '<div style="color:var(--text-secondary);font-size:13px;margin-top:8px;">고객이 만족도 설문에 응답하면 여기에 표시됩니다</div>';
+      html += '<div style="color:var(--text-secondary);font-size:16px;">아직 고객 피드백 데이터가 없습니다</div>';
+      html += '<div style="color:var(--text-secondary);font-size:13px;margin-top:8px;">상담 종료 시 자동 발송되는 CSAT 설문에 고객이 응답하면 여기에 표시됩니다</div>';
       html += '</div>';
     }
 
     document.getElementById('csatContent').innerHTML = html;
+  }).catch(function(err) {
+    document.getElementById('csatContent').innerHTML = '<div class="loading" style="color:#ef4444;">오류: ' + err.message + '</div>';
   });
 }
 
