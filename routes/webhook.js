@@ -375,14 +375,8 @@ router.post('/channeltalk', async function(req, res) {
           };
           surveyMsg = botSurveys[surveyLang] || botSurveys['zh-TW'];
         }
-        satisfactionPending[chatId0] = Date.now();
-        // Mark in file to prevent scheduler duplicate
-        csatHelper.markSent(chatId0, 'escalation-close');
-        setTimeout(async function() {
-          try {
-            await channeltalk.sendMessage(chatId0, { blocks: [{ type: 'text', value: surveyMsg }] });
-          } catch(e) {}
-        }, 3000);
+        // REMOVED: escalation-close CSAT (자동종료 시에만 발송)
+        // REMOVED: CSAT survey sendMessage (자동종료 시에만 발송)
 
         // AI quality review for manager conversations
         if (closedChat) {
@@ -738,25 +732,7 @@ router.post('/channeltalk', async function(req, res) {
       };
       await channeltalk.sendMessage(chatId, { blocks: [{ type: 'text', value: thankReply[detectedLang] || thankReply['zh-TW'] }] });
       aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "thank_you", userMessage: userText, aiResponse: "감사 응답", escalated: false, confidence: 1.0 });
-      // thank_you 후 3초 뒤 간단 CSAT 발송 (중복 방지)
-      if (!satisfactionPending[chatId]) {
-        if (!csatHelper.alreadySent(chatId)) {
-          satisfactionPending[chatId] = Date.now();
-          csatHelper.markSent(chatId, 'thank-you');
-          setTimeout(async function() {
-            try {
-              var tyCSAT = {
-                'zh-TW': '😊 很高興能幫到您！方便花5秒幫我們評個分嗎？\n\n1 = 😍 非常滿意\n2 = 😊 滿意\n3 = 😐 普通\n4 = 😕 不太滿意\n5 = 😞 很不滿意\n\n輸入數字就好！',
-                'ko': '😊 도움이 되셨다니 기뻐요! 5초만 평가해주실 수 있나요?\n\n1 = 😍 매우 만족\n2 = 😊 만족\n3 = 😐 보통\n4 = 😕 불만족\n5 = 😞 매우 불만족\n\n숫자만 입력해주세요!',
-                'en': '😊 Glad I could help! Could you take 5 seconds to rate us?\n\n1 = 😍 Excellent  2 = 😊 Good  3 = 😐 Average  4 = 😕 Poor  5 = 😞 Very Poor',
-                'ja': '😊 お役に立てて嬉しいです！5秒で評価していただけますか？\n\n1 = 😍 大満足  2 = 😊 満足  3 = 😐 普通  4 = 😕 不満  5 = 😞 大不満'
-              };
-              await channeltalk.sendMessage(chatId, { blocks: [{ type: 'text', value: tyCSAT[detectedLang] || tyCSAT['zh-TW'] }] });
-              console.log('[CSAT] Thank-you CSAT sent to:', chatId);
-            } catch(tyCsatErr) { console.log('[CSAT] Thank-you send error:', tyCsatErr.message); }
-          }, 3000);
-        }
-      }
+      // REMOVED: thank_you CSAT (자동종료 시에만 발송)
       return res.status(200).send('OK');
     }
 
