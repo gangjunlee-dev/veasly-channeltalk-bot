@@ -78,6 +78,7 @@ var analytics = require('../lib/analytics');
 
 var processedMessages = {};
 // Dedup cleanup handled below (120s TTL)
+var csatHelper = require('../lib/csat');
 var satisfactionPending = {};
 var chatLanguage = {};
 var managerActive = {};
@@ -376,7 +377,7 @@ router.post('/channeltalk', async function(req, res) {
         }
         satisfactionPending[chatId0] = Date.now();
         // Mark in file to prevent scheduler duplicate
-        try { var csFile = require('path').join(__dirname, '..', 'data', 'csat-sent.json'); var csData = {}; try { csData = JSON.parse(require('fs').readFileSync(csFile, 'utf8')); } catch(ce) {} csData[chatId0] = Date.now(); require('fs').writeFileSync(csFile, JSON.stringify(csData), 'utf8'); } catch(ce2) {}
+        csatHelper.markSent(chatId0, 'escalation-close');
         setTimeout(async function() {
           try {
             await channeltalk.sendMessage(chatId0, { blocks: [{ type: 'text', value: surveyMsg }] });
@@ -740,12 +741,9 @@ router.post('/channeltalk', async function(req, res) {
       aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "thank_you", userMessage: userText, aiResponse: "감사 응답", escalated: false, confidence: 1.0 });
       // thank_you 후 3초 뒤 간단 CSAT 발송 (중복 방지)
       if (!satisfactionPending[chatId]) {
-        var csatSentFile = require('path').join(__dirname, '..', 'data', 'csat-sent.json');
-        var csatSentCheck = {};
-        try { csatSentCheck = JSON.parse(require('fs').readFileSync(csatSentFile, 'utf8')); } catch(cse) {}
-        if (!csatSentCheck[chatId]) {
+        if (!csatHelper.alreadySent(chatId)) {
           satisfactionPending[chatId] = Date.now();
-          try { csatSentCheck[chatId] = { sentAt: Date.now(), count: 1, source: 'webhook' }; require('fs').writeFileSync(csatSentFile, JSON.stringify(csatSentCheck), 'utf8'); } catch(cse2) {}
+          csatHelper.markSent(chatId, 'thank-you');
           setTimeout(async function() {
             try {
               var tyCSAT = {
