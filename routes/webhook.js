@@ -55,14 +55,11 @@ var csatFeedbackPath = require('path').join(__dirname, '..', 'data', 'csat-feedb
 function loadCSATFeedback() { try { return JSON.parse(fs.readFileSync(csatFeedbackPath, 'utf8')); } catch(e) { return []; } }
 function saveCSATFeedback(data) { if (data.length > 1000) data = data.slice(-1000); fs.writeFileSync(csatFeedbackPath, JSON.stringify(data, null, 2)); }
 
-var cesDataPath = path.join(__dirname, '..', 'data', 'ces-results.json');
+// LEGACY: cesDataPath removed - use lib/ces.js
 function loadCESData() {
   try { return JSON.parse(fs.readFileSync(cesDataPath, 'utf8')); } catch(e) { return []; }
 }
-function saveCESData(data) {
-  if (data.length > 1000) data = data.slice(-1000);
-  fs.writeFileSync(cesDataPath, JSON.stringify(data, null, 2));
-}
+// LEGACY: saveCESData removed - use cesHelper.saveResult()
 var channeltalk = require('../lib/channeltalk');
 var matcher = require('../lib/matcher');
 var aiEngine = require('../lib/ai-engine');
