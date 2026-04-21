@@ -539,7 +539,7 @@ function loadOverview() {
       }
     }
     if (autoClose && autoClose.success) {
-      html += card('CSAT 대기', autoClose.csatPending, '건', autoClose.csatPending > 10 ? 'yellow' : 'green', '24h 후 자동종료', '📋 CSAT 설문 발송 후 미응답 건수입니다.');
+      html += card('CSAT 대기', autoClose.csatPending, '건', autoClose.csatPending > 10 ? 'yellow' : 'green', '12h 경고 → 16h 종료', '📋 CSAT 설문 발송(12h 경고 시) 후 미응답 건수입니다. 영업시간 16h에 자동종료됩니다.');
     }
     html += '</div>';
 
@@ -1601,12 +1601,12 @@ function loadCSATData() {
   
   Promise.all([
     fetch('/api/analytics/csat?days=' + days).then(function(r) { return r.json(); }),
-    fetch('/api/analytics/csat-feedback?days=' + days).then(function(r) { return r.json(); }).catch(function() { return null; }),
-    fetch('/api/analytics/manager-performance?days=' + days).then(function(r) { return r.json(); }).catch(function() { return null; })
+    // REMOVED: csat-feedback (추후 CSAT 탭 업그레이드 시 활용)
+    // REMOVED: manager-performance (CSAT 탭에서 미사용)
   ]).then(function(results) {
     var csat = results[0];
-    var csatFeedback = results[1];
-    var mgrPerf = results[2];
+    // var csatFeedback = results[1]; // REMOVED
+    // var mgrPerf = results[2]; // REMOVED
     cachedData.csat = true;
 
     var html = '';
@@ -1638,8 +1638,8 @@ function loadCSATData() {
         html += '</div></div>';
 
         // Manager CSAT (if available)
-        html += '<div class="chart-card"><h3>매니저별 CSAT (향후 데이터 수집)</h3>';
-        html += '<div style="color:var(--text-secondary);font-size:13px;padding:20px;text-align:center;">CSAT 수집 시작 후 매니저별 만족도 데이터가 표시됩니다.</div>';
+        html += '<div class="chart-card"><h3>매니저별 CSAT</h3>';
+        html += '<div style="color:var(--text-secondary);font-size:13px;padding:20px;text-align:center;">매니저별 CSAT 데이터는 매니저 성과 탭에서 확인할 수 있습니다.</div>';
         html += '</div></div>';
       }
     } else {

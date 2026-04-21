@@ -656,7 +656,9 @@ router.get('/cs-score-metrics', async function(req, res) {
       csatAvg2 = Math.round((csatSum2 / csatCount2) * 10) / 10;
     }
 
-  var csatScore = csatAvg2 > 0 ? csatAvg2 : (csatAvg > 0 ? csatAvg : 2.5); // csatAvg2 from csat-results.json
+  // CSAT: 1=매우만족 ~ 5=매우불만족 → CS Score는 높을수록 좋으므로 역변환 (6 - score)
+  var csatRaw = csatAvg2 > 0 ? csatAvg2 : (csatAvg > 0 ? csatAvg : 0);
+  var csatScore = csatRaw > 0 ? (6 - csatRaw) : 2.5; // 역변환: 1→5, 2→4, 3→3, 4→2, 5→1
   if (csatAvg === 0 && csatAvg2 === 0) console.log('[CS Score] CSAT no data - using default 2.5');
 
   var cesScoreVal = cesAvg > 0 ? cesAvg : 2.5; // default if no data
