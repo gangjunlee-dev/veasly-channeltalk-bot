@@ -348,7 +348,7 @@ function switchTab(name) {
   if (name === 'shipping' && !cachedData.shipping) loadShippingData();
   if (name === 'faq' && !cachedData.faq) loadFAQManagement();
   if (name === 'unreplied' && !cachedData.unreplied) loadUnrepliedData();
-  if (name === 'csscore') { setTimeout(function(){ loadCSScoreTrend(); loadFAQRecommendations(); }, 500); }
+  // CLEANED: csscore 추가 로딩은 loadCSScoreData 내부에서 처리
 }
 
 function toggleAutoRefresh() {
@@ -2441,6 +2441,8 @@ function loadCSScoreData() {
       html += '</div>';
 
       container.innerHTML = html;
+      // 추가 데이터 로딩
+      setTimeout(function() { loadCSScoreTrend(); loadFAQRecommendations(); loadBusinessMetrics(); }, 300);
     })
     .catch(function(e) { console.log('CS Score load error:', e); });
 }
@@ -2448,7 +2450,7 @@ function loadCSScoreData() {
 </script>
 
 <script>
-// CS Score 트렌드 로딩
+// ===== CS Score 트렌드 + FAQ 추천 + 비즈니스 메트릭 =====
 async function loadCSScoreTrend() {
   if (!document.getElementById('csScoreTrendPanel') && !document.getElementById('cs-score-trend')) { return; }
   try {
@@ -2558,30 +2560,12 @@ async function loadBusinessMetrics() {
 }
 
 // CS Score 탭 활성화 시 모두 로딩
-(function() {
-  const origLoadCS = typeof loadCSScoreData === 'function' ? loadCSScoreData : null;
-  if (origLoadCS) {
-    window.loadCSScoreData = function() {
-      origLoadCS();
-      loadCSScoreTrend();
-      loadFAQRecommendations();
-      loadBusinessMetrics();
-    };
-  } else {
-    // 탭 클릭 이벤트에 직접 연결
-    document.addEventListener('DOMContentLoaded', function() {
-      setTimeout(() => {
-        loadCSScoreTrend();
-        loadFAQRecommendations();
-        loadBusinessMetrics();
-      }, 2000);
-    });
-  }
-})();
+// CLEANED: loadCSScoreData 래퍼 제거 (원본 함수에 통합)
 </script>
 
 
 <script>
+// ===== 데이터 헬스 + 이벤트 위임 =====
 async function loadDataHealth() {
   if (!document.getElementById('health-content')) { return; }
   try {

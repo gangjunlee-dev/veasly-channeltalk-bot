@@ -176,7 +176,7 @@ router.get('/faq-log', async function(req, res) {
 // 자동 종료 현황
 router.get('/auto-close', async function(req, res) {
   try {
-    var csatSentFile = require('path').join(__dirname, '..', 'data', 'csat-sent.json');
+    var csatSentFile = require('path').join(__dirname, '..', 'data', 'csat-sent.json'); // TODO: csatHelper로 통일
     var csatResultsFile = require('path').join(__dirname, '..', 'data', 'csat-results.json');
     var csatSent = {};
     var csatResults = [];
