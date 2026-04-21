@@ -79,6 +79,7 @@ var analytics = require('../lib/analytics');
 var processedMessages = {};
 // Dedup cleanup handled below (120s TTL)
 var csatHelper = require('../lib/csat');
+var cesHelper = require('../lib/ces');
 var satisfactionPending = {};
 var chatLanguage = {};
 var managerActive = {};
