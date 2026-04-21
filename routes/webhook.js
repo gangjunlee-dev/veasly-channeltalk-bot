@@ -597,7 +597,7 @@ router.post('/channeltalk', async function(req, res) {
       }
     }
     // CES response handler
-    if (pendingCES[chatId]) {
+    if (cesHelper.isPending(chatId)) {
       var cesText = (userText || '').trim();
       var cesNum = parseInt(cesText);
       if (cesNum >= 1 && cesNum <= 5) {
@@ -605,12 +605,12 @@ router.post('/channeltalk', async function(req, res) {
         cesData.push({
           timestamp: new Date().toISOString(),
           chatId: chatId,
-          userId: pendingCES[chatId].userId,
+          userId: (cesHelper.getPending(chatId)||{}).userId || '',
           score: cesNum,
-          managerId: pendingCES[chatId].managerId || ''
+          managerId: (cesHelper.getPending(chatId)||{}).managerId || ''
         });
         saveCESData(cesData);
-        delete pendingCES[chatId];
+        cesHelper.removePending(chatId);
         var cesThanks = {
           "zh-TW": "感謝您的回饋！祝您購物愉快 😊",
           "ko": "소중한 의견 감사합니다! 즐거운 쇼핑 되세요 😊",
@@ -623,8 +623,8 @@ router.post('/channeltalk', async function(req, res) {
         return res.status(200).send('OK');
       }
       // 10분 지나면 만료
-      if (Date.now() - pendingCES[chatId].timestamp > 600000) {
-        delete pendingCES[chatId];
+      if (!cesHelper.isPending(chatId)) { // 만료는 cesHelper가 자동 처리
+        cesHelper.removePending(chatId);
       }
     }
 
@@ -674,7 +674,7 @@ router.post('/channeltalk', async function(req, res) {
         // CSAT 점수별 분기: 만족(1-2)→CES(간단), 보통(3)→CES, 불만족(4-5)→사유질문
         if (csatScore <= 2) {
           // 만족 → CES 질문으로 편의성 측정 (데이터 수집 확대)
-          pendingCES[chatId] = { timestamp: Date.now(), chatId: chatId, userId: memberId || personId || '', managerId: '', csatScore: csatScore };
+          cesHelper.markPending(chatId, { userId: memberId || personId || '', managerId: '', csatScore: csatScore });
           var cesQSatisfied = {
             'zh-TW': '感謝您的好評！最後想請問，今天解決問題的過程容易嗎？\n1=非常困難 ~ 5=非常容易',
             'ko': '좋은 평가 감사합니다! 마지막으로, 문제 해결 과정이 쉬웠나요?\n1=매우 어려움 ~ 5=매우 쉬움',
@@ -687,7 +687,7 @@ router.post('/channeltalk', async function(req, res) {
           } catch(cesErr) { console.log('[CES] Satisfied send error:', cesErr.message); }
         } else if (csatScore === 3) {
           // 보통 → CES 질문
-          pendingCES[chatId] = { timestamp: Date.now(), chatId: chatId, userId: memberId || personId || '', managerId: '', csatScore: csatScore };
+          cesHelper.markPending(chatId, { userId: memberId || personId || '', managerId: '', csatScore: csatScore });
           var cesQ = {
             'zh-TW': '最後一個問題！今天解決問題容易嗎？\n1=非常困難 2=困難 3=普通 4=容易 5=非常容易',
             'ko': '마지막 질문! 오늘 문제 해결이 쉬웠나요?\n1=매우 어려움 2=어려움 3=보통 4=쉬움 5=매우 쉬움',
