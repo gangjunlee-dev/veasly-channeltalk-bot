@@ -227,6 +227,7 @@ td { padding: 10px 8px; border-bottom: 1px solid var(--border-secondary); font-s
   <div class="tab" onclick="switchTab('csat')">⭐ 고객 피드백</div>
   <div class="tab" onclick="switchTab('shipping')">📦 배송현황</div>
   <div class="tab" onclick="switchTab('csscore')">🎯 CS Score</div>
+  <div class="tab" onclick="switchTab('faq')">🧠 AI 학습</div>
   <div class="tab" onclick="switchTab('unreplied')" id="unreplied-tab">🚨 미응답</div>
 </div>
 
@@ -293,6 +294,12 @@ td { padding: 10px 8px; border-bottom: 1px solid var(--border-secondary); font-s
   <div id="shippingContent"><div class="loading">배송 데이터 로딩 중...</div></div>
 </div>
 
+
+<!-- TAB: AI 학습/FAQ 관리 -->
+<div id="tab-faq" class="tab-content">
+  <div id="faqContent"><div class="loading">AI 학습 데이터 로딩 중...</div></div>
+</div>
+
 <!-- TAB: 미응답 알림 -->
 <div id="tab-unreplied" class="tab-content">
   <div class="section-title">🚨 미응답 채팅 관리 <span style="font-size:12px;color:var(--text-secondary);font-weight:400;margin-left:8px;">실시간 현황 (opened + 최근 7일 방치종료)</span></div>
@@ -339,6 +346,7 @@ function switchTab(name) {
   if (name === 'csat' && !cachedData.csat) loadCSATData();
   if (name === 'csscore' && !cachedData.csscore) loadCSScoreData();
   if (name === 'shipping' && !cachedData.shipping) loadShippingData();
+  if (name === 'faq' && !cachedData.faq) loadFAQManagement();
   if (name === 'unreplied' && !cachedData.unreplied) loadUnrepliedData();
   if (name === 'csscore') { setTimeout(function(){ loadCSScoreTrend(); loadFAQRecommendations(); }, 500); }
 }
@@ -1603,6 +1611,173 @@ function applyAILogFilters() {
 }
 
 // ===== CSAT TAB =====
+
+
+// ===== AI 학습/FAQ 관리 TAB =====
+function loadFAQManagement() {
+  document.getElementById('faqContent').innerHTML = '<div class="loading">AI 학습 데이터 로딩 중...</div>';
+
+  Promise.all([
+    fetch('/api/analytics/auto-upgrade/status').then(function(r) { return r.json(); }).catch(function() { return null; }),
+    fetch('/api/analytics/faq-candidates').then(function(r) { return r.json(); }).catch(function() { return null; }),
+    fetch('/api/analytics/auto-upgrade/report').then(function(r) { return r.json(); }).catch(function() { return null; }),
+    fetch('/api/analytics/escalation-analysis?days=7').then(function(r) { return r.json(); }).catch(function() { return null; })
+  ]).then(function(results) {
+    var status = results[0];
+    var candidates = results[1];
+    var report = results[2];
+    var escData = results[3];
+    cachedData.faq = true;
+
+    var html = '';
+
+    // ========== 요약 카드 ==========
+    html += '<div class="section-title">🧠 AI 자동학습 현황</div>';
+    html += '<div class="grid">';
+
+    var pending = status ? status.pendingCandidates : 0;
+    var processed = status ? status.processedCandidates : 0;
+    var escRate = status && status.confidenceAnalysis ? status.confidenceAnalysis.escalationRate : 0;
+    var avgConf = status && status.confidenceAnalysis ? status.confidenceAnalysis.avgEscalatedConfidence : 0;
+
+    html += card('FAQ 후보', pending, '건', pending > 50 ? 'red' : pending > 20 ? 'yellow' : 'green', '미처리 대기', '📝 AI가 답변하지 못한 질문에서 자동 추출된 FAQ 후보');
+    html += card('학습 완료', processed, '건', 'blue', '처리된 FAQ', '✅ AI가 학습 완료한 FAQ 항목');
+    html += card('에스컬레이션율', escRate + '%', '', escRate > 40 ? 'red' : escRate > 25 ? 'yellow' : 'green', '7일 기준', '🔺 AI가 처리 못한 비율. 30% 이하 목표');
+    html += card('에스컬 Confidence', avgConf > 0 ? avgConf.toFixed(2) : '-', '', avgConf > 0.7 ? 'yellow' : 'green', '에스컬된 질문의 평균', '🎯 높으면 AI가 알면서도 에스컬 → threshold 조정 필요');
+    html += '</div>';
+
+    // ========== Confidence 분석 ==========
+    if (status && status.confidenceAnalysis) {
+      var ca = status.confidenceAnalysis;
+      html += '<div class="charts">';
+      html += '<div class="chart-card"><h3>에스컬레이션 Confidence 분석</h3>';
+      html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px;">';
+      
+      var confDist = ca.confidenceDistribution || {};
+      html += '<div style="background:rgba(239,68,68,0.1);border-radius:8px;padding:12px;text-align:center;"><div style="font-size:24px;font-weight:700;color:#ef4444;">' + (confDist.low || 0) + '</div><div style="font-size:11px;color:var(--text-secondary);">Low (<0.3)</div></div>';
+      html += '<div style="background:rgba(234,179,8,0.1);border-radius:8px;padding:12px;text-align:center;"><div style="font-size:24px;font-weight:700;color:#eab308;">' + (confDist.mid || 0) + '</div><div style="font-size:11px;color:var(--text-secondary);">Mid (0.3~0.6)</div></div>';
+      html += '<div style="background:rgba(34,197,94,0.1);border-radius:8px;padding:12px;text-align:center;"><div style="font-size:24px;font-weight:700;color:#22c55e;">' + (confDist.high || 0) + '</div><div style="font-size:11px;color:var(--text-secondary);">High (>0.6)</div></div>';
+      html += '</div>';
+      
+      if (ca.recommendation) {
+        html += '<div style="padding:12px;background:rgba(59,130,246,0.08);border-radius:8px;border-left:3px solid #3b82f6;">';
+        html += '<div style="font-size:12px;color:var(--text-secondary);line-height:1.6;">💡 ' + ca.recommendation + '</div>';
+        html += '</div>';
+      }
+      html += '</div>';
+
+      // 에스컬레이션 사유 차트
+      if (escData && escData.reasons) {
+        var reasons = escData.reasons;
+        var rKeys = Object.keys(reasons).sort(function(a,b) { return reasons[b] - reasons[a]; });
+        if (rKeys.length > 0) {
+          var rMax = reasons[rKeys[0]] || 1;
+          var escColors2 = {'주문조회':'#3b82f6','직접요청':'#eab308','결제/금액':'#8b5cf6','배송/물류':'#f97316','상품문의':'#10b981','상담사전환':'#ec4899','국제운임':'#06b6d4','이용방법':'#14b8a6','계정/회원':'#6366f1','취소/환불':'#ef4444','클레임/불만':'#dc2626','기타':'#64748b'};
+          html += '<div class="chart-card"><h3>에스컬레이션 사유 TOP 10</h3><div class="bar-chart">';
+          rKeys.slice(0, 10).forEach(function(k) {
+            var pct = Math.round((reasons[k] / rMax) * 100);
+            html += '<div class="bar-row"><div class="bar-label">' + k + '</div><div class="bar-track"><div class="bar-fill" style="width:' + pct + '%;background:' + (escColors2[k]||'#64748b') + ';"></div><span class="bar-count">' + reasons[k] + '</span></div></div>';
+          });
+          html += '</div></div>';
+        }
+      }
+      html += '</div>';
+    }
+
+    // ========== FAQ 후보 목록 ==========
+    if (candidates && candidates.success && candidates.totalPending > 0) {
+      html += '<div style="padding:0 32px 16px;"><div class="chart-card">';
+      html += '<h3>📝 FAQ 후보 (' + candidates.totalPending + '건)</h3>';
+      html += '<div style="font-size:12px;color:var(--text-secondary);margin-bottom:12px;">AI가 답변하지 못한 질문에서 자동 추출. 카테고리별 분류됨.</div>';
+
+      var byReason = candidates.byReason || {};
+      var reasonKeys = Object.keys(byReason).sort(function(a,b) { return (byReason[b].count || 0) - (byReason[a].count || 0); });
+
+      reasonKeys.forEach(function(reason) {
+        var group = byReason[reason];
+        var samples = group.samples || [];
+        if (samples.length === 0) return;
+
+        var reasonLabels = {
+          'unclassified': '미분류',
+          'ai_low_confidence': 'AI 낮은 신뢰도',
+          'escalated': '에스컬레이션',
+          'manager_corrected': '매니저 수정',
+          'no_match': 'FAQ 미매칭'
+        };
+        var label = reasonLabels[reason] || reason;
+
+        html += '<div style="margin-bottom:16px;">';
+        html += '<div style="font-weight:600;color:var(--text-primary);font-size:13px;margin-bottom:8px;display:flex;align-items:center;gap:8px;">';
+        html += '<span class="pill" style="background:rgba(139,92,246,0.15);color:#8b5cf6;">' + label + '</span>';
+        html += '<span style="color:var(--text-secondary);font-weight:400;">' + group.count + '건</span>';
+        html += '</div>';
+
+        html += '<div style="max-height:200px;overflow-y:auto;">';
+        samples.slice(0, 10).forEach(function(s) {
+          html += '<div style="padding:8px 12px;margin-bottom:4px;background:var(--bg-primary);border-radius:8px;border-left:3px solid #8b5cf6;">';
+          html += '<div style="font-size:12px;color:var(--text-primary);line-height:1.5;">"' + (s.message || '').substring(0, 150) + '"</div>';
+          html += '<div style="display:flex;gap:8px;margin-top:4px;">';
+          if (s.lang) html += '<span style="font-size:10px;color:var(--text-muted);">' + s.lang + '</span>';
+          if (s.keywords && s.keywords.length > 0) html += '<span style="font-size:10px;color:var(--text-muted);">키워드: ' + s.keywords.slice(0,3).join(', ') + '</span>';
+          html += '</div></div>';
+        });
+        html += '</div></div>';
+      });
+
+      html += '</div></div>';
+    }
+
+    // ========== 자동학습 리포트 ==========
+    if (report && report.success && report.report) {
+      html += '<div style="padding:0 32px 16px;"><div class="chart-card">';
+      html += '<h3>📋 최근 AI 학습 리포트</h3>';
+      html += '<div style="font-size:13px;color:var(--text-secondary);white-space:pre-wrap;line-height:1.8;max-height:400px;overflow-y:auto;padding:12px;background:var(--bg-primary);border-radius:8px;">';
+      html += (typeof report.report === 'string' ? report.report : JSON.stringify(report.report, null, 2));
+      html += '</div></div></div>';
+    }
+
+    // ========== AI 자동학습 실행 버튼 ==========
+    html += '<div style="padding:0 32px 16px;"><div class="chart-card">';
+    html += '<h3>⚙️ AI 학습 관리</h3>';
+    html += '<div style="display:flex;gap:12px;align-items:center;">';
+    html += '<button onclick="runAutoUpgrade()" style="background:#3b82f6;color:#fff;border:none;padding:10px 20px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;">🚀 FAQ 자동학습 실행</button>';
+    html += '<span id="autoUpgradeStatus" style="font-size:12px;color:var(--text-secondary);">마지막 실행: ' + (candidates && candidates.lastUpdated ? new Date(candidates.lastUpdated).toLocaleString('ko-KR', {timeZone:'Asia/Seoul'}) : '-') + '</span>';
+    html += '</div>';
+    html += '<div style="margin-top:8px;font-size:11px;color:var(--text-muted);">FAQ 후보를 Gemini AI가 분석하여 자동으로 학습합니다. 매일 새벽 3시 자동 실행됩니다.</div>';
+    html += '</div></div>';
+
+    document.getElementById('faqContent').innerHTML = html;
+  }).catch(function(err) {
+    document.getElementById('faqContent').innerHTML = '<div class="loading" style="color:#ef4444;">오류: ' + err.message + '</div>';
+  });
+}
+
+function runAutoUpgrade() {
+  var btn = event.target;
+  btn.disabled = true;
+  btn.textContent = '실행 중...';
+  document.getElementById('autoUpgradeStatus').textContent = '실행 중... (1~2분 소요)';
+
+  fetch('/api/analytics/auto-upgrade/run', { method: 'POST' })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      btn.disabled = false;
+      btn.textContent = '🚀 FAQ 자동학습 실행';
+      if (d.success) {
+        document.getElementById('autoUpgradeStatus').textContent = '✅ 완료! ' + new Date().toLocaleString('ko-KR', {timeZone:'Asia/Seoul'});
+        cachedData.faq = false;
+        setTimeout(loadFAQManagement, 1000);
+      } else {
+        document.getElementById('autoUpgradeStatus').textContent = '❌ 실패: ' + (d.error || '알 수 없는 오류');
+      }
+    })
+    .catch(function(e) {
+      btn.disabled = false;
+      btn.textContent = '🚀 FAQ 자동학습 실행';
+      document.getElementById('autoUpgradeStatus').textContent = '❌ 오류: ' + e.message;
+    });
+}
 
 // ===== 배송현황 TAB =====
 function loadShippingData() {
