@@ -221,11 +221,12 @@ td { padding: 10px 8px; border-bottom: 1px solid var(--border-secondary); font-s
 </div>
 
 <div class="tabs">
-  <div class="tab active" onclick="switchTab('overview')">Overview</div>
-  <div class="tab" onclick="switchTab('managers')">매니저 성과</div>
-  <div class="tab" onclick="switchTab('ai')">AI 모니터링</div>
-  <div class="tab" onclick="switchTab('csat')">CSAT</div>
-  <div class="tab" onclick="switchTab('csscore')">CS Score</div>
+  <div class="tab active" onclick="switchTab('overview')">📊 종합현황</div>
+  <div class="tab" onclick="switchTab('managers')">👥 매니저 성과</div>
+  <div class="tab" onclick="switchTab('ai')">🤖 AI 모니터링</div>
+  <div class="tab" onclick="switchTab('csat')">⭐ 고객 피드백</div>
+  <div class="tab" onclick="switchTab('shipping')">📦 배송현황</div>
+  <div class="tab" onclick="switchTab('csscore')">🎯 CS Score</div>
   <div class="tab" onclick="switchTab('unreplied')" id="unreplied-tab">🚨 미응답</div>
 </div>
 
@@ -286,6 +287,12 @@ td { padding: 10px 8px; border-bottom: 1px solid var(--border-secondary); font-s
 </div>
 </div>
 
+
+<!-- TAB: 배송현황 -->
+<div id="tab-shipping" class="tab-content">
+  <div id="shippingContent"><div class="loading">배송 데이터 로딩 중...</div></div>
+</div>
+
 <!-- TAB: 미응답 알림 -->
 <div id="tab-unreplied" class="tab-content">
   <div class="section-title">🚨 미응답 채팅 관리 <span style="font-size:12px;color:var(--text-secondary);font-weight:400;margin-left:8px;">실시간 현황 (opened + 최근 7일 방치종료)</span></div>
@@ -331,6 +338,7 @@ function switchTab(name) {
   if (name === 'ai' && !cachedData.ai) loadAIData();
   if (name === 'csat' && !cachedData.csat) loadCSATData();
   if (name === 'csscore' && !cachedData.csscore) loadCSScoreData();
+  if (name === 'shipping' && !cachedData.shipping) loadShippingData();
   if (name === 'unreplied' && !cachedData.unreplied) loadUnrepliedData();
   if (name === 'csscore') { setTimeout(function(){ loadCSScoreTrend(); loadFAQRecommendations(); }, 500); }
 }
@@ -1595,6 +1603,119 @@ function applyAILogFilters() {
 }
 
 // ===== CSAT TAB =====
+
+// ===== 배송현황 TAB =====
+function loadShippingData() {
+  document.getElementById('shippingContent').innerHTML = '<div class="loading">배송 데이터 로딩 중...</div>';
+
+  fetch('/api/analytics/shipping').then(function(r) { return r.json(); }).then(function(data) {
+    if (!data.success) { document.getElementById('shippingContent').innerHTML = '<div class="loading" style="color:#ef4444;">배송 데이터 로드 실패</div>'; return; }
+    cachedData.shipping = data;
+
+    var html = '';
+    html += '<div class="section-title">📦 배송 현황</div>';
+
+    // 요약 카드
+    html += '<div class="grid">';
+    html += card('총 추적 상품', data.trackedItems, '건', 'blue', '전체 배송 추적', '📦 현재 추적 중인 전체 상품 수');
+    
+    var dist = data.statusDistribution || {};
+    var processing = (dist.ORDER_PROCESSING || 0);
+    var toBDJ = (dist.SHIPPING_TO_BDJ || 0);
+    var toHome = (dist.SHIPPING_TO_HOME || 0);
+    var completed = (dist.COMPLETED || 0);
+    var cancelled = (dist.CANCEL_COMPLETED || 0);
+    var payment = (dist.PAYMENT_COMPLETED || 0);
+    
+    html += card('결제완료', payment, '건', 'purple', '처리 대기', '💳 결제 완료 후 상품 준비 대기 중');
+    html += card('주문처리중', processing, '건', 'yellow', '한국 내 배송', '🏭 한국 내 배송 중 (1-3 영업일)');
+    html += card('창고 배송중', toBDJ, '건', 'cyan', 'VEASLY 창고행', '🚛 VEASLY 창고로 배송 중');
+    html += card('국제배송중', toHome, '건', 'blue', '고객 배송중', '✈️ 대만/해외 고객에게 배송 중');
+    html += card('배송완료', completed, '건', 'green', '도착 완료', '✅ 고객에게 배송 완료');
+    if (cancelled > 0) html += card('취소', cancelled, '건', 'red', '취소/환불', '❌ 취소된 주문');
+    html += '</div>';
+
+    // 배송 파이프라인 시각화
+    html += '<div style="padding:0 32px 16px;"><div class="chart-card">';
+    html += '<h3>배송 파이프라인</h3>';
+    
+    var pipeline = [
+      {label: '결제완료', count: payment, color: '#a855f7', icon: '💳'},
+      {label: '주문처리중', count: processing, color: '#eab308', icon: '🏭'},
+      {label: '창고 배송중', count: toBDJ, color: '#06b6d4', icon: '🚛'},
+      {label: '국제배송중', count: toHome, color: '#3b82f6', icon: '✈️'},
+      {label: '배송완료', count: completed, color: '#22c55e', icon: '✅'}
+    ];
+    var pipelineMax = 1;
+    pipeline.forEach(function(p) { if (p.count > pipelineMax) pipelineMax = p.count; });
+    
+    // 파이프라인 플로우
+    html += '<div style="display:flex;align-items:center;gap:4px;margin:20px 0;">';
+    pipeline.forEach(function(p, i) {
+      var width = Math.max(8, Math.round((p.count / pipelineMax) * 100));
+      html += '<div style="flex:' + width + ';text-align:center;">';
+      html += '<div style="font-size:24px;margin-bottom:4px;">' + p.icon + '</div>';
+      html += '<div style="background:' + p.color + ';height:32px;border-radius:4px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:14px;">' + p.count + '</div>';
+      html += '<div style="font-size:11px;color:var(--text-secondary);margin-top:4px;">' + p.label + '</div>';
+      html += '</div>';
+      if (i < pipeline.length - 1) {
+        html += '<div style="font-size:16px;color:var(--text-muted);flex-shrink:0;">→</div>';
+      }
+    });
+    html += '</div>';
+
+    // 상태별 비율
+    var totalActive = payment + processing + toBDJ + toHome + completed;
+    if (totalActive > 0) {
+      html += '<div style="margin-top:16px;">';
+      html += '<div style="display:flex;height:24px;border-radius:12px;overflow:hidden;">';
+      pipeline.forEach(function(p) {
+        var pct = Math.round((p.count / totalActive) * 100);
+        if (pct > 0) html += '<div style="width:' + pct + '%;background:' + p.color + ';" title="' + p.label + ' ' + p.count + '건 (' + pct + '%)"></div>';
+      });
+      html += '</div>';
+      html += '<div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-top:6px;">';
+      pipeline.forEach(function(p) {
+        var pct = Math.round((p.count / totalActive) * 100);
+        html += '<span style="font-size:11px;color:' + p.color + ';">' + p.icon + ' ' + p.label + ' ' + pct + '%</span>';
+      });
+      html += '</div></div>';
+    }
+    
+    html += '</div></div>';
+
+    // 알림 발송 현황
+    if (data.notificationsSent !== undefined) {
+      html += '<div style="padding:0 32px 16px;"><div class="chart-card">';
+      html += '<h3>📮 배송 알림 발송</h3>';
+      html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">';
+      html += '<div style="background:var(--bg-primary);border-radius:8px;padding:16px;text-align:center;"><div style="font-size:28px;font-weight:700;color:#3b82f6;">' + (data.notificationsSent || 0) + '</div><div style="font-size:11px;color:var(--text-secondary);margin-top:4px;">발송된 알림</div></div>';
+      html += '<div style="background:var(--bg-primary);border-radius:8px;padding:16px;text-align:center;"><div style="font-size:28px;font-weight:700;color:#22c55e;">' + (data.stateChanges || 0) + '</div><div style="font-size:11px;color:var(--text-secondary);margin-top:4px;">상태 변경</div></div>';
+      html += '<div style="background:var(--bg-primary);border-radius:8px;padding:16px;text-align:center;"><div style="font-size:28px;font-weight:700;color:var(--text-primary);">' + data.trackedItems + '</div><div style="font-size:11px;color:var(--text-secondary);margin-top:4px;">추적 상품</div></div>';
+      html += '</div></div></div>';
+    }
+
+    // 취소 현황 (있을 때만)
+    if (cancelled > 0) {
+      var cancelRate = Math.round((cancelled / data.trackedItems) * 100);
+      html += '<div style="padding:0 32px 16px;"><div class="chart-card">';
+      html += '<h3>❌ 취소 현황</h3>';
+      html += '<div style="display:flex;align-items:center;gap:16px;">';
+      html += '<div style="font-size:36px;font-weight:700;color:#ef4444;">' + cancelled + '건</div>';
+      html += '<div>';
+      html += '<div style="font-size:14px;color:var(--text-secondary);">취소율 ' + cancelRate + '%</div>';
+      html += '<div style="font-size:12px;color:var(--text-muted);">전체 ' + data.trackedItems + '건 중</div>';
+      html += '</div></div>';
+      html += '</div></div>';
+    }
+
+    document.getElementById('shippingContent').innerHTML = html;
+  }).catch(function(err) {
+    document.getElementById('shippingContent').innerHTML = '<div class="loading" style="color:#ef4444;">오류: ' + err.message + '</div>';
+  });
+}
+
+
 function loadCSATData() {
   var days = document.getElementById('days').value;
   document.getElementById('csatContent').innerHTML = '<div class="loading">고객 피드백 데이터 로딩 중...</div>';
