@@ -601,15 +601,14 @@ router.post('/channeltalk', async function(req, res) {
       var cesText = (userText || '').trim();
       var cesNum = parseInt(cesText);
       if (cesNum >= 1 && cesNum <= 5) {
-        var cesData = loadCESData();
-        cesData.push({
+        cesHelper.saveResult({
+        /* saved via cesHelper */ 
           timestamp: new Date().toISOString(),
           chatId: chatId,
           userId: (cesHelper.getPending(chatId)||{}).userId || '',
           score: cesNum,
           managerId: (cesHelper.getPending(chatId)||{}).managerId || ''
         });
-        saveCESData(cesData);
         cesHelper.removePending(chatId);
         var cesThanks = {
           "zh-TW": "感謝您的回饋！祝您購物愉快 😊",
@@ -669,7 +668,7 @@ router.post('/channeltalk', async function(req, res) {
 
         // Clear CSAT pending
         // Clear CSAT pending from file
-        try { var csatFile = require("path").join(__dirname, "..", "data", "csat-sent.json"); var csatData = JSON.parse(require("fs").readFileSync(csatFile, "utf8")); csatData[chatId] = 'responded:' + new Date().toISOString(); require("fs").writeFileSync(csatFile, JSON.stringify(csatData), "utf8"); } catch(ce) {}
+        // CSAT 응답 완료 처리는 아래 분기에서 진행
 
         // CSAT 점수별 분기: 만족(1-2)→CES(간단), 보통(3)→CES, 불만족(4-5)→사유질문
         if (csatScore <= 2) {
