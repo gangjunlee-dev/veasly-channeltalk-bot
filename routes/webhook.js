@@ -582,8 +582,7 @@ router.post('/channeltalk', async function(req, res) {
           'ja': '貴重なご意見ありがとうございます！改善に全力で取り組みます 🙏'
         };
         await channeltalk.sendMessage(chatId, { blocks: [{ type: 'text', value: reasonThanks[detectedLang] || reasonThanks['zh-TW'] }] });
-        // 사유 응답 완료 → 채팅 자동 종료
-        try { await channeltalk.closeChat(chatId); console.log('[CSAT-REASON] Chat closed after feedback:', chatId); } catch(_ccErr2) {}
+        // 사유 응답 완료 (채팅은 open 유지 → 16h에 자동종료)
         console.log('[CSAT-REASON] Feedback saved for chat:', chatId, '| Score:', pendingCSATReason[chatId] ? pendingCSATReason[chatId].csatScore : '?', '| Reason:', reasonText.substring(0, 50));
         aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || '', userName: '', lang: detectedLang, type: 'csat_feedback', userMessage: reasonText, aiResponse: 'CSAT feedback recorded', escalated: false, confidence: 1.0 });
         return res.status(200).send('OK');
@@ -614,8 +613,7 @@ router.post('/channeltalk', async function(req, res) {
         };
         await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: cesThanks[detectedLang] || cesThanks["zh-TW"] }] });
         console.log("[CES] Score recorded:", cesNum, "for chat:", chatId);
-        // CES 완료 → 채팅 자동 종료 (미응답 루프 방지)
-        try { await channeltalk.closeChat(chatId); console.log("[CES] Chat closed after survey:", chatId); } catch(_ccErr) { console.log("[CES] Close error:", _ccErr.message); }
+        // CES 완료 (채팅은 open 유지 → 16h에 자동종료)
         aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || '', userName: '', lang: detectedLang, type: 'ces_response', userMessage: cesText, aiResponse: 'CES score: ' + cesNum, escalated: false, confidence: 1.0 });
         return res.status(200).send('OK');
       }
@@ -681,11 +679,11 @@ router.post('/channeltalk', async function(req, res) {
           try {
             await channeltalk.sendMessage(chatId, { blocks: [{ type: 'text', value: cesQSatisfied[detectedLang] || cesQSatisfied['zh-TW'] }] });
             console.log('[CES] Satisfied CES question sent to chat:', chatId);
-            // 5분 후 CES 미응답이면 채팅 자동 종료
-            setTimeout(async function() {
+            // CES 미응답 시 5분 후 pending만 정리 (채팅은 open 유지)
+            setTimeout(function() {
               if (cesHelper.isPending(chatId)) {
                 cesHelper.removePending(chatId);
-                try { await channeltalk.closeChat(chatId); console.log('[CES] Auto-closed after 5min no CES response:', chatId); } catch(_e) {}
+                console.log("[CES] Pending expired (5min):", chatId);
               }
             }, 300000);
           } catch(cesErr) { console.log('[CES] Satisfied send error:', cesErr.message); }
@@ -701,11 +699,11 @@ router.post('/channeltalk', async function(req, res) {
           try {
             await channeltalk.sendMessage(chatId, { blocks: [{ type: 'text', value: cesQ[detectedLang] || cesQ['zh-TW'] }] });
             console.log('[CES] Question sent to chat:', chatId);
-            // 5분 후 CES 미응답이면 채팅 자동 종료
-            setTimeout(async function() {
+            // CES 미응답 시 5분 후 pending만 정리 (채팅은 open 유지)
+            setTimeout(function() {
               if (cesHelper.isPending(chatId)) {
                 cesHelper.removePending(chatId);
-                try { await channeltalk.closeChat(chatId); console.log('[CES] Auto-closed after 5min no CES response:', chatId); } catch(_e) {}
+                console.log("[CES] Pending expired (5min):", chatId);
               }
             }, 300000);
           } catch(cesErr) { console.log('[CES] Send error:', cesErr.message); }
@@ -721,11 +719,11 @@ router.post('/channeltalk', async function(req, res) {
           try {
             await channeltalk.sendMessage(chatId, { blocks: [{ type: 'text', value: reasonQ[detectedLang] || reasonQ['zh-TW'] }] });
             console.log('[CSAT-REASON] Question sent to chat:', chatId, '| Score:', csatScore);
-            // 5분 후 사유 미응답이면 채팅 자동 종료
-            setTimeout(async function() {
+            // 사유 미응답 시 5분 후 pending만 정리 (채팅은 open 유지)
+            setTimeout(function() {
               if (pendingCSATReason[chatId]) {
                 delete pendingCSATReason[chatId];
-                try { await channeltalk.closeChat(chatId); console.log('[CSAT-REASON] Auto-closed after 5min no reason:', chatId); } catch(_e) {}
+                console.log("[CSAT-REASON] Pending expired (5min):", chatId);
               }
             }, 300000);
           } catch(reasonErr) { console.log('[CSAT-REASON] Send error:', reasonErr.message); }
