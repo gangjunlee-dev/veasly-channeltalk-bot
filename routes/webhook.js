@@ -826,6 +826,9 @@ router.post('/channeltalk', async function(req, res) {
     // === 報價/代購 요청 우선 체크 (isActionRequest보다 먼저) ===
     var quoteRequestKws = ['報價','估價','幫我買','想買','可以買嗎','能買嗎','代購','幫我代購','想要這個','想訂','幫我訂','我要買','購買','想購入','幫忙代購','幫我看','可以幫我買','給我報價','想問價格','幫我看價格','能不能買','可以訂嗎','견적','구매대행','사고싶어','사줘','구매','quote','buy for me','want to buy','can you buy','purchase'];
     var isQuoteRequest = quoteRequestKws.some(function(kw) { return userText.toLowerCase().indexOf(kw.toLowerCase()) > -1; });
+    // 금액불일치 키워드가 함께 있으면 報價가 아니라 금액불일치로 처리
+    var priceIssueKws = ['不對','不一樣','不符','錯誤','有差','不同','變了','怎麼回事','有問題','錯了','差異','多收','少收'];
+    if (isQuoteRequest && priceIssueKws.some(function(kw) { return userText.indexOf(kw) > -1; })) { isQuoteRequest = false; }
     if (isQuoteRequest) {
       var quoteMsg = {
         'zh-TW': '想購買商品的話，請到 veasly.com 找到您想要的商品，點擊「申請報價」按鈕就可以囉！\n\n📌 報價申請步驟：\n1️⃣ 到 veasly.com/tw\n2️⃣ 貼上商品 URL 或上傳截圖\n3️⃣ 選擇規格後點擊「申請報價」\n4️⃣ 我們收到後會盡快為您處理報價！\n\n💡 報價完成後會通知您，確認金額後即可付款下單喔！',
