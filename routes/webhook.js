@@ -823,6 +823,23 @@ router.post('/channeltalk', async function(req, res) {
       return res.status(200).send("OK");
     }
 
+    // === 報價/代購 요청 우선 체크 (isActionRequest보다 먼저) ===
+    var quoteRequestKws = ['報價','估價','幫我買','想買','可以買嗎','能買嗎','代購','幫我代購','想要這個','想訂','幫我訂','我要買','購買','想購入','幫忙代購','幫我看','可以幫我買','給我報價','想問價格','幫我看價格','能不能買','可以訂嗎','견적','구매대행','사고싶어','사줘','구매','quote','buy for me','want to buy','can you buy','purchase'];
+    var isQuoteRequest = quoteRequestKws.some(function(kw) { return userText.toLowerCase().indexOf(kw.toLowerCase()) > -1; });
+    if (isQuoteRequest) {
+      var quoteMsg = {
+        'zh-TW': '想購買商品的話，請到 veasly.com 找到您想要的商品，點擊「申請報價」按鈕就可以囉！\n\n📌 報價申請步驟：\n1️⃣ 到 veasly.com/tw\n2️⃣ 貼上商品 URL 或上傳截圖\n3️⃣ 選擇規格後點擊「申請報價」\n4️⃣ 我們收到後會盡快為您處理報價！\n\n💡 報價完成後會通知您，確認金額後即可付款下單喔！',
+        'ko': '상품 구매를 원하시면 veasly.com에서 원하시는 상품을 찾아 「견적 요청」 버튼을 눌러주세요!\n\n📌 견적 신청 방법:\n1️⃣ veasly.com/tw 접속\n2️⃣ 상품 URL 또는 스크린샷 업로드\n3️⃣ 옵션 선택 후 「견적 요청」 클릭\n4️⃣ 견적 완료 후 알림 드립니다!',
+        'en': 'To purchase, please visit veasly.com, find your desired product, and click the "Request Quote" button!\n\n📌 Steps:\n1️⃣ Go to veasly.com/tw\n2️⃣ Paste product URL or upload screenshot\n3️⃣ Select options and click "Request Quote"\n4️⃣ We will notify you when the quote is ready!',
+        'ja': 'ご購入をご希望でしたら、veasly.comで商品を見つけて「見積もり申請」ボタンをクリックしてください！\n\n📌 手順：\n1️⃣ veasly.com/tw にアクセス\n2️⃣ 商品URLまたはスクリーンショットを貼付\n3️⃣ オプション選択後「見積もり申請」をクリック'
+      };
+      var qMsg = quoteMsg[detectedLang] || quoteMsg['zh-TW'];
+      qMsg += '\n\n💡 ' + (detectedLang === 'ko' ? '다른 질문이 있으시면 입력해주세요!' : detectedLang === 'en' ? 'Any other questions? Just type!' : detectedLang === 'ja' ? '他にご質問があればどうぞ！' : '還有其他問題嗎？直接輸入問題，或輸入「客服」轉接真人客服喔！');
+      await channeltalk.sendMessage(chatId, { blocks: [{ type: 'text', value: qMsg }] });
+      aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || '', userName: veaslyUser ? veaslyUser.name : '', lang: detectedLang, type: 'faq_answer', userMessage: userText.substring(0, 200), aiResponse: '報價요청 → veasly.com 申請報價 안내', escalated: false, confidence: 1.0, category: 'quote_request' });
+      return res.status(200).send('OK');
+    }
+
     // === 결제금액 불일치 우선 체크 (isActionRequest보다 먼저) ===
     var payMismatchKws = ['金額不對','金額不一樣','價格不對','金額不符','價格不符','結帳金額','結帳錯誤','金額錯誤','價格錯誤','金額有差','價格有差','金額跟報價不同','金額變了','價格變了','付款金額','app金額','app價格','手機金額','결제금액','금액불일치','금액오류','payment mismatch','wrong amount','price different'];
     var isPayMismatch = payMismatchKws.some(function(kw) { return userText.toLowerCase().indexOf(kw.toLowerCase()) > -1; });
