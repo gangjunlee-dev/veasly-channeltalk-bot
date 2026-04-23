@@ -823,6 +823,23 @@ router.post('/channeltalk', async function(req, res) {
       return res.status(200).send("OK");
     }
 
+    // === 결제금액 불일치 우선 체크 (isActionRequest보다 먼저) ===
+    var payMismatchKws = ['金額不對','金額不一樣','價格不對','金額不符','價格不符','結帳金額','結帳錯誤','金額錯誤','價格錯誤','金額有差','價格有差','金額跟報價不同','金額變了','價格變了','付款金額','app金額','app價格','手機金額','결제금액','금액불일치','금액오류','payment mismatch','wrong amount','price different'];
+    var isPayMismatch = payMismatchKws.some(function(kw) { return userText.toLowerCase().indexOf(kw.toLowerCase()) > -1; });
+    if (isPayMismatch) {
+      var payMismatchMsgs = {
+        'zh-TW': '關於結帳金額不符的問題：\n\n📌 請問您目前是用 APP（手機應用程式）下單嗎？\n\n如果是的話，建議改用網頁版 (veasly.com/tw) 進行結帳，APP版本偶爾會出現金額顯示異常的情況，使用網頁版就不會有這個問題囉！\n\n💡 操作方式：\n1️⃣ 用手機或電腦瀏覽器打開 veasly.com/tw\n2️⃣ 登入您的帳號\n3️⃣ 到「我的頁面」找到訂單重新結帳\n\n如果用網頁版還是有金額問題，請提供訂單號碼和截圖，客服人員會幫您確認！',
+        'ko': '결제 금액이 다른 문제에 대해:\n\n📌 혹시 지금 APP(모바일 앱)으로 주문하고 계신가요?\n\nAPP에서 간혹 금액 표시 오류가 발생할 수 있어요. 웹 브라우저(veasly.com/tw)로 결제하시면 문제가 해결됩니다!\n\n💡 방법:\n1️⃣ 브라우저에서 veasly.com/tw 접속\n2️⃣ 로그인\n3️⃣ 마이페이지에서 주문 재결제',
+        'en': 'About the payment amount mismatch:\n\n📌 Are you currently ordering through the APP?\n\nThe APP may occasionally show incorrect amounts. Please try using the web version (veasly.com/tw) instead!\n\n💡 Steps:\n1️⃣ Open veasly.com/tw\n2️⃣ Log in\n3️⃣ Go to My Page and retry payment',
+        'ja': '決済金額の不一致について：\n\n📌 現在APPからご注文されていますか？\n\nAPPでは稀に金額表示の不具合が発生します。ウェブ版(veasly.com/tw)で決済すれば問題が解決します！'
+      };
+      var payMsg = payMismatchMsgs[detectedLang] || payMismatchMsgs['zh-TW'];
+      payMsg += '\n\n💡 ' + (detectedLang === 'ko' ? '웹에서도 문제가 있으면 주문번호와 스크린샷을 보내주세요!' : detectedLang === 'en' ? 'If the issue persists on web, please send your order number and screenshot!' : detectedLang === 'ja' ? 'ウェブでも問題がある場合は注文番号とスクリーンショットをお送りください！' : '還有其他問題嗎？直接輸入問題，或輸入「客服」轉接真人客服喔！');
+      await channeltalk.sendMessage(chatId, { blocks: [{ type: 'text', value: payMsg }] });
+      aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || '', userName: veaslyUser ? veaslyUser.name : '', lang: detectedLang, type: 'faq_answer', userMessage: userText.substring(0, 200), aiResponse: '결제금액 불일치 → APP→웹 전환 안내', escalated: false, confidence: 1.0, category: 'payment_mismatch' });
+      return res.status(200).send('OK');
+    }
+
     // Action request → AI guide message + escalation
     var actionType = isActionRequest(userText);
     if (actionType) {
