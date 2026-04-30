@@ -917,7 +917,8 @@ router.post('/channeltalk', async function(req, res) {
         'ja': 'ご購入をご希望でしたら、veasly.comで商品を見つけて「見積もり申請」ボタンをクリックしてください！\n\n📌 手順：\n1️⃣ veasly.com/tw にアクセス\n2️⃣ 商品URLまたはスクリーンショットを貼付\n3️⃣ オプション選択後「見積もり申請」をクリック'
       };
       var qMsg = quoteMsg[detectedLang] || quoteMsg['zh-TW'];
-      qMsg += '\n\n💡 ' + (detectedLang === 'ko' ? '다른 질문이 있으시면 입력해주세요!' : detectedLang === 'en' ? 'Any other questions? Just type!' : detectedLang === 'ja' ? '他にご質問があればどうぞ！' : '還有其他問題嗎？直接輸入問題，或輸入「客服」轉接真人客服喔！');
+      qMsg += '\n\n🔗 ' + (detectedLang === 'ko' ? '상품 링크를 여기에 바로 붙여넣으시면, 규격/가격 정보를 확인해드릴 수 있어요!' : detectedLang === 'en' ? 'You can also paste the product link here and I will help check availability!' : detectedLang === 'ja' ? '商品リンクをここに貼り付けていただければ、在庫確認をお手伝いします！' : '也可以直接把商品連結貼在這裡，我可以先幫您確認商品資訊喔！');
+      qMsg += '\n\n💡 ' + (detectedLang === 'ko' ? '다른 질문이 있으시면 입력해주세요!' : detectedLang === 'en' ? 'Any other questions? Just type!' : detectedLang === 'ja' ? '他にご質問があればどうぞ！' : '還有其他問題嗎？直接輸入問題，AI會為您解答喔！');
       await channeltalk.sendMessage(chatId, { blocks: [{ type: 'text', value: qMsg }] });
       aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || '', userName: veaslyUser ? veaslyUser.name : '', lang: detectedLang, type: 'faq_answer', userMessage: userText.substring(0, 200), aiResponse: '報價요청 → veasly.com 申請報價 안내', escalated: false, confidence: 1.0, category: 'quote_request' });
       return res.status(200).send('OK');
@@ -1118,7 +1119,7 @@ router.post('/channeltalk', async function(req, res) {
           "ja": orderMatches.length + "件の注文を確認しました：\n\n"
         };
         multiReply = (multiHeaders[detectedLang] || multiHeaders["zh-TW"]) + multiReply;
-        multiReply += "💡 " + (detectedLang === "ko" ? "더 궁금한 점이 있으면 입력해주세요!" : detectedLang === "en" ? "Any questions?" : detectedLang === "ja" ? "ご質問があればどうぞ！" : "還有問題嗎？直接輸入問題，或輸入「客服」轉接真人客服喔！");
+        multiReply += "💡 " + (detectedLang === "ko" ? "특정 주문의 상세 상태를 보려면 주문번호를 입력해주세요! 배송 지연 시 「독촉해줘」라고 입력하시면 도움드릴게요." : detectedLang === "en" ? "Enter a specific order number for details! If delayed, type 'follow up' and I will help!" : detectedLang === "ja" ? "詳細は注文番号を入力！遅延の場合は「確認して」と入力してください！" : "想看特定訂單詳情？請輸入完整訂單編號！如果配送延遲，可以告訴我「幫我催一下」喔！");
         await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: multiReply }] });
         aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "order_lookup", userMessage: userText.substring(0, 200), aiResponse: "복수 주문조회: " + orderMatches.length + "건 (" + successCount + "건 성공)", escalated: false, confidence: 0.8 });
         return res.status(200).send("OK");
@@ -1152,7 +1153,19 @@ router.post('/channeltalk', async function(req, res) {
           };
           var tip = (tipMap[mainStatus] && tipMap[mainStatus][detectedLang]) || (tipMap[mainStatus] && tipMap[mainStatus]["zh-TW"]) || "";
           if (tip) orderReply += "\n\n📋 " + tip;
-          orderReply += "\n\n💡 " + (detectedLang === "ko" ? "더 궁금한 점이 있으면 입력해주세요! 「상담사」 입력 시 담당자를 연결해드려요." : detectedLang === "en" ? "Any questions? Type or enter 'agent' for live support!" : detectedLang === "ja" ? "ご質問があればどうぞ！「agent」と入力で担当者に接続します！" : "還有問題嗎？直接輸入問題，或輸入「客服」轉接真人客服喔！");
+          // 주문 상태별 맞춤 후속 행동 제안
+          var followUpMap = {
+            "PAYMENT_WAITING": { "zh-TW": "⏰ 如果付款遇到問題，可以直接告訴我喔！支援信用卡、ATM轉帳、PayPal付款方式。", "ko": "⏰ 결제 문제가 있으시면 알려주세요! 신용카드, ATM이체, PayPal을 지원합니다.", "en": "⏰ Need help with payment? We support credit card, ATM, and PayPal!", "ja": "⏰ お支払いでお困りですか？クレジットカード、ATM、PayPalに対応しています！" },
+            "PAYMENT_COMPLETED": { "zh-TW": "🔄 商品正在等待賣家出貨，我們會持續追蹤喔！如果超過3天沒更新，請直接告訴我，我來幫您催促賣家！", "ko": "🔄 판매자 출고 대기 중입니다. 3일 이상 변동 없으면 말씀해주세요, 판매자에게 독촉하겠습니다!", "en": "🔄 Waiting for seller to ship. If no update in 3 days, let me know and I will follow up!", "ja": "🔄 セラーの発送待ちです。3日以上更新がなければお知らせください！" },
+            "ORDER_PROCESSING": { "zh-TW": "🚚 如果超過3個工作天還沒到倉庫，請告訴我，我會幫您跟賣家確認喔！您也可以問我：「幫我催一下」", "ko": "🚚 3영업일 이상 변동 없으면 알려주세요! 판매자에게 확인하겠습니다. 「독촉해줘」라고 입력하셔도 돼요!", "en": "🚚 If no update in 3 business days, let me know and I will check with the seller!", "ja": "🚚 3営業日以上更新がなければお知らせください！セラーに確認いたします！" },
+            "SHIPPING_TO_BDJ": { "zh-TW": "📦 商品已在倉庫！如果有其他訂單想一起寄（合併配送），請告訴我喔！通常1-2天內會安排國際寄出。", "ko": "📦 창고에 도착! 다른 주문과 합배송을 원하시면 말씀해주세요! 보통 1-2일 내 국제발송 예정입니다.", "en": "📦 At warehouse! Want to combine with other orders? Let me know! Usually ships internationally in 1-2 days.", "ja": "📦 倉庫到着！他の注文と合わせて発送をご希望ですか？通常1-2日で国際発送します！" },
+            "SHIPPING_TO_HOME": { "zh-TW": "✈️ 包裹飛往您手中了！追蹤進度可以查看EZ WAY APP，收到通知記得按「申報相符」喔！通常5-10個工作天到達。\n如果超過10天還沒收到，請告訴我！", "ko": "✈️ 국제배송 중! 보통 5-10영업일 소요됩니다. 10일 이상 지연 시 말씀해주세요!", "en": "✈️ On the way! Usually arrives in 5-10 business days. Let me know if it takes longer than 10 days!", "ja": "✈️ 配送中です！通常5-10営業日で届きます。10日以上かかる場合はお知らせください！" },
+            "COMPLETED": { "zh-TW": "🎉 期待您的下次購物！如果商品有任何問題，7天內可以申請退換貨喔～", "ko": "🎉 다음 쇼핑도 기대해주세요! 상품 문제 시 7일 이내 교환/환불 가능합니다~", "en": "🎉 Hope you love it! If any issues, returns are available within 7 days!", "ja": "🎉 お楽しみいただけましたか？7日以内なら返品・交換可能です！" },
+            "CANCEL_COMPLETED": { "zh-TW": "💰 退款會在3-5個工作天內處理。如果想重新下單，可以直接在 veasly.com 申請報價喔！", "ko": "💰 환불은 3-5영업일 내 처리됩니다. 재주문을 원하시면 veasly.com에서 견적 요청해주세요!", "en": "💰 Refund in 3-5 business days. Want to reorder? Visit veasly.com!", "ja": "💰 返金は3-5営業日以内に処理されます。再注文はveasly.comからどうぞ！" }
+          };
+          var followUp = (followUpMap[mainStatus] && followUpMap[mainStatus][detectedLang]) || (followUpMap[mainStatus] && followUpMap[mainStatus]["zh-TW"]) || "";
+          if (followUp) orderReply += "\n\n" + followUp;
+          orderReply += "\n\n💡 " + (detectedLang === "ko" ? "더 궁금한 점이 있으면 입력해주세요!" : detectedLang === "en" ? "Any more questions? Just type!" : detectedLang === "ja" ? "他にご質問があればどうぞ！" : "還有其他問題嗎？直接輸入問題，AI會為您解答喔！");
           await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: orderReply }] });
           if (!chatContext[chatId]) chatContext[chatId] = {};
           chatContext[chatId].lastOrder = orderReply;
@@ -1205,7 +1218,7 @@ router.post('/channeltalk', async function(req, res) {
             var providerTag = o._provider ? " [" + o._provider + "]" : ""; var currentTag = o._isCurrentAccount === false ? " ⚠" : ""; return (i + 1) + ". " + o.orderNumber + " (" + veaslyApi.getStatusText(o.status, detectedLang) + ")" + providerTag + currentTag;
           });
           var listReply = listHeader + "\n" + orderLines.join("\n");
-          var hasMultiAccount = recentOrders.some(function(o) { return o._isCurrentAccount === false; }); if (hasMultiAccount) { listReply += "\n\n" + (detectedLang === "ko" ? "⚠ = 다른 로그인 방식으로 주문한 건입니다" : detectedLang === "en" ? "⚠ = ordered from a different login method" : detectedLang === "ja" ? "⚠ = 別のログイン方法での注文です" : "⚠ = 透過其他登入方式下的訂單"); } listReply += "\n\n" + (detectedLang === "ko" ? "주문번호를 입력하시면 상세 상태를 확인할 수 있어요!" : detectedLang === "en" ? "Enter an order number for details!" : detectedLang === "ja" ? "注文番号を入力すると詳細が確認できます！" : "輸入完整訂單編號可查看詳細狀態喔！");
+          var hasMultiAccount = recentOrders.some(function(o) { return o._isCurrentAccount === false; }); if (hasMultiAccount) { listReply += "\n\n" + (detectedLang === "ko" ? "⚠ = 다른 로그인 방식으로 주문한 건입니다" : detectedLang === "en" ? "⚠ = ordered from a different login method" : detectedLang === "ja" ? "⚠ = 別のログイン方法での注文です" : "⚠ = 透過其他登入方式下的訂單"); } listReply += "\n\n" + (detectedLang === "ko" ? "주문번호를 입력하시면 상세 상태를 확인할 수 있어요!" : detectedLang === "en" ? "Enter an order number for details!" : detectedLang === "ja" ? "注文番号を入力すると詳細が確認できます！" : "輸入完整訂單編號可查看詳細狀態喔！如果配送有問題，也可以直接告訴我喔！");
           await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: listReply }] });
           console.log("[Order] Listed", recentOrders.length, "orders for", veaslyUser.email);
           
