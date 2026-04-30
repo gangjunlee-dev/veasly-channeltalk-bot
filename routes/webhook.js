@@ -92,6 +92,8 @@ var processedMessages = {};
 var csatHelper = require('../lib/csat');
 var cesHelper = require('../lib/ces');
 var satisfactionPending = {};
+// CSAT 발송 중복 방지 락 (close 이벤트 2회 트리거 대응)
+var _csatSendLock = {};
 var chatLanguage = {};
 var managerActive = {};
 var pendingEscalations = {};
@@ -389,6 +391,31 @@ router.post('/channeltalk', async function(req, res) {
         }
         // REMOVED: escalation-close CSAT (자동종료 시에만 발송)
         // REMOVED: CSAT survey sendMessage (자동종료 시에만 발송)
+        // === CSAT 발송 복원 (3중 안전장치) ===
+        // 1차: 메모리 락 (_csatSendLock) - 동시 close 이벤트 방지
+        // 2차: csatHelper.alreadySent - 파일 기반 영구 기록
+        // 3차: markSent 즉시 호출 - 발송 전에 기록
+        if (surveyMsg && !_csatSendLock[chatId0] && !csatHelper.alreadySent(chatId0)) {
+          _csatSendLock[chatId0] = true; // 1차: 즉시 락
+          var _csatSrc = managerActive[chatId0] ? "close_manager_csat" : "close_bot_ces";
+          csatHelper.markSent(chatId0, _csatSrc); // 3차: 발송 전에 기록
+          try {
+            await channeltalk.sendMessage(chatId0, { blocks: [{ type: "text", value: surveyMsg }] });
+            if (managerActive[chatId0]) {
+              satisfactionPending[chatId0] = { managerId: stats_managerId || "", lang: surveyLang, time: Date.now() };
+            }
+            console.log("[CSAT] Close survey sent:", chatId0, "| source:", _csatSrc);
+          } catch(_csErr) {
+            console.error("[CSAT] Close send error:", _csErr.message);
+          }
+          // 5분 후 메모리 락 해제 (메모리 누수 방지)
+          setTimeout(function() { delete _csatSendLock[chatId0]; }, 5 * 60 * 1000);
+        } else {
+          console.log("[CSAT] Skip close survey:", chatId0,
+            "| lock:", !!_csatSendLock[chatId0],
+            "| alreadySent:", csatHelper.alreadySent(chatId0));
+        }
+
 
         // AI quality review for manager conversations
         if (closedChat) {
@@ -1377,11 +1404,16 @@ router.post('/channeltalk', async function(req, res) {
         }
       }
 
-      var mediumConfidenceEsc = (confidence > 0 && confidence < 0.6);
-      for (var ek = 0; !_botConfidentAnswer && ek < escalateKeywords.length; ek++) {
+      var mediumConfidenceEsc = (confidence > 0 && confidence < 0.5);
+      // confidence >= 0.65이면 AI가 충분히 답변 → 키워드 에스컬레이션 스킵
+      var _skipKeywordEsc = confidence >= 0.65;
+      if (_skipKeywordEsc) {
+        console.log("[AI] Confidence " + confidence.toFixed(3) + " >= 0.65 - skipping keyword escalation check");
+      }
+      for (var ek = 0; !_botConfidentAnswer && !_skipKeywordEsc && ek < escalateKeywords.length; ek++) {
         if (aiAnswer.indexOf(escalateKeywords[ek]) !== -1) { needEscalate = true; break; }
       }
-      aiEscalated = needEscalate || mediumConfidenceEsc;
+      aiEscalated = (needEscalate && !_skipKeywordEsc) || mediumConfidenceEsc;
       var hasOrderCtxForEsc = chatContext[chatId] && chatContext[chatId].lastOrderContext && (Date.now() - chatContext[chatId].lastOrderTime) < 60 * 60 * 1000;
       if (mediumConfidenceEsc && !needEscalate && !hasOrderCtxForEsc) {
         console.log("[AI] Medium confidence (" + (confidence || 0).toFixed(3) + ") - triggering escalation after AI answer (no order context)");
