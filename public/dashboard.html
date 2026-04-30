@@ -232,7 +232,7 @@ td { padding: 10px 8px; border-bottom: 1px solid var(--border-secondary); font-s
 </div>
 
 <div class="controls" id="periodBar">
-  <select id="days">
+  <select id="days" onchange="loadAllData()">
     <option value="1">오늘</option>
     <option value="3">최근 3일</option>
     <option value="7" selected>최근 7일</option>
@@ -339,16 +339,14 @@ function switchTab(name) {
   // 미응답 탭에서는 기간 선택 숨기기
   var periodBar = document.getElementById('periodBar');
   if (periodBar) periodBar.style.display = (name === 'unreplied') ? 'none' : 'flex';
-  event.target.classList.add('active');
+  // 클릭한 탭 버튼 활성화 (event.target 대신 id 기반)
+  var tabBtn = document.getElementById(name + '-tab');
+  if (tabBtn) tabBtn.classList.add('active');
   document.getElementById('tab-' + name).classList.add('active');
-  if (name === 'managers' && !cachedData.mgr) loadManagerData();
-  if (name === 'ai' && !cachedData.ai) loadAIData();
-  if (name === 'csat' && !cachedData.csat) loadCSATData();
-  if (name === 'csscore' && !cachedData.csscore) loadCSScoreData();
-  if (name === 'shipping' && !cachedData.shipping) loadShippingData();
-  if (name === 'faq' && !cachedData.faq) loadFAQManagement();
-  if (name === 'unreplied' && !cachedData.unreplied) loadUnrepliedData();
-  // CLEANED: csscore 추가 로딩은 loadCSScoreData 내부에서 처리
+  // TAB_MAP 기반 로드 (캐시 없으면 로드)
+  var tabId = 'tab-' + name;
+  var entry = TAB_MAP[tabId];
+  if (entry && !cachedData[entry.cacheKey]) entry.loader();
 }
 
 function toggleAutoRefresh() {
@@ -499,16 +497,25 @@ function loadUnrepliedBadge() {
   }).catch(function(){});
 }
 
+// 탭 ID → { loader, cacheKey } 매핑 (단일 소스)
+var TAB_MAP = {
+  'tab-overview':   { loader: loadOverview,       cacheKey: 'overview' },
+  'tab-managers':   { loader: loadManagerData,     cacheKey: 'mgr' },
+  'tab-ai':         { loader: loadAIData,          cacheKey: 'ai' },
+  'tab-csat':       { loader: loadCSATData,        cacheKey: 'csat' },
+  'tab-csscore':    { loader: loadCSScoreData,     cacheKey: 'csscore' },
+  'tab-shipping':   { loader: loadShippingData,    cacheKey: 'shipping' },
+  'tab-faq':        { loader: loadFAQManagement,   cacheKey: 'faq' },
+  'tab-unreplied':  { loader: loadUnrepliedData,   cacheKey: 'unreplied' }
+};
+
 function loadAllData() {
   cachedData = {};
   loadOverview();
-  var activeTab = document.querySelector('.tab.active');
-  if (activeTab) {
-    var tabName = activeTab.textContent.trim();
-    if (tabName.indexOf('매니저') > -1) loadManagerData();
-    if (tabName.indexOf('AI') > -1) loadAIData();
-    if (tabName.indexOf('CSAT') > -1) loadCSATData();
-    if (tabName.indexOf('CS Score') > -1) loadCSScoreData();
+  var activeContent = document.querySelector('.tab-content.active');
+  if (activeContent && activeContent.id !== 'tab-overview') {
+    var entry = TAB_MAP[activeContent.id];
+    if (entry && entry.loader) entry.loader();
   }
   document.getElementById('lastUpdate').textContent = new Date().toLocaleString('ko-KR');
 }
