@@ -753,7 +753,25 @@ router.post('/channeltalk', async function(req, res) {
       };
       await channeltalk.sendMessage(chatId, { blocks: [{ type: 'text', value: thankReply[detectedLang] || thankReply['zh-TW'] }] });
       aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "thank_you", userMessage: userText, aiResponse: "감사 응답", escalated: false, confidence: 1.0 });
-      // REMOVED: thank_you CSAT (자동종료 시에만 발송)
+      // === 업그레이드5: 감사 응답 후 간편 CSAT 즉시 발송 ===
+      if (!csatHelper.alreadySent(chatId)) {
+        csatHelper.markSent(chatId, 'thank_you_csat');
+        var _csatDelay = 3000; // 3초 후 발송
+        (function(_cid, _lang) {
+          setTimeout(async function() {
+            try {
+              var _csatMsgs = {
+                'zh-TW': '📋 最後想請問，這次的服務體驗如何呢？\n1️⃣ 非常滿意  2️⃣ 滿意  3️⃣ 普通  4️⃣ 不滿意  5️⃣ 非常不滿意\n請輸入數字 1~5',
+                'ko': '📋 마지막으로, 이번 서비스는 어떠셨나요?\n1️⃣ 매우 만족  2️⃣ 만족  3️⃣ 보통  4️⃣ 불만족  5️⃣ 매우 불만족\n숫자 1~5를 입력해주세요',
+                'en': '📋 How was your experience?\n1️⃣ Very Satisfied  2️⃣ Satisfied  3️⃣ Neutral  4️⃣ Dissatisfied  5️⃣ Very Dissatisfied\nPlease enter 1~5',
+                'ja': '📋 今回のサービスはいかがでしたか？\n1️⃣ 大満足  2️⃣ 満足  3️⃣ 普通  4️⃣ 不満  5️⃣ 大不満\n1~5の数字を入力してください'
+              };
+              await channeltalk.sendMessage(_cid, { blocks: [{ type: 'text', value: _csatMsgs[_lang] || _csatMsgs['zh-TW'] }] });
+              console.log('[CSAT] Thank-you trigger sent to:', _cid);
+            } catch(_csatErr) { console.error('[CSAT] Thank-you trigger error:', _csatErr.message); }
+          }, _csatDelay);
+        })(chatId, detectedLang);
+      }
       return res.status(200).send('OK');
     }
 
@@ -917,7 +935,7 @@ router.post('/channeltalk', async function(req, res) {
       if (step === 0) {
         // Step 1: Ask what they need help with
         var step1Msgs = {
-          'zh-TW': !isBusinessHours() ? '💡 目前非客服時間（台灣 09:00~18:00），但我可以馬上幫您！\n\n請直接告訴我：\n1️⃣ 輸入「訂單號碼」→ 馬上查進度\n2️⃣ 輸入您的問題 → AI即時回答\n\n例如：\n・貼上訂單號碼（如 20260415TW...）\n・「我的包裹到哪了」\n・「運費怎麼算」\n\n⏰ 客服人員上班後會優先處理需要人工協助的問題！\n🔸 還是需要真人？請再輸入「客服」，我會記錄下來' : '💡 轉接前，試試看我能不能幫到您！\n\n請直接告訴我：\n1️⃣ 輸入「訂單號碼」→ 馬上查進度\n2️⃣ 輸入您的問題 → AI即時回答\n\n例如：\n・貼上訂單號碼（如 20260415TW...）\n・「我的包裹到哪了」\n・「運費怎麼算」\n\n🔸 還是需要真人？請再輸入「客服」',
+          'zh-TW': !isBusinessHours() ? '💡 目前非客服時間（台灣 09:00~18:00），但我可以馬上幫您！\n\n請直接告訴我：\n1️⃣ 輸入「訂單號碼」→ 馬上查進度\n2️⃣ 輸入您的問題 → AI即時回答\n\n例如：\n・貼上訂單號碼（如 20260415TW...）\n・「我的包裹到哪了」\n・「運費怎麼算」\n\n⏰ 客服人員上班後會優先處理需要人工協助的問題！\n🔸 還是需要真人？請再輸入「客服」，我會記錄下來' : '💡 轉接客服前，請先簡單告訴我您遇到什麼問題，這樣可以更快幫您解決喔！\n\n例如：\n・貼上訂單號碼 → 馬上查進度\n・「包裹到哪了」「運費多少」→ AI即時回答\n・「想修改地址」→ 馬上為您處理\n\n📝 請用一句話描述您的問題：\n\n🔸 還是需要真人？請再輸入「客服」',
           'ko': '💡 상담사 연결 전에 제가 도움드릴 수 있을지 확인해볼게요!\n\n질문을 간단히 설명해주세요:\n・「주문 진행 상태 확인」\n・「운임 계산 방법」\n・「환불 신청 방법」\n\n또는 번호를 입력하세요:\n' + getMenuText('ko') + '\n\n🔸 그래도 상담사가 필요하시면 「상담사」를 한 번 더 입력해주세요',
           'en': '💡 Before connecting to an agent, maybe I can help!\n\nDescribe your issue briefly, or enter a number:\n' + getMenuText('en') + '\n\n🔸 Still need a human? Type "agent" again',
           'ja': '💡 オペレーターに接続する前に、お手伝いできるかもしれません！\n\n質問を簡単に説明するか、番号を入力してください：\n' + getMenuText('ja') + '\n\n🔸 それでも必要な場合は「オペレーター」をもう一度入力'
@@ -1152,9 +1170,54 @@ router.post('/channeltalk', async function(req, res) {
       return res.status(200).send("OK");
         }
       } catch(olErr) { console.error("[Order] List error:", olErr.message); }
+
+    // === 업그레이드3: userId 기반 주문 자동조회 (veaslyUser 없을 때) ===
+    if (isOrderQuery && !veaslyUser && memberId) {
+      try {
+        var _fallbackUser = await veaslyApi.findUserById(memberId);
+        if (_fallbackUser && _fallbackUser.email) {
+          var _fbOrders = await veaslyApi.getUserOrders(_fallbackUser.email, 500, memberId);
+          if (_fbOrders.length > 0) {
+            var _fbRecent = _fbOrders.slice(0, 5);
+            var _fbHeader = {"zh-TW": "為您查到以下訂單：", "ko": "주문 내역을 찾았습니다:", "en": "Found your orders:", "ja": "ご注文が見つかりました："};
+            var _fbLines = _fbRecent.map(function(o, i) { return (i+1) + ". " + o.orderNumber + " (" + veaslyApi.getStatusText(o.status, detectedLang) + ")"; });
+            var _fbReply = (_fbHeader[detectedLang] || _fbHeader["zh-TW"]) + "\n" + _fbLines.join("\n") + "\n\n" + (detectedLang === "ko" ? "주문번호를 입력하면 상세 조회할 수 있어요!" : detectedLang === "en" ? "Enter order number for details!" : detectedLang === "ja" ? "注文番号を入力すると詳細確認できます！" : "輸入訂單編號可查看詳細狀態喔！");
+            await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: _fbReply }] });
+            aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || "", lang: detectedLang, type: "order_list", userMessage: userText, aiResponse: "userId fallback 주문조회 " + _fbRecent.length + "건", escalated: false, confidence: 0.8 });
+            return res.status(200).send("OK");
+          }
+        }
+      } catch(_fbErr) { console.error("[Order] userId fallback error:", _fbErr.message); }
+    }
+
     }
 
     // AI-first, then FAQ fallback
+
+    // === 업그레이드4: 실시간 배송추적 응답 ===
+    var _shipKws = ["包裹到哪", "物流", "到哪了", "寄到哪", "到貨", "配送進度", "出貨了嗎", "什麼時候到", "何時到", "還沒收到", "배송", "택배", "어디", "shipping", "tracking", "where is", "届く", "届いた", "配送状況"];
+    var _isShipQuery = _shipKws.some(function(kw) { return userText.toLowerCase().indexOf(kw.toLowerCase()) > -1; });
+    if (_isShipQuery && veaslyUser && veaslyUser.email && !orderMatches.length) {
+      try {
+        var _shipOrders = await veaslyApi.getUserOrders(veaslyUser.email, 500, memberId);
+        var _activeOrders = _shipOrders.filter(function(o) { return ["ORDER_PROCESSING","SHIPPING_TO_BDJ","SHIPPING_TO_HOME"].indexOf(o.status) > -1; });
+        if (_activeOrders.length > 0) {
+          var _shipHeaders = {"zh-TW": "📦 您目前配送中的訂單：", "ko": "📦 배송 중인 주문:", "en": "📦 Orders in transit:", "ja": "📦 配送中のご注文："};
+          var _shipLines = _activeOrders.slice(0, 5).map(function(o, i) {
+            var st = veaslyApi.getStatusText(o.status, detectedLang);
+            var tips = {"ORDER_PROCESSING": (detectedLang === "ko" ? "한국 내 배송 중 (1-3일)" : "韓國境內配送中（約1-3工作天）"), "SHIPPING_TO_BDJ": (detectedLang === "ko" ? "VEASLY 창고 도착, 국제발송 준비 중" : "已到VEASLY倉庫，準備國際寄送"), "SHIPPING_TO_HOME": (detectedLang === "ko" ? "국제배송 중 (7-14일)" : "國際配送中（約7-14天），請在EZ WAY APP按「申報相符」")};
+            return (i+1) + ". " + o.orderNumber + "\n   " + st + " — " + (tips[o.status] || "");
+          });
+          var _shipReply = (_shipHeaders[detectedLang] || _shipHeaders["zh-TW"]) + "\n\n" + _shipLines.join("\n\n");
+          _shipReply += "\n\n💡 " + (detectedLang === "ko" ? "주문번호를 입력하면 더 자세한 상태를 확인할 수 있어요!" : detectedLang === "en" ? "Enter order number for more details!" : detectedLang === "ja" ? "注文番号を入力すると詳細確認できます！" : "輸入訂單編號可查看更詳細狀態喔！");
+          await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: _shipReply }] });
+          aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "shipping_status", userMessage: userText.substring(0, 200), aiResponse: "실시간 배송추적 " + _activeOrders.length + "건", escalated: false, confidence: 0.9 });
+          return res.status(200).send("OK");
+        }
+      } catch(_shipErr) { console.error("[Shipping] Realtime query error:", _shipErr.message); }
+    }
+    // === 업그레이드4 END ===
+
     var aiAnswer = null;
     if (aiEngine.isReady()) {
       try {
@@ -1188,8 +1251,8 @@ router.post('/channeltalk', async function(req, res) {
           aiAnswer = aiResult.answer;
           var confidence = aiResult.confidence || 0;
           console.log("[AI] Confidence:", confidence.toFixed(3));
-          if (confidence < 0.3) {
-            console.log("[AI] Very low confidence (" + confidence.toFixed(3) + ") - " + (isBusinessHours() ? "auto-escalate" : "off-hour AI guide only"));
+          if (confidence < 0.25) {
+            console.log("[AI] Very low confidence (" + confidence.toFixed(3) + ") - " + (isBusinessHours() ? "auto-escalate" : "off-hour AI guide only") + " [threshold: 0.25]");
             
             if (!isBusinessHours()) {
               // ★ 오프시간: 매니저 초대 없이 AI가 적극 안내
