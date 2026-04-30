@@ -1361,8 +1361,24 @@ router.post('/channeltalk', async function(req, res) {
       var aiEscalated = false;
       var escalateKeywords = ["轉接客服", "轉接", "客服確認", "客服人員", "為您確認", "幫您確認", "需要客服", "建議聯繫", "請聯繫客服", "無法為您", "담당자를 연결", "담당자에게", "상담사", "확인이 필요", "상담원", "connect you with", "support team", "contact support", "unable to help", "担当者におつなぎ", "担当者に", "お問い合わせ"];
       var needEscalate = false;
+      // 봇이 확실히 아는 정보는 에스컬레이션 키워드 무시
+      var _botConfidentTopics = ["假日", "공휴일", "holiday", "祝日", "營業時間", "上班時間", "영업시간",
+        "business hour", "工作時間", "休假", "放假", "客服時間", "상담 시간", "幾點", "什麼時候上班",
+        "週末", "주말", "weekend", "國定假日", "勞動節", "春節", "中秋", "端午", "開天節",
+        "設날", "추석", "어린이날", "성탄절", "聖誕", "元旦", "新年"];
+      var _botConfidentAnswer = false;
+      if (confidence >= 0.6) {
+        for (var _bt = 0; _bt < _botConfidentTopics.length; _bt++) {
+          if (userText.indexOf(_botConfidentTopics[_bt]) > -1) {
+            _botConfidentAnswer = true;
+            console.log("[AI] Bot-confident topic detected: " + _botConfidentTopics[_bt] + " - skip escalation keywords");
+            break;
+          }
+        }
+      }
+
       var mediumConfidenceEsc = (confidence > 0 && confidence < 0.6);
-      for (var ek = 0; ek < escalateKeywords.length; ek++) {
+      for (var ek = 0; !_botConfidentAnswer && ek < escalateKeywords.length; ek++) {
         if (aiAnswer.indexOf(escalateKeywords[ek]) !== -1) { needEscalate = true; break; }
       }
       aiEscalated = needEscalate || mediumConfidenceEsc;
@@ -1395,7 +1411,7 @@ router.post('/channeltalk', async function(req, res) {
       });
       recordFCRResolved(memberId || personId || "", chatId, "ai_answer");
 
-      if (needEscalate) {
+      if (needEscalate && !_botConfidentAnswer) {
         try {
           var mgrList = await getCachedManagers();
           var mgrArr = (mgrList && mgrList.managers) || [];
