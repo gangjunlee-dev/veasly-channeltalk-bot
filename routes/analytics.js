@@ -1,3 +1,4 @@
+var chatResolver = require('../lib/chat-resolver');
 var express = require('express');
 var autoUpgrade = require('../lib/auto-upgrade');
 var path = require('path');
@@ -478,8 +479,15 @@ router.get('/cs-score-metrics', async function(req, res) {
           // 영업시간 1시간 이상 경과한 경우만 미응답으로 집계
           // (오프시간/주말에 들어온 문의는 다음 영업일까지 대기)
           if (bizElapsed >= 1) {
-            totalMgrChats++;
-            noReplyChats++;
+            // 봇 해결 완료 체크 - CSAT 숫자/감사 메시지는 미응답 제외
+            var _msgs1 = chat.messages || [];
+            var _resolved1 = chatResolver.isChatResolved(_msgs1);
+            if (_resolved1.resolved) {
+              // 봇이 해결한 채팅 → 미응답 집계 제외
+            } else {
+              totalMgrChats++;
+              noReplyChats++;
+            }
           }
           // else: 아직 영업시간 기준 1시간 미만 → 집계 제외
         }
@@ -1314,6 +1322,13 @@ router.get('/unreplied-chats', async function(req, res) {
         }
         if (!lastMsg) { lastMsg = msgs[0]; lastPersonType = lastMsg.personType || ""; }
 
+        // === 봇 해결 완료 → 미응답 제외 (chat-resolver) ===
+        var _resolved2 = chatResolver.isChatResolved(msgs);
+        if (_resolved2.resolved) {
+          // CSAT 숫자, 감사 메시지, 봇 답변 후 추가 문의 없음 → skip
+          continue;
+        }
+
         // === 미응답 판단 로직 (확장) ===
         var isUnreplied = false;
         var unrepliedType = "";
@@ -1417,6 +1432,11 @@ var seen = {};
           }
           
           if (!lastUserMsg) continue; // 고객 메시지 없으면 스킵
+
+          // 봇 해결 완료 → 방치종료 미응답에서 제외
+          var _allMsgs3 = msgs || [];
+          var _resolved3 = chatResolver.isChatResolved(_allMsgs3);
+          if (_resolved3.resolved) { continue; }
 
           var shouldAdd = false;
           var customerLeftHanging = false;
