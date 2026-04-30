@@ -71,6 +71,20 @@ var aiReview = require('../lib/ai-review');
 var aiLog = require('../lib/ai-log');
 var errorAlert = require('../lib/error-alert');
 var bizHoursUtil = require('../lib/business-hours');
+function getHolidayNotice(lang) {
+  var info = bizHoursUtil.getHolidayInfo();
+  if (!info.isHoliday) return null;
+  var kr = info.krName || "공휴일";
+  var tw = info.twName || kr;
+  var m = {
+    "zh-TW": "\ud83c\udfd6\ufe0f 今天是韓國國定假日（" + tw + "），客服人員休假中。\nAI小幫手可以先為您服務！",
+    "ko": "\ud83c\udfd6\ufe0f 오늘은 " + kr + "(공휴일)으로 상담원이 휴무입니다.\nAI가 먼저 도와드릴게요!",
+    "en": "\ud83c\udfd6\ufe0f Today is a Korean national holiday (" + kr + "). Our agents are off.\nAI assistant is here to help!",
+    "ja": "\ud83c\udfd6\ufe0f 本日は韓国の祝日（" + kr + "）のため、オペレーターはお休みです。\nAIがまずお手伝いします！"
+  };
+  return m[lang] || m["zh-TW"];
+}
+
 var analytics = require('../lib/analytics');
 
 var processedMessages = {};
@@ -934,8 +948,9 @@ router.post('/channeltalk', async function(req, res) {
 
       if (step === 0) {
         // Step 1: Ask what they need help with
+        var _holS0 = getHolidayNotice(detectedLang);
         var step1Msgs = {
-          'zh-TW': !isBusinessHours() ? '💡 目前非客服時間（台灣 09:00~18:00），但我可以馬上幫您！\n\n請直接告訴我：\n1️⃣ 輸入「訂單號碼」→ 馬上查進度\n2️⃣ 輸入您的問題 → AI即時回答\n\n例如：\n・貼上訂單號碼（如 20260415TW...）\n・「我的包裹到哪了」\n・「運費怎麼算」\n\n⏰ 客服人員上班後會優先處理需要人工協助的問題！\n🔸 還是需要真人？請再輸入「客服」，我會記錄下來' : '💡 轉接客服前，請先簡單告訴我您遇到什麼問題，這樣可以更快幫您解決喔！\n\n例如：\n・貼上訂單號碼 → 馬上查進度\n・「包裹到哪了」「運費多少」→ AI即時回答\n・「想修改地址」→ 馬上為您處理\n\n📝 請用一句話描述您的問題：\n\n🔸 還是需要真人？請再輸入「客服」',
+          'zh-TW': !isBusinessHours() ? '💡 ' + (_holS0 || '\ud83d\udca1 目前非客服時間（台灣 09:00~18:00）') + '，但我可以馬上幫您！\n\n請直接告訴我：\n1️⃣ 輸入「訂單號碼」→ 馬上查進度\n2️⃣ 輸入您的問題 → AI即時回答\n\n例如：\n・貼上訂單號碼（如 20260415TW...）\n・「我的包裹到哪了」\n・「運費怎麼算」\n\n⏰ 客服人員上班後會優先處理需要人工協助的問題！\n🔸 還是需要真人？請再輸入「客服」，我會記錄下來' : '💡 轉接客服前，請先簡單告訴我您遇到什麼問題，這樣可以更快幫您解決喔！\n\n例如：\n・貼上訂單號碼 → 馬上查進度\n・「包裹到哪了」「運費多少」→ AI即時回答\n・「想修改地址」→ 馬上為您處理\n\n📝 請用一句話描述您的問題：\n\n🔸 還是需要真人？請再輸入「客服」',
           'ko': '💡 상담사 연결 전에 제가 도움드릴 수 있을지 확인해볼게요!\n\n질문을 간단히 설명해주세요:\n・「주문 진행 상태 확인」\n・「운임 계산 방법」\n・「환불 신청 방법」\n\n또는 번호를 입력하세요:\n' + getMenuText('ko') + '\n\n🔸 그래도 상담사가 필요하시면 「상담사」를 한 번 더 입력해주세요',
           'en': '💡 Before connecting to an agent, maybe I can help!\n\nDescribe your issue briefly, or enter a number:\n' + getMenuText('en') + '\n\n🔸 Still need a human? Type "agent" again',
           'ja': '💡 オペレーターに接続する前に、お手伝いできるかもしれません！\n\n質問を簡単に説明するか、番号を入力してください：\n' + getMenuText('ja') + '\n\n🔸 それでも必要な場合は「オペレーター」をもう一度入力'
@@ -956,8 +971,9 @@ router.post('/channeltalk', async function(req, res) {
             'ja': '👨‍💼 オペレーターにお繋ぎします。少々お待ちください！'
           };
         } else {
+          var _holN = getHolidayNotice(detectedLang);
           escMsgs = {
-            'zh-TW': '👨‍💼 目前非客服時間（平日 10:00~19:00 韓國時間 = 台灣 09:00~18:00）\n\n📝 請留下您的問題，我們會在上班後優先回覆！\n・訂單問題請附上訂單號碼\n・其他問題請簡單描述\n\n我們一定會回覆您！😊',
+            'zh-TW': (_holN ? _holN + '\n\n' : '') + '👨‍💼 目前非客服時間（平日 10:00~19:00 韓國時間 = 台灣 09:00~18:00）\n\n📝 請留下您的問題，我們會在上班後優先回覆！\n・訂單問題請附上訂單號碼\n・其他問題請簡單描述\n\n我們一定會回覆您！😊',
             'ko': '👨‍💼 현재 상담 시간이 아닙니다 (평일 10:00~19:00 한국시간)\n\n📝 메시지를 남겨주시면 업무 시작 후 우선 답변드리겠습니다!',
             'en': '👨‍💼 Outside business hours (Weekdays 10:00~19:00 KST)\n\n📝 Leave your message and we\'ll reply first thing!',
             'ja': '👨‍💼 現在営業時間外です（平日 10:00~19:00 韓国時間）\n\n📝 メッセージを残してください。営業開始後すぐにご返信します！'
@@ -1257,11 +1273,12 @@ router.post('/channeltalk', async function(req, res) {
             if (!isBusinessHours()) {
               // ★ 오프시간: 매니저 초대 없이 AI가 적극 안내
               try {
+                var _holAI = getHolidayNotice(detectedLang);
                 var offHourLowMsgs = {
-                  "zh-TW": "感謝您的提問！🙏\n\n💡 目前非客服時間，但我可以馬上幫您：\n・請輸入「訂單號碼」→ 馬上查詢進度\n・描述您的問題 → AI為您解答\n\n例如：\n・貼上訂單號碼（如 20260415TW...）\n・「我的包裹到哪了」\n・「運費怎麼算」\n\n⏰ 客服時間：週一至週五 台灣09:00~18:00\n客服人員上班後會優先為您處理！😊",
-                  "ko": "질문 감사합니다! 🙏\n\n💡 현재 상담 시간 외이지만 제가 먼저 도와드릴게요:\n・주문번호 입력 → 바로 조회\n・궁금한 점을 말씀해주세요\n\n⏰ 상담시간: 평일 10:00~19:00 (한국시간)\n업무 시작 후 우선 답변드리겠습니다!",
-                  "en": "Thanks for your question! 🙏\n\n💡 We're currently outside business hours, but I can help right away:\n・Enter your order number for instant tracking\n・Describe your issue and I'll assist\n\n⏰ Business hours: Mon-Fri 10:00-19:00 KST\nOur team will prioritize your inquiry!",
-                  "ja": "ご質問ありがとうございます！🙏\n\n💡 現在営業時間外ですが、まずお手伝いします：\n・注文番号を入力 → すぐに確認\n・お問い合わせ内容をご記入ください\n\n⏰ 営業時間：月〜金 10:00〜19:00 KST\n営業開始後、優先的に対応いたします！"
+                  "zh-TW": (_holAI ? _holAI + "\n\n" : "") + "感謝您的提問！🙏\n\n💡 目前非客服時間，但我可以馬上幫您：\n・請輸入「訂單號碼」→ 馬上查詢進度\n・描述您的問題 → AI為您解答\n\n例如：\n・貼上訂單號碼（如 20260415TW...）\n・「我的包裹到哪了」\n・「運費怎麼算」\n\n⏰ 客服時間：週一至週五 台灣09:00~18:00\n客服人員上班後會優先為您處理！😊",
+                  "ko": (_holAI ? _holAI + "\n\n" : "") + "질문 감사합니다! 🙏\n\n💡 현재 상담 시간 외이지만 제가 먼저 도와드릴게요:\n・주문번호 입력 → 바로 조회\n・궁금한 점을 말씀해주세요\n\n⏰ 상담시간: 평일 10:00~19:00 (한국시간)\n업무 시작 후 우선 답변드리겠습니다!",
+                  "en": (_holAI ? _holAI + "\n\n" : "") + "Thanks for your question! 🙏\n\n💡 We're currently outside business hours, but I can help right away:\n・Enter your order number for instant tracking\n・Describe your issue and I'll assist\n\n⏰ Business hours: Mon-Fri 10:00-19:00 KST\nOur team will prioritize your inquiry!",
+                  "ja": (_holAI ? _holAI + "\n\n" : "") + "ご質問ありがとうございます！🙏\n\n💡 現在営業時間外ですが、まずお手伝いします：\n・注文番号を入力 → すぐに確認\n・お問い合わせ内容をご記入ください\n\n⏰ 営業時間：月〜金 10:00〜19:00 KST\n営業開始後、優先的に対応いたします！"
                 };
                 await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: offHourLowMsgs[detectedLang] || offHourLowMsgs["zh-TW"] }] });
                 aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", lang: detectedLang, type: "ai_answer", userMessage: userText.substring(0, 200), aiResponse: "오프시간 low-confidence → AI 안내 (에스컬레이션 안 함)", escalated: false, escalationReason: "off_hour_low_confidence", confidence: confidence });
