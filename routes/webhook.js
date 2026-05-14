@@ -250,6 +250,22 @@ async function connectManager(chatId, lang) {
   } catch(e) { console.error("[ConnectManager] Error:", e.message); }
 }
 
+// === 주문 소유권 검증 ===
+var orderSecurityMsgs = {
+  noAuth: {
+    "zh-TW": "🔒 為了保護您的隱私，請先透過 veasly.com 登入後再查詢訂單喔！\n如需幫助，請聯繫客服人員！",
+    "ko": "🔒 개인정보 보호를 위해 로그인 후 주문 조회가 가능합니다.\n도움이 필요하시면 고객센터에 문의해주세요!",
+    "en": "🔒 Please log in via veasly.com first to check your order.\nNeed help? Contact our support team!",
+    "ja": "🔒 注文確認にはveasly.comでのログインが必要です。\nお困りの場合はサポートチームへどうぞ！"
+  },
+  denied: {
+    "zh-TW": "🔒 此訂單不屬於您的帳戶，無法查詢。\n如有疑問，請聯繫客服人員！",
+    "ko": "🔒 본인의 주문만 조회 가능합니다.\n도움이 필요하시면 고객센터에 문의해주세요!",
+    "en": "🔒 You can only view your own orders.\nNeed help? Contact our support team!",
+    "ja": "🔒 ご自身の注文のみ確認可能です。\nお困りの場合はサポートチームへどうぞ！"
+  }
+};
+
 function isMergeShippingRequest(text) {
   var mergeKeywords = ["合併寄送", "合併運送", "合併出貨", "合併配送", "一起寄", "一起送", "一起出貨", "併單", "합배송", "합배", "merge ship", "combine order", "合併寄"];
   var lower = (text || "").toLowerCase();
@@ -1128,6 +1144,11 @@ router.post('/channeltalk', async function(req, res) {
     if (orderMatches.length > 1) {
       // Multi-order lookup
       console.log("[Order] Detected", orderMatches.length, "order numbers");
+      if (!veaslyUser) {
+        await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: orderSecurityMsgs.noAuth[detectedLang] || orderSecurityMsgs.noAuth["zh-TW"] }] });
+        console.log("[Security] Multi-order blocked - no auth");
+        return res.status(200).send("OK");
+      }
       try {
         var multiReply = "";
         var successCount = 0;
@@ -1141,12 +1162,24 @@ router.post('/channeltalk', async function(req, res) {
                 if (cOrder && cOrder.items && cOrder.items.length > 0) {
                   var cInfo = cOrder.items.map(function(ci) { return (ci.product && ci.product.name ? ci.product.name : "상품") + " (" + veaslyApi.getStatusText(ci.status, detectedLang) + ")"; }).join(", ");
                   var isMerged = (cOrder.children || []).length > 0;
+                  var mcOwnerId = (cOrder.user && cOrder.user.id) || null;
+                  if (mcOwnerId && String(mcOwnerId) !== String(veaslyUser.id)) {
+                    multiReply += "🔒 " + oNum + " - " + (detectedLang === "ko" ? "본인 주문이 아님" : detectedLang === "en" ? "Not your order" : detectedLang === "ja" ? "ご本人の注文ではありません" : "此訂單不屬於您的帳戶") + "\n\n";
+                    console.log("[Security] Multi combined ownership mismatch:", oNum);
+                    continue;
+                  }
                   multiReply += "📦 " + oNum + (isMerged ? " [" + (detectedLang === "ko" ? "합배송" : detectedLang === "en" ? "Combined" : detectedLang === "ja" ? "合併配送" : "合併配送") + "]" : "") + "\n" + cInfo + "\n\n";
                   successCount++;
                   continue;
                 }
               }
             if (oItems && oItems.length > 0) {
+              var moOwnerId = (oItems[0] && oItems[0].order && oItems[0].order.userId) || null;
+              if (moOwnerId && String(moOwnerId) !== String(veaslyUser.id)) {
+                multiReply += "🔒 " + oNum + " - " + (detectedLang === "ko" ? "본인 주문이 아님" : detectedLang === "en" ? "Not your order" : detectedLang === "ja" ? "ご本人の注文ではありません" : "此訂單不屬於您的帳戶") + "\n\n";
+                console.log("[Security] Multi order ownership mismatch:", oNum);
+                continue;
+              }
               var oInfo = veaslyApi.formatOrderInfo(oItems, detectedLang);
               var mainSt = (oItems[0] && oItems[0].status) || "";
               multiReply += "📦 " + oNum + "\n" + oInfo + "\n\n";
@@ -1184,6 +1217,20 @@ router.post('/channeltalk', async function(req, res) {
         }
         // 합배송 주문 처리
         if (combinedOrder && combinedOrder.items && combinedOrder.items.length > 0) {
+          // 보안: 소유권 검증
+          if (!veaslyUser) {
+            await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: orderSecurityMsgs.noAuth[detectedLang] || orderSecurityMsgs.noAuth["zh-TW"] }] });
+            console.log("[Security] Order blocked - no auth:", orderNum);
+            aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: "", userName: "", lang: detectedLang, type: "order_lookup", userMessage: userText.substring(0, 200), aiResponse: "주문조회 차단: 미인증", escalated: false, category: "order", confidence: 1.0 });
+            return res.status(200).send("OK");
+          }
+          var cOwnerId = (combinedOrder.user && combinedOrder.user.id) || null;
+          if (cOwnerId && String(cOwnerId) !== String(veaslyUser.id)) {
+            await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: orderSecurityMsgs.denied[detectedLang] || orderSecurityMsgs.denied["zh-TW"] }] });
+            console.log("[Security] Combined order ownership mismatch:", orderNum, "owner:", cOwnerId, "requester:", veaslyUser.id);
+            aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: String(veaslyUser.id), userName: veaslyUser.name || "", lang: detectedLang, type: "order_lookup", userMessage: userText.substring(0, 200), aiResponse: "주문조회 차단: 소유권 불일치", escalated: false, category: "order", confidence: 1.0 });
+            return res.status(200).send("OK");
+          }
           var cItems = combinedOrder.items;
           var cChildren = combinedOrder.children || [];
           var isCombined = cChildren.length > 0;
@@ -1218,6 +1265,20 @@ router.post('/channeltalk', async function(req, res) {
           return res.status(200).send("OK");
         }
         if (orderItems && orderItems.length > 0) {
+          // 보안: 소유권 검증
+          if (!veaslyUser) {
+            await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: orderSecurityMsgs.noAuth[detectedLang] || orderSecurityMsgs.noAuth["zh-TW"] }] });
+            console.log("[Security] Order blocked - no auth:", orderNum);
+            aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: "", userName: "", lang: detectedLang, type: "order_lookup", userMessage: userText.substring(0, 200), aiResponse: "주문조회 차단: 미인증", escalated: false, category: "order", confidence: 1.0 });
+            return res.status(200).send("OK");
+          }
+          var normalOwnerId = (orderItems[0] && orderItems[0].order && orderItems[0].order.userId) || null;
+          if (normalOwnerId && String(normalOwnerId) !== String(veaslyUser.id)) {
+            await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: orderSecurityMsgs.denied[detectedLang] || orderSecurityMsgs.denied["zh-TW"] }] });
+            console.log("[Security] Order ownership mismatch:", orderNum, "owner:", normalOwnerId, "requester:", veaslyUser.id);
+            aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: String(veaslyUser.id), userName: veaslyUser.name || "", lang: detectedLang, type: "order_lookup", userMessage: userText.substring(0, 200), aiResponse: "주문조회 차단: 소유권 불일치", escalated: false, category: "order", confidence: 1.0 });
+            return res.status(200).send("OK");
+          }
           var orderInfo = veaslyApi.formatOrderInfo(orderItems, detectedLang);
           var orderHeaders = {
             "zh-TW": "訂單 " + orderNum + " 的狀態：",
