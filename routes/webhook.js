@@ -899,7 +899,7 @@ router.post('/channeltalk', async function(req, res) {
       };
       await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: mergeMsg[detectedLang] || mergeMsg["zh-TW"] }] });
       await connectManager(chatId, detectedLang);
-      aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "escalation", userMessage: userText.substring(0, 200), aiResponse: "합배송 요청 → 즉시 에스컬레이션", escalated: true, escalationReason: 'merge_shipping', confidence: 0 });
+      aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "escalation", userMessage: userText.substring(0, 200), aiResponse: "합배송 요청 → 즉시 에스컬레이션", escalated: true, escalationReason: 'merge_shipping', confidence: 0, category: 'shipping' });
       return res.status(200).send("OK");
     }
 
@@ -988,7 +988,7 @@ router.post('/channeltalk', async function(req, res) {
       var actionMsg = (actionMsgs[actionType] && actionMsgs[actionType][detectedLang]) || (actionMsgs[actionType] && actionMsgs[actionType]["zh-TW"]) || "正在為您轉接客服人員 🙋‍♀️";
       await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: actionMsg }] });
       await connectManager(chatId, detectedLang);
-      aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "escalation", userMessage: userText.substring(0, 200), aiResponse: "행동요청(" + actionType + ") → 안내 후 에스컬레이션", escalated: true, escalationReason: 'action_request_' + actionType, confidence: 0 });
+      aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "escalation", userMessage: userText.substring(0, 200), aiResponse: "행동요청(" + actionType + ") → 안내 후 에스컬레이션", escalated: true, escalationReason: 'action_request_' + actionType, confidence: 0, category: actionType || 'other' });
       return res.status(200).send("OK");
     }
 
@@ -1041,7 +1041,7 @@ router.post('/channeltalk', async function(req, res) {
             }
           }
         } catch(e) {}
-        aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || '', userName: veaslyUser ? veaslyUser.name : '', lang: detectedLang, type: 'escalation', userMessage: userText, aiResponse: '에스컬레이션 - 매니저 연결', escalated: true, escalationReason: 'keyword_request', confidence: 0 });
+        aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || '', userName: veaslyUser ? veaslyUser.name : '', lang: detectedLang, type: 'escalation', userMessage: userText, aiResponse: '에스컬레이션 - 매니저 연결', escalated: true, escalationReason: 'keyword_request', confidence: 0, category: 'agent_request' });
         try { var scheduler2 = require('../lib/scheduler'); scheduler2.savePendingEscalation(chatId, memberId || personId || '', userText); } catch(pe) {}
         return res.status(200).send('OK');
       }
@@ -1363,7 +1363,7 @@ router.post('/channeltalk', async function(req, res) {
                 pendingEscalations[chatId] = { time: Date.now(), timestamp: Date.now(), lang: detectedLang };
                 managerActive[chatId] = Date.now();
                 console.log("[AI] Very low confidence auto-escalation for:", chatId);
-                aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", lang: detectedLang, type: "escalation", userMessage: userText.substring(0, 200), aiResponse: "confidence " + confidence.toFixed(3) + " < 0.3 → 자동 에스컬레이션", escalated: true, escalationReason: "low_confidence", confidence: confidence });
+                aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", lang: detectedLang, type: "escalation", userMessage: userText.substring(0, 200), aiResponse: "confidence " + confidence.toFixed(3) + " < 0.3 → 자동 에스컬레이션", escalated: true, escalationReason: "low_confidence", confidence: confidence, category: (aiResult && aiResult.category) || "other" });
               } catch(lcErr) { console.error("[AI] Low confidence escalation error:", lcErr.message); }
             }
           } else if (confidence < 0.6) {
@@ -1526,7 +1526,7 @@ router.post('/channeltalk', async function(req, res) {
         } catch(e) {}
       }
       
-          aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "escalation", userMessage: userText, aiResponse: "매니저 에스컬레이션 (수동)", escalated: true, escalationReason: "ai_self_escalate", confidence: 0 });
+          aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "escalation", userMessage: userText, aiResponse: "매니저 에스컬레이션 (수동)", escalated: true, escalationReason: "ai_self_escalate", confidence: 0, category: (aiResult && aiResult.category) || "other" });
           return res.status(200).send("OK");
     }
     // Fallback
