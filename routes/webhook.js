@@ -1135,6 +1135,17 @@ router.post('/channeltalk', async function(req, res) {
           var oNum = orderMatches[oi];
           try {
             var oItems = await veaslyApi.getOrderDetail(oNum);
+              // 합배송 fallback
+              if (!oItems || oItems.length === 0) {
+                var cOrder = await veaslyApi.getOrderByNumber(oNum);
+                if (cOrder && cOrder.items && cOrder.items.length > 0) {
+                  var cInfo = cOrder.items.map(function(ci) { return (ci.product && ci.product.name ? ci.product.name : "상품") + " (" + veaslyApi.getStatusText(ci.status, detectedLang) + ")"; }).join(", ");
+                  var isMerged = (cOrder.children || []).length > 0;
+                  multiReply += "📦 " + oNum + (isMerged ? " [" + (detectedLang === "ko" ? "합배송" : detectedLang === "en" ? "Combined" : detectedLang === "ja" ? "合併配送" : "合併配送") + "]" : "") + "\n" + cInfo + "\n\n";
+                  successCount++;
+                  continue;
+                }
+              }
             if (oItems && oItems.length > 0) {
               var oInfo = veaslyApi.formatOrderInfo(oItems, detectedLang);
               var mainSt = (oItems[0] && oItems[0].status) || "";
@@ -1166,6 +1177,46 @@ router.post('/channeltalk', async function(req, res) {
       console.log("[Order] Detected order number:", orderNum);
       try {
         var orderItems = await veaslyApi.getOrderDetail(orderNum);
+        // 합배송 주문 fallback (getOrderDetail이 500 에러 시)
+        var combinedOrder = null;
+        if (!orderItems || orderItems.length === 0) {
+          combinedOrder = await veaslyApi.getOrderByNumber(orderNum);
+        }
+        // 합배송 주문 처리
+        if (combinedOrder && combinedOrder.items && combinedOrder.items.length > 0) {
+          var cItems = combinedOrder.items;
+          var cChildren = combinedOrder.children || [];
+          var isCombined = cChildren.length > 0;
+          var cPayment = combinedOrder.payment || {};
+          var cHeaders = {
+            "zh-TW": isCombined ? "📦 合併配送訂單 " + orderNum + "：\n（包含 " + cChildren.length + " 筆原始訂單合併寄送）\n\n" : "📦 訂單 " + orderNum + " 的狀態：\n\n",
+            "ko": isCombined ? "📦 합배송 주문 " + orderNum + ":\n(" + cChildren.length + "건의 원본 주문 합배송)\n\n" : "📦 주문 " + orderNum + " 상태:\n\n",
+            "en": isCombined ? "📦 Combined Shipping Order " + orderNum + ":\n(" + cChildren.length + " original orders combined)\n\n" : "📦 Order " + orderNum + " Status:\n\n",
+            "ja": isCombined ? "📦 合併配送注文 " + orderNum + "：\n（" + cChildren.length + "件の注文を合併配送）\n\n" : "📦 注文 " + orderNum + " の状態：\n\n"
+          };
+          var cReply = cHeaders[detectedLang] || cHeaders["zh-TW"];
+          for (var ci = 0; ci < cItems.length; ci++) {
+            var cItem = cItems[ci];
+            var cStatus = veaslyApi.getStatusText(cItem.status, detectedLang);
+            var cName = (cItem.product && cItem.product.name) || "상품";
+            var cPrice = cItem.priceLocal || 0;
+            var cCurrency = (cPayment.currency) || "TWD";
+            cReply += (ci + 1) + ". " + cName + "\n";
+            cReply += "   " + (detectedLang === "ko" ? "상태" : detectedLang === "en" ? "Status" : detectedLang === "ja" ? "状態" : "狀態") + ": " + cStatus + "\n";
+            cReply += "   " + (detectedLang === "ko" ? "금액" : detectedLang === "en" ? "Price" : detectedLang === "ja" ? "金額" : "金額") + ": " + cCurrency + " " + cPrice + "\n\n";
+          }
+          var cTotal = cPayment.totalAmountLocal || 0;
+          cReply += "💰 " + (detectedLang === "ko" ? "총 결제금액" : detectedLang === "en" ? "Total" : detectedLang === "ja" ? "合計" : "總付款金額") + ": " + (cPayment.currency || "TWD") + " " + cTotal + "\n";
+          if (isCombined) {
+            cReply += "\n📋 " + (detectedLang === "ko" ? "합배송으로 묶인 주문이므로 함께 배송됩니다!" : detectedLang === "en" ? "These orders are combined and will be shipped together!" : detectedLang === "ja" ? "合併配送のため、まとめて発送されます！" : "此為合併配送訂單，所有商品會一起寄出喔！");
+          }
+          cReply += "\n\n💡 " + (detectedLang === "ko" ? "더 궁금한 점이 있으면 입력해주세요!" : detectedLang === "en" ? "Any more questions? Just type!" : detectedLang === "ja" ? "他にご質問があればどうぞ！" : "還有其他問題嗎？直接輸入問題，AI會為您解答喔！");
+          await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: cReply }] });
+          console.log("[Order] Combined shipping replied:", orderNum, cItems.length, "items", isCombined ? "(merged " + cChildren.length + " orders)" : "");
+          recordFCRResolved(memberId || personId || "", chatId, "order_lookup_combined");
+          aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "order_lookup", userMessage: userText.substring(0, 200), aiResponse: "합배송 주문조회: " + orderNum + " (" + cItems.length + "개 아이템, " + (isCombined ? cChildren.length + "건 합배송" : "일반") + ")", escalated: false, category: "order", confidence: 0.9 });
+          return res.status(200).send("OK");
+        }
         if (orderItems && orderItems.length > 0) {
           var orderInfo = veaslyApi.formatOrderInfo(orderItems, detectedLang);
           var orderHeaders = {
