@@ -843,6 +843,7 @@ router.post('/channeltalk', async function(req, res) {
         console.log('[CSAT] Inline CSAT included in thank-you response for:', chatId);
       }
       aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "thank_you", userMessage: userText, aiResponse: "감사 응답", escalated: false, confidence: 1.0 });
+      recordFCRResolved(memberId || personId || "", chatId, "thank_you");
       // 업그레이드5 → 인라인 방식으로 대체됨 (위에서 처리)
       return res.status(200).send('OK');
     }
@@ -868,6 +869,7 @@ router.post('/channeltalk', async function(req, res) {
       }
       await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: greetText }] });
       aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "greeting", userMessage: userText, aiResponse: "인사 응답 + 메뉴 제공" + (veaslyUser && veaslyUser.credit >= 500 ? " (포인트:" + veaslyUser.credit + ")" : ""), escalated: false, confidence: 1.0 });
+      recordFCRResolved(memberId || personId || "", chatId, "greeting");
       return res.status(200).send('OK');
     }
 
@@ -937,6 +939,7 @@ router.post('/channeltalk', async function(req, res) {
       payMsg += '\n\n💡 ' + (detectedLang === 'ko' ? '웹에서도 문제가 있으면 주문번호와 스크린샷을 보내주세요!' : detectedLang === 'en' ? 'If the issue persists on web, please send your order number and screenshot!' : detectedLang === 'ja' ? 'ウェブでも問題がある場合は注文番号とスクリーンショットをお送りください！' : '還有其他問題嗎？直接輸入問題，或輸入「客服」轉接真人客服喔！');
       await channeltalk.sendMessage(chatId, { blocks: [{ type: 'text', value: payMsg }] });
       aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || '', userName: veaslyUser ? veaslyUser.name : '', lang: detectedLang, type: 'faq_answer', userMessage: userText.substring(0, 200), aiResponse: '결제금액 불일치 → APP→웹 전환 안내', escalated: false, confidence: 1.0, category: 'payment_mismatch' });
+      recordFCRResolved(memberId || personId || '', chatId, 'faq_payment');
       return res.status(200).send('OK');
     }
 
@@ -952,6 +955,7 @@ router.post('/channeltalk', async function(req, res) {
       qMsg += '\n\n💡 ' + (detectedLang === 'ko' ? '다른 질문이 있으시면 입력해주세요!' : detectedLang === 'en' ? 'Any other questions? Just type!' : detectedLang === 'ja' ? '他にご質問があればどうぞ！' : '還有其他問題嗎？直接輸入問題，AI會為您解答喔！');
       await channeltalk.sendMessage(chatId, { blocks: [{ type: 'text', value: qMsg }] });
       aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || '', userName: veaslyUser ? veaslyUser.name : '', lang: detectedLang, type: 'faq_answer', userMessage: userText.substring(0, 200), aiResponse: '報價요청 → veasly.com 申請報價 안내', escalated: false, confidence: 1.0, category: 'quote_request' });
+      recordFCRResolved(memberId || personId || '', chatId, 'quote_request');
       return res.status(200).send('OK');
     }
     // Action request → AI guide message + escalation
@@ -1153,6 +1157,7 @@ router.post('/channeltalk', async function(req, res) {
         multiReply += "💡 " + (detectedLang === "ko" ? "특정 주문의 상세 상태를 보려면 주문번호를 입력해주세요! 배송 지연 시 「독촉해줘」라고 입력하시면 도움드릴게요." : detectedLang === "en" ? "Enter a specific order number for details! If delayed, type 'follow up' and I will help!" : detectedLang === "ja" ? "詳細は注文番号を入力！遅延の場合は「確認して」と入力してください！" : "想看特定訂單詳情？請輸入完整訂單編號！如果配送延遲，可以告訴我「幫我催一下」喔！");
         await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: multiReply }] });
         aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "order_lookup", userMessage: userText.substring(0, 200), aiResponse: "복수 주문조회: " + orderMatches.length + "건 (" + successCount + "건 성공)", escalated: false, confidence: 0.8 });
+        recordFCRResolved(memberId || personId || "", chatId, "order_lookup_multi");
         return res.status(200).send("OK");
       } catch(multiErr) { console.error("[Order] Multi-order error:", multiErr.message); return res.status(200).send("OK"); }
     }
@@ -1203,6 +1208,7 @@ router.post('/channeltalk', async function(req, res) {
           chatContext[chatId].lastOrderContext = buildOrderContext(orderItems, orderNum, detectedLang);
           chatContext[chatId].lastOrderTime = Date.now();
           console.log("[Order] Replied with", orderItems.length, "items for", orderNum);
+          recordFCRResolved(memberId || personId || "", chatId, "order_lookup");
           aiLog.saveConversation({
             timestamp: new Date().toISOString(),
             chatId: chatId,
@@ -1254,6 +1260,7 @@ router.post('/channeltalk', async function(req, res) {
           console.log("[Order] Listed", recentOrders.length, "orders for", veaslyUser.email);
           
       aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "order_list", userMessage: userText, aiResponse: "주문 목록 " + recentOrders.length + "건 조회", escalated: false, confidence: 0.8 });
+      recordFCRResolved(memberId || personId || "", chatId, "order_list");
       return res.status(200).send("OK");
         }
       } catch(olErr) { console.error("[Order] List error:", olErr.message); }
@@ -1299,6 +1306,7 @@ router.post('/channeltalk', async function(req, res) {
           _shipReply += "\n\n💡 " + (detectedLang === "ko" ? "주문번호를 입력하면 더 자세한 상태를 확인할 수 있어요!" : detectedLang === "en" ? "Enter order number for more details!" : detectedLang === "ja" ? "注文番号を入力すると詳細確認できます！" : "輸入訂單編號可查看更詳細狀態喔！");
           await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: _shipReply }] });
           aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "shipping_status", userMessage: userText.substring(0, 200), aiResponse: "실시간 배송추적 " + _activeOrders.length + "건", escalated: false, confidence: 0.9 });
+          recordFCRResolved(memberId || personId || "", chatId, "shipping_status");
           return res.status(200).send("OK");
         }
       } catch(_shipErr) { console.error("[Shipping] Realtime query error:", _shipErr.message); }
