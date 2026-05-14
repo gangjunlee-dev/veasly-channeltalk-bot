@@ -1144,6 +1144,17 @@ router.post('/channeltalk', async function(req, res) {
     if (orderMatches.length > 1) {
       // Multi-order lookup
       console.log("[Order] Detected", orderMatches.length, "order numbers");
+      if (!veaslyUser && personId) {
+        try {
+          var retryUser3 = await channeltalk.getUser(personId);
+          var retryProfile3 = (retryUser3 && retryUser3.user) || retryUser3 || {};
+          var retryEmail3 = retryProfile3.email || (retryProfile3.profile && retryProfile3.profile.email) || "";
+          var retryMemberId3 = retryProfile3.memberId || "";
+          if (retryMemberId3) veaslyUser = await veaslyApi.findUserById(retryMemberId3, retryEmail3);
+          else if (retryEmail3) veaslyUser = await veaslyApi.findUserByEmail(retryEmail3);
+          if (veaslyUser) console.log("[Security] Multi retry auth success:", veaslyUser.name);
+        } catch(retryErr3) {}
+      }
       if (!veaslyUser) {
         await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: orderSecurityMsgs.noAuth[detectedLang] || orderSecurityMsgs.noAuth["zh-TW"] }] });
         console.log("[Security] Multi-order blocked - no auth");
@@ -1217,7 +1228,22 @@ router.post('/channeltalk', async function(req, res) {
         }
         // 합배송 주문 처리
         if (combinedOrder && combinedOrder.items && combinedOrder.items.length > 0) {
-          // 보안: 소유권 검증
+          // 보안: 소유권 검증 (fallback 인증 포함)
+          if (!veaslyUser && combinedOrder.user && combinedOrder.user.email) {
+            veaslyUser = await veaslyApi.findUserByEmail(combinedOrder.user.email);
+            if (veaslyUser) console.log("[Security] Fallback auth via order email:", combinedOrder.user.email, "→", veaslyUser.name);
+          }
+          if (!veaslyUser && personId) {
+            try {
+              var retryUser = await channeltalk.getUser(personId);
+              var retryProfile = (retryUser && retryUser.user) || retryUser || {};
+              var retryEmail = retryProfile.email || (retryProfile.profile && retryProfile.profile.email) || "";
+              var retryMemberId = retryProfile.memberId || "";
+              if (retryMemberId) veaslyUser = await veaslyApi.findUserById(retryMemberId, retryEmail);
+              else if (retryEmail) veaslyUser = await veaslyApi.findUserByEmail(retryEmail);
+              if (veaslyUser) console.log("[Security] Retry auth success:", veaslyUser.name);
+            } catch(retryErr) {}
+          }
           if (!veaslyUser) {
             await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: orderSecurityMsgs.noAuth[detectedLang] || orderSecurityMsgs.noAuth["zh-TW"] }] });
             console.log("[Security] Order blocked - no auth:", orderNum);
@@ -1265,12 +1291,35 @@ router.post('/channeltalk', async function(req, res) {
           return res.status(200).send("OK");
         }
         if (orderItems && orderItems.length > 0) {
-          // 보안: 소유권 검증
+          // 보안: 소유권 검증 (fallback 인증 포함)
           if (!veaslyUser) {
-            await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: orderSecurityMsgs.noAuth[detectedLang] || orderSecurityMsgs.noAuth["zh-TW"] }] });
-            console.log("[Security] Order blocked - no auth:", orderNum);
-            aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: "", userName: "", lang: detectedLang, type: "order_lookup", userMessage: userText.substring(0, 200), aiResponse: "주문조회 차단: 미인증", escalated: false, category: "order", confidence: 1.0 });
-            return res.status(200).send("OK");
+            var normalOwnerId_pre = (orderItems[0] && orderItems[0].order && orderItems[0].order.userId) || null;
+            if (normalOwnerId_pre) {
+              try {
+                var orderOwner = await veaslyApi.getOrderByNumber(orderNum);
+                if (orderOwner && orderOwner.user && orderOwner.user.email) {
+                  veaslyUser = await veaslyApi.findUserByEmail(orderOwner.user.email);
+                  if (veaslyUser) console.log("[Security] Fallback auth via order email:", orderOwner.user.email, "→", veaslyUser.name);
+                }
+              } catch(fbErr) {}
+            }
+            if (!veaslyUser && personId) {
+              try {
+                var retryUser2 = await channeltalk.getUser(personId);
+                var retryProfile2 = (retryUser2 && retryUser2.user) || retryUser2 || {};
+                var retryEmail2 = retryProfile2.email || (retryProfile2.profile && retryProfile2.profile.email) || "";
+                var retryMemberId2 = retryProfile2.memberId || "";
+                if (retryMemberId2) veaslyUser = await veaslyApi.findUserById(retryMemberId2, retryEmail2);
+                else if (retryEmail2) veaslyUser = await veaslyApi.findUserByEmail(retryEmail2);
+                if (veaslyUser) console.log("[Security] Retry auth success:", veaslyUser.name);
+              } catch(retryErr2) {}
+            }
+            if (!veaslyUser) {
+              await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: orderSecurityMsgs.noAuth[detectedLang] || orderSecurityMsgs.noAuth["zh-TW"] }] });
+              console.log("[Security] Order blocked - no auth:", orderNum);
+              aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: "", userName: "", lang: detectedLang, type: "order_lookup", userMessage: userText.substring(0, 200), aiResponse: "주문조회 차단: 미인증", escalated: false, category: "order", confidence: 1.0 });
+              return res.status(200).send("OK");
+            }
           }
           var normalOwnerId = (orderItems[0] && orderItems[0].order && orderItems[0].order.userId) || null;
           if (normalOwnerId && String(normalOwnerId) !== String(veaslyUser.id)) {
