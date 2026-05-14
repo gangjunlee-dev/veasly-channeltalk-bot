@@ -20,26 +20,36 @@ function trackFCR(userId, chatId, issueType) {
   var fcr = loadFCRData();
   var now = Date.now();
   var cutoff72h = now - (72 * 60 * 60 * 1000);
-  // Check if same user had a resolved conversation in last 72h
+  // Check if same user had a resolved conversation in last 72h (different chatId only)
   var recentResolved = fcr.resolved.filter(function(r) {
-    return r.userId === userId && r.timestamp > cutoff72h;
+    return r.userId === userId && r.chatId !== chatId && r.timestamp > cutoff72h;
   });
   if (recentResolved.length > 0) {
-    // This is a repeat inquiry within 72h → FCR failure
-    fcr.reopened.push({
-      timestamp: now,
-      userId: userId,
-      chatId: chatId,
-      issueType: issueType || 'unknown',
-      previousChatId: recentResolved[recentResolved.length - 1].chatId
+    // Check if already recorded as reopened for this chatId
+    var alreadyReopened = fcr.reopened.some(function(r) {
+      return r.chatId === chatId && r.userId === userId;
     });
-    console.log('[FCR] Repeat inquiry detected - userId:', userId, 'within 72h of chatId:', recentResolved[recentResolved.length - 1].chatId);
+    if (!alreadyReopened) {
+      fcr.reopened.push({
+        timestamp: now,
+        userId: userId,
+        chatId: chatId,
+        issueType: issueType || 'unknown',
+        previousChatId: recentResolved[recentResolved.length - 1].chatId
+      });
+      console.log('[FCR] Repeat inquiry detected - userId:', userId, 'chatId:', chatId, 'prev:', recentResolved[recentResolved.length - 1].chatId);
+      saveFCRData(fcr);
+    }
   }
-  saveFCRData(fcr);
 }
 function recordFCRResolved(userId, chatId, issueType) {
   if (!userId) return;
   var fcr = loadFCRData();
+  // 같은 chatId가 이미 resolved에 있으면 중복 기록 방지
+  var alreadyResolved = fcr.resolved.some(function(r) {
+    return r.chatId === chatId;
+  });
+  if (alreadyResolved) return;
   fcr.resolved.push({
     timestamp: Date.now(),
     userId: userId,
