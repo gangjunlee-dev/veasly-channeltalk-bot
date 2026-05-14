@@ -2171,7 +2171,7 @@ function messageBreakdown(r) {
   h += '<span style="color:#eab308;">매니저 ' + mgrPct + '% (' + mgr + '건)</span>';
   h += '</div>';
   h += '<div style="margin-top:12px;font-size:13px;color:var(--text-secondary);">시스템 메시지 ' + sysMsg + '건 제외 (CSAT 설문·자동종료·대기안내 등)</div>';
-  h += '<div style="margin-top:8px;padding-top:12px;border-top:1px solid var(--border-primary);font-size:13px;color:var(--text-secondary);">목표: AI 응답률 70% 이상 ✅ 현재 ' + botPct + '%</div></div>';
+  h += '<div style="margin-top:8px;padding-top:12px;border-top:1px solid var(--border-primary);font-size:13px;color:var(--text-secondary);">목표: AI 응답률 70% 이상 ' + (botPct >= 70 ? '✅' : '⚠️') + ' 현재 ' + botPct + '%</div></div>';
   return h;
 }
 function insightsCard(r) {
