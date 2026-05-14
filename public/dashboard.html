@@ -539,14 +539,14 @@ function loadOverview() {
     var sysMsg = r.systemMessages || 0;
     var realBot = r.botMessages || 0;
     var botRate = r.totalMessages > 0 ? Math.round((realBot / r.totalMessages) * 100) : 0;
-    var aiResolveRate = (realBot + r.managerMessages) > 0 ? Math.round((realBot / (realBot + r.managerMessages)) * 100) : 0;
+    var aiResolveRate = (r.aiResolution && r.aiResolution.rate !== undefined) ? r.aiResolution.rate : ((realBot + r.managerMessages) > 0 ? Math.round((realBot / (realBot + r.managerMessages)) * 100) : 0);
     var escalationCount = cachedData.escalationTotal || ((r.categories.agent_direct ? r.categories.agent_direct.count : 0) + (r.categories.agent_request ? r.categories.agent_request.count : 0));
     var escalationRate = cachedData.escalationRate || (r.userMessages > 0 ? Math.round((escalationCount / r.userMessages) * 100) : 0);
 
     var html = '<div class="grid">';
     html += card('총 상담', r.totalChats, '건', 'blue', r.period, '📊 선택한 기간 동안 접수된 전체 상담 건수입니다.');
-    html += card('AI 봇 응답', realBot, '건', 'green', '응답률 ' + botRate + '%', '🤖 AI가 자동으로 처리한 메시지 (시스템 메시지 ' + sysMsg + '건 제외)');
-    html += card('매니저 응답', r.managerMessages, '건', 'yellow', 'AI 해결률 ' + aiResolveRate + '%', '👨‍💼 매니저가 직접 응답한 건수입니다.');
+    html += card('AI 봇 응답', realBot, '건', 'green', '응답률 ' + botRate + '%', '🤖 AI 봇 메시지 ' + realBot + '건 (시스템 ' + sysMsg + '건 제외)');
+    html += card('매니저 응답', r.managerMessages, '건', 'yellow', 'AI 해결률 ' + aiResolveRate + '%', '👨‍💼 매니저 응답 ' + r.managerMessages + '건 | AI 해결률은 AI가 에스컬레이션 없이 해결한 비율입니다.');
     html += card('에스컬레이션', escalationCount, '건', escalationRate > 20 ? 'red' : 'yellow', '비율 ' + escalationRate + '%', '🔺 AI가 처리하지 못해 매니저에게 전달된 건수입니다.');
     html += card('미해결 상담', r.unresolvedChats, '건', r.unresolvedChats > 10 ? 'red' : 'green', r.unresolvedChats > 10 ? '우선 처리 필요' : '양호', '⏳ 아직 종료되지 않은 열린 상담입니다.');
     if (r.channelStats) {
