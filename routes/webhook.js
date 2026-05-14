@@ -280,12 +280,36 @@ function isGreeting(text) {
 
 function isThankYou(text) {
   var lower = text.toLowerCase().trim();
-  if (lower.length > 20) return false; // Long messages are not simple thanks
-  var thanks = ['謝謝', '感謝', '谢谢', '感谢', '太好了', '好的謝謝', '好的感謝', '知道了感謝', '非常感謝', '太感謝了', 'thanks', 'thank you', 'thx', 'ありがとう', '감사합니다', '감사', '고마워'];
-  for (var i = 0; i < thanks.length; i++) {
-    if (lower === thanks[i] || lower === thanks[i] + '!' || lower === thanks[i] + '~' || lower === thanks[i] + '！' || lower === thanks[i] + '～') return true;
+  if (lower.length > 40) return false;
+  // 정확 매칭 (기존)
+  var exactThanks = ['謝謝', '感謝', '谢谢', '感谢', '太好了', '好的謝謝', '好的感謝', '知道了感謝', '非常感謝', '太感謝了', 'thanks', 'thank you', 'thx', 'ありがとう', '감사합니다', '감사', '고마워'];
+  for (var i = 0; i < exactThanks.length; i++) {
+    if (lower === exactThanks[i] || lower === exactThanks[i] + '!' || lower === exactThanks[i] + '~' || lower === exactThanks[i] + '！' || lower === exactThanks[i] + '～') return true;
   }
-  // Regex removed - exact match only to prevent false positives
+  // 부분 매칭: 감사 키워드 포함 + 질문 키워드 미포함
+  var thankKeywords = ['謝謝', '感謝', '谢谢', '感谢', 'thanks', 'thank you', 'thx', 'ありがとう', '감사'];
+  var questionKeywords = ['請問', '想問', '想請問', '可以', '怎麼', '什麼', '嗎', '？', '?', '如何', '요?', '까요', '나요'];
+  var hasThank = false;
+  var hasQuestion = false;
+  for (var j = 0; j < thankKeywords.length; j++) {
+    if (lower.indexOf(thankKeywords[j]) >= 0) { hasThank = true; break; }
+  }
+  for (var k = 0; k < questionKeywords.length; k++) {
+    if (lower.indexOf(questionKeywords[k]) >= 0) { hasQuestion = true; break; }
+  }
+  // 대만 고객 흔한 패턴: "好的謝謝", "了解 謝謝", "OK感謝", "收到感謝"
+  var twPatterns = ['好的', '了解', '收到', 'ok', '知道了', '明白', '好喔', '好哦', '好唷', '好ㄉ'];
+  var hasTwPrefix = false;
+  for (var p = 0; p < twPatterns.length; p++) {
+    if (lower.indexOf(twPatterns[p]) >= 0) { hasTwPrefix = true; break; }
+  }
+  if (hasThank && !hasQuestion) return true;
+  if (hasTwPrefix && hasThank) return true;
+  // "好的", "了解", "收到" 단독도 감사로 처리 (대만에서 대화 종료 신호)
+  var closingWords = ['好的', '了解', '收到', '知道了', '明白了', 'ok', '好喔', '好哦'];
+  for (var c = 0; c < closingWords.length; c++) {
+    if (lower === closingWords[c] || lower === closingWords[c] + '!' || lower === closingWords[c] + '~') return true;
+  }
   return false;
 }
 
@@ -363,6 +387,9 @@ router.post('/channeltalk', async function(req, res) {
     var event = body.event || '';
     var type = (body.type || '').toLowerCase();
     var entity = body.entity;
+
+    // 디버그: 모든 웹훅 이벤트 로깅
+    console.log('[Webhook] Event received:', event, '| type:', type, '| state:', entity && entity.state ? entity.state : '-');
 
     if (type === 'userchat' && event === 'update') {
       var closedChat = entity;
@@ -786,33 +813,27 @@ router.post('/channeltalk', async function(req, res) {
 
     // Thank you response
     if (isThankYou(userText)) {
+      // CSAT 인라인 포함 여부 결정
+      var _inlineCSAT = !csatHelper.alreadySent(chatId);
+      var _csatLine = {
+        'zh-TW': '\n\n📋 最後想請問，這次的服務體驗如何呢？\n1️⃣ 非常滿意  2️⃣ 滿意  3️⃣ 普通  4️⃣ 不滿意  5️⃣ 非常不滿意\n💬 請回覆數字 1~5 即可，非常感謝！',
+        'ko': '\n\n📋 마지막으로, 이번 서비스는 어떠셨나요?\n1️⃣ 매우 만족  2️⃣ 만족  3️⃣ 보통  4️⃣ 불만족  5️⃣ 매우 불만족\n💬 숫자 1~5만 입력해주시면 큰 도움이 됩니다!',
+        'en': '\n\n📋 How was your experience?\n1️⃣ Very Satisfied  2️⃣ Satisfied  3️⃣ Neutral  4️⃣ Dissatisfied  5️⃣ Very Dissatisfied\n💬 Just reply 1~5, it really helps us!',
+        'ja': '\n\n📋 今回のサービスはいかがでしたか？\n1️⃣ 大満足  2️⃣ 満足  3️⃣ 普通  4️⃣ 不満  5️⃣ 大不満\n💬 1~5の数字だけで大丈夫です！'
+      };
       var thankReply = {
-        'zh-TW': '不客氣！還有其他問題歡迎隨時詢問 😊\n\n' + getMenuText('zh-TW'),
-        'ko': '천만에요! 다른 질문 있으시면 언제든 물어보세요 😊\n\n' + getMenuText('ko'),
-        'en': "You're welcome! Feel free to ask anything else 😊\n\n" + getMenuText('en'),
-        'ja': 'どういたしまして！他にご質問があればお気軽にどうぞ 😊\n\n' + getMenuText('ja')
+        'zh-TW': '不客氣！😊' + (_inlineCSAT ? _csatLine['zh-TW'] : '\n\n還有其他問題歡迎隨時詢問！'),
+        'ko': '천만에요! 😊' + (_inlineCSAT ? _csatLine['ko'] : '\n\n다른 질문 있으시면 언제든 물어보세요!'),
+        'en': "You're welcome! 😊" + (_inlineCSAT ? _csatLine['en'] : '\n\nFeel free to ask anything else!'),
+        'ja': 'どういたしまして！😊' + (_inlineCSAT ? _csatLine['ja'] : '\n\n他にご質問があればお気軽にどうぞ！')
       };
       await channeltalk.sendMessage(chatId, { blocks: [{ type: 'text', value: thankReply[detectedLang] || thankReply['zh-TW'] }] });
-      aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "thank_you", userMessage: userText, aiResponse: "감사 응답", escalated: false, confidence: 1.0 });
-      // === 업그레이드5: 감사 응답 후 간편 CSAT 즉시 발송 ===
-      if (!csatHelper.alreadySent(chatId)) {
+      if (_inlineCSAT) {
         csatHelper.markSent(chatId, 'thank_you_csat');
-        var _csatDelay = 3000; // 3초 후 발송
-        (function(_cid, _lang) {
-          setTimeout(async function() {
-            try {
-              var _csatMsgs = {
-                'zh-TW': '📋 最後想請問，這次的服務體驗如何呢？\n1️⃣ 非常滿意  2️⃣ 滿意  3️⃣ 普通  4️⃣ 不滿意  5️⃣ 非常不滿意\n請輸入數字 1~5',
-                'ko': '📋 마지막으로, 이번 서비스는 어떠셨나요?\n1️⃣ 매우 만족  2️⃣ 만족  3️⃣ 보통  4️⃣ 불만족  5️⃣ 매우 불만족\n숫자 1~5를 입력해주세요',
-                'en': '📋 How was your experience?\n1️⃣ Very Satisfied  2️⃣ Satisfied  3️⃣ Neutral  4️⃣ Dissatisfied  5️⃣ Very Dissatisfied\nPlease enter 1~5',
-                'ja': '📋 今回のサービスはいかがでしたか？\n1️⃣ 大満足  2️⃣ 満足  3️⃣ 普通  4️⃣ 不満  5️⃣ 大不満\n1~5の数字を入力してください'
-              };
-              await channeltalk.sendMessage(_cid, { blocks: [{ type: 'text', value: _csatMsgs[_lang] || _csatMsgs['zh-TW'] }] });
-              console.log('[CSAT] Thank-you trigger sent to:', _cid);
-            } catch(_csatErr) { console.error('[CSAT] Thank-you trigger error:', _csatErr.message); }
-          }, _csatDelay);
-        })(chatId, detectedLang);
+        console.log('[CSAT] Inline CSAT included in thank-you response for:', chatId);
       }
+      aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "thank_you", userMessage: userText, aiResponse: "감사 응답", escalated: false, confidence: 1.0 });
+      // 업그레이드5 → 인라인 방식으로 대체됨 (위에서 처리)
       return res.status(200).send('OK');
     }
 
