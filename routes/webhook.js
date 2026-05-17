@@ -144,6 +144,30 @@ setInterval(function() {
   Object.keys(processedMessages).forEach(function(k) {
     if (now - processedMessages[k] > 120000) delete processedMessages[k];
   });
+  // 메모리 누수 방지: 24시간 이상 된 항목 정리
+  Object.keys(managerActive).forEach(function(k) {
+    if (now - managerActive[k] > 86400000) delete managerActive[k];
+  });
+  Object.keys(chatLanguage).forEach(function(k) {
+    if (typeof chatLanguage[k] === 'string') {
+      // chatLanguage는 타임스탬프가 없으므로 chatContext 기준으로 정리
+    }
+  });
+  Object.keys(chatContext).forEach(function(k) {
+    if (chatContext[k] && chatContext[k].lastOrderTime && (now - chatContext[k].lastOrderTime > 86400000)) delete chatContext[k];
+  });
+  Object.keys(satisfactionPending).forEach(function(k) {
+    if (satisfactionPending[k] && satisfactionPending[k].time && (now - satisfactionPending[k].time > 3600000)) delete satisfactionPending[k];
+  });
+  Object.keys(pendingEscalations).forEach(function(k) {
+    if (pendingEscalations[k] && pendingEscalations[k].time && (now - pendingEscalations[k].time > 86400000)) delete pendingEscalations[k];
+  });
+  Object.keys(_csatSendLock).forEach(function(k) {
+    if (now - _csatSendLock[k] > 600000) delete _csatSendLock[k];
+  });
+  Object.keys(waitingMessageSent).forEach(function(k) {
+    if (now - waitingMessageSent[k] > 3600000) delete waitingMessageSent[k];
+  });
 }, 60000);
 
 function extractText(message) {
@@ -267,7 +291,7 @@ var orderSecurityMsgs = {
 };
 
 function isMergeShippingRequest(text) {
-  var mergeKeywords = ["合併寄送", "合併運送", "合併出貨", "合併配送", "一起寄", "一起送", "一起出貨", "併單", "합배송", "합배", "merge ship", "combine order", "合併寄"];
+  var mergeKeywords = ["合併寄送", "合併運送", "合併出貨", "合併配送", "一起寄", "一起送", "一起出貨", "併單", "합배송", "합배", "merge ship", "combine order", "合併寄", "合併訂單", "合併運費"];
   var lower = (text || "").toLowerCase();
   for (var i = 0; i < mergeKeywords.length; i++) {
     if (lower.indexOf(mergeKeywords[i].toLowerCase()) > -1) return true;
@@ -425,49 +449,40 @@ router.post('/channeltalk', async function(req, res) {
         var surveyMsg;
         var stats_managerId = null;
         try { var _ms = require("../lib/manager-stats"); var _st = JSON.parse(require("fs").readFileSync(require("path").join(__dirname, "..", "data", "manager-stats.json"), "utf8")); if (_st.chats && _st.chats[chatId0]) stats_managerId = _st.chats[chatId0].managerId; } catch(e) {}
-        if (managerActive[chatId0]) {
-          var csSurveys = {
-            'zh-TW': '💬 感謝您的諮詢！\n\n請幫我們評個分吧：\n1 = 😍 非常滿意\n2 = 😊 滿意\n3 = 😐 普通\n4 = 😕 不太滿意\n5 = 😞 很不滿意\n\n直接輸入數字 1~5 就好囉！',
-            'ko': '💬 상담이 종료되었습니다. 평가 부탁드려요！\n\n1 = 😍 매우 만족\n2 = 😊 만족\n3 = 😐 보통\n4 = 😕 불만족\n5 = 😞 매우 불만족\n\n숫자를 입력해주세요 1~5',
-            'en': '💬 Please rate your experience:\n\n1 = 😍 Excellent\n2 = 😊 Good\n3 = 😐 Average\n4 = 😕 Poor\n5 = 😞 Very Poor\n\nPlease enter 1~5',
-            'ja': '💬 今回の対応を評価してください：\n\n1 = 😍 大満足\n2 = 😊 満足\n3 = 😐 普通\n4 = 😕 不満\n5 = 😞 大不満\n\n数字を入力してください 1~5'
-          };
-          surveyMsg = csSurveys[surveyLang] || csSurveys['zh-TW'];
-        } else {
-          var botSurveys = {
-            'zh-TW': '💬 這次的自動回覆有幫助到您嗎？\n\n👍 有幫助 → 輸入「感謝」\n👎 沒幫助 → 輸入「不好」',
-            'ko': '💬 자동 응답이 도움이 되셨나요?\n\n👍 도움이 됨 → 「감사」\n👎 도움 안 됨 → 「별로」',
-            'en': '💬 Was the auto-reply helpful?\n\n👍 Helpful → "thanks"\n👎 Not helpful → "bad"',
-            'ja': '💬 自動返信はお役に立ちましたか？\n\n👍 役立った → 「感謝」\n👎 役立たなかった → 「不満」'
-          };
-          surveyMsg = botSurveys[surveyLang] || botSurveys['zh-TW'];
-        }
+        var _csatType = managerActive[chatId0] ? "manager" : "bot";
+        // 유저 정보 조회 (회원 여부, 이메일)
+        var _userInfo = { member: false, email: '', veaslyId: '', name: '' };
+        try {
+          var _userData = await channeltalk.getUser(closedChat.userId || '');
+          if (_userData && _userData.user) {
+            var _u = _userData.user;
+            _userInfo.member = _u.member === true;
+            _userInfo.email = _u.email || (_u.profile && _u.profile.email) || '';
+            _userInfo.veaslyId = (_u.profile && _u.profile.veasly_id) || _u.memberId || '';
+            _userInfo.name = _u.name || (_u.profile && _u.profile.name) || '';
+          } else if (_userData) {
+            _userInfo.member = _userData.member === true;
+            _userInfo.email = _userData.email || (_userData.profile && _userData.profile.email) || '';
+            _userInfo.veaslyId = (_userData.profile && _userData.profile.veasly_id) || _userData.memberId || '';
+            _userInfo.name = _userData.name || (_userData.profile && _userData.profile.name) || '';
+          }
+        } catch(_ue) { console.log('[CSAT] User info fetch error:', _ue.message); }
+        var _baseUrl = "https://veasly-dashboard.gangjun-lee.workers.dev/survey.html";
+        var _surveyUrl = _baseUrl + "?cid=" + chatId0 + "&uid=" + (closedChat.userId || "") + "&lang=" + surveyLang + "&type=" + _csatType + "&ts=" + Math.floor(Date.now()/1000) + "&member=" + (_userInfo.member ? "1" : "0") + "&email=" + encodeURIComponent(_userInfo.email) + "&vid=" + encodeURIComponent(_userInfo.veaslyId) + "&name=" + encodeURIComponent(_userInfo.name || _userInfo.email || "");
+        var csatLinkMsgs = {
+          'zh-TW': '💬 感謝您的諮詢！\n\n花30秒幫我們填個小問卷，您的意見是我們進步的動力 🙏\n\n👉 <link type="url">' + _surveyUrl + '</link>',
+          'ko': '💬 상담이 종료되었습니다！\n\n30초만 투자해서 간단한 설문에 답해주세요 🙏\n\n👉 <link type="url">' + _surveyUrl + '</link>',
+          'en': '💬 Thank you for reaching out!\n\nPlease take 30 seconds to share your feedback 🙏\n\n👉 <link type="url">' + _surveyUrl + '</link>',
+          'ja': '💬 お問い合わせありがとうございます！\n\n30秒でアンケートにご協力ください 🙏\n\n👉 <link type="url">' + _surveyUrl + '</link>'
+        };
+        surveyMsg = csatLinkMsgs[surveyLang] || csatLinkMsgs['zh-TW']
         // REMOVED: escalation-close CSAT (자동종료 시에만 발송)
         // REMOVED: CSAT survey sendMessage (자동종료 시에만 발송)
         // === CSAT 발송 복원 (3중 안전장치) ===
         // 1차: 메모리 락 (_csatSendLock) - 동시 close 이벤트 방지
         // 2차: csatHelper.alreadySent - 파일 기반 영구 기록
         // 3차: markSent 즉시 호출 - 발송 전에 기록
-        if (surveyMsg && !_csatSendLock[chatId0] && !csatHelper.alreadySent(chatId0)) {
-          _csatSendLock[chatId0] = true; // 1차: 즉시 락
-          var _csatSrc = managerActive[chatId0] ? "close_manager_csat" : "close_bot_ces";
-          csatHelper.markSent(chatId0, _csatSrc); // 3차: 발송 전에 기록
-          try {
-            await channeltalk.sendMessage(chatId0, { blocks: [{ type: "text", value: surveyMsg }] });
-            if (managerActive[chatId0]) {
-              satisfactionPending[chatId0] = { managerId: stats_managerId || "", lang: surveyLang, time: Date.now() };
-            }
-            console.log("[CSAT] Close survey sent:", chatId0, "| source:", _csatSrc);
-          } catch(_csErr) {
-            console.error("[CSAT] Close send error:", _csErr.message);
-          }
-          // 5분 후 메모리 락 해제 (메모리 누수 방지)
-          setTimeout(function() { delete _csatSendLock[chatId0]; }, 5 * 60 * 1000);
-        } else {
-          console.log("[CSAT] Skip close survey:", chatId0,
-            "| lock:", !!_csatSendLock[chatId0],
-            "| alreadySent:", csatHelper.alreadySent(chatId0));
-        }
+        // CSAT on close: removed (not supported by webhook scope)
 
 
         // AI quality review for manager conversations
@@ -562,7 +577,16 @@ router.post('/channeltalk', async function(req, res) {
     if (isSystemEvent(userText)) return res.status(200).send('OK');
 
     if (managerActive[chatId]) {
-      return res.status(200).send('OK');
+      var _mgrElapsed = Date.now() - managerActive[chatId];
+      var _mgrTimeoutMs = 2 * 60 * 60 * 1000; // 2시간
+      if (_mgrElapsed > _mgrTimeoutMs) {
+        // 마지막 매니저 활동 후 2시간 경과 → AI 다시 활성화
+        delete managerActive[chatId];
+        if (pendingEscalations[chatId]) delete pendingEscalations[chatId];
+        console.log("[ManagerActive] Auto-released after 2h for chat:", chatId);
+      } else {
+        return res.status(200).send('OK');
+      }
     }
 
     // VEASLY member lookup
@@ -676,7 +700,7 @@ router.post('/channeltalk', async function(req, res) {
         await channeltalk.sendMessage(chatId, { blocks: [{ type: 'text', value: reasonThanks[detectedLang] || reasonThanks['zh-TW'] }] });
         // 사유 응답 완료 (채팅은 open 유지 → 16h에 자동종료)
         console.log('[CSAT-REASON] Feedback saved for chat:', chatId, '| Score:', pendingCSATReason[chatId] ? pendingCSATReason[chatId].csatScore : '?', '| Reason:', reasonText.substring(0, 50));
-        aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || '', userName: '', lang: detectedLang, type: 'csat_feedback', userMessage: reasonText, aiResponse: 'CSAT feedback recorded', escalated: false, confidence: 1.0 });
+        aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || '', userName: '', lang: detectedLang, type: 'csat_feedback', userMessage: reasonText, aiResponse: 'CSAT feedback recorded', escalated: false, confidence: 1.0, category: 'other' });
         return res.status(200).send('OK');
       }
       if (Date.now() - pendingCSATReason[chatId].timestamp > 600000) {
@@ -706,7 +730,7 @@ router.post('/channeltalk', async function(req, res) {
         await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: cesThanks[detectedLang] || cesThanks["zh-TW"] }] });
         console.log("[CES] Score recorded:", cesNum, "for chat:", chatId);
         // CES 완료 (채팅은 open 유지 → 16h에 자동종료)
-        aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || '', userName: '', lang: detectedLang, type: 'ces_response', userMessage: cesText, aiResponse: 'CES score: ' + cesNum, escalated: false, confidence: 1.0 });
+        aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || '', userName: '', lang: detectedLang, type: 'ces_response', userMessage: cesText, aiResponse: 'CES score: ' + cesNum, escalated: false, confidence: 1.0, category: 'other' });
         return res.status(200).send('OK');
       }
       // 10분 지나면 만료
@@ -858,7 +882,7 @@ router.post('/channeltalk', async function(req, res) {
         csatHelper.markSent(chatId, 'thank_you_csat');
         console.log('[CSAT] Inline CSAT included in thank-you response for:', chatId);
       }
-      aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "thank_you", userMessage: userText, aiResponse: "감사 응답", escalated: false, confidence: 1.0 });
+      aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "thank_you", userMessage: userText, aiResponse: "감사 응답", escalated: false, confidence: 1.0, category: "greeting" });
       recordFCRResolved(memberId || personId || "", chatId, "thank_you");
       // 업그레이드5 → 인라인 방식으로 대체됨 (위에서 처리)
       return res.status(200).send('OK');
@@ -884,7 +908,7 @@ router.post('/channeltalk', async function(req, res) {
         greetText += pointHints[detectedLang] || pointHints["zh-TW"];
       }
       await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: greetText }] });
-      aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "greeting", userMessage: userText, aiResponse: "인사 응답 + 메뉴 제공" + (veaslyUser && veaslyUser.credit >= 500 ? " (포인트:" + veaslyUser.credit + ")" : ""), escalated: false, confidence: 1.0 });
+      aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "greeting", userMessage: userText, category: "greeting", aiResponse: "인사 응답 + 메뉴 제공" + (veaslyUser && veaslyUser.credit >= 500 ? " (포인트:" + veaslyUser.credit + ")" : ""), escalated: false, confidence: 1.0 });
       recordFCRResolved(memberId || personId || "", chatId, "greeting");
       return res.status(200).send('OK');
     }
@@ -917,19 +941,40 @@ router.post('/channeltalk', async function(req, res) {
     }
 
     // Merge shipping request → immediate escalation
+    // Merge shipping → AI policy guide (no escalation)
+    // Merge shipping -> AI policy guide (no escalation, direct mypage link)
     if (isMergeShippingRequest(userText)) {
-      setEscalationStep(chatId, 2);
-      var mergeMsg = {
-        "zh-TW": "合併寄送需要由客服人員為您處理喔！正在為您轉接客服 🙋‍♀️",
-        "ko": "합배송은 상담사가 직접 처리해드릴게요! 연결 중입니다 🙋‍♀️",
-        "en": "Combining shipments requires our support team! Connecting you now 🙋‍♀️",
-        "ja": "合併配送はスタッフが対応いたします！接続中です 🙋‍♀️"
+      var mergeGuide = {
+        "zh-TW": "關於合併配送，您可以在「我的頁面」直接申請喔！\n\n" +
+          "申請連結：https://www.veasly.com/tw/my-page/orders/combined-shipping/request\n\n" +
+          "請注意以下幾點：\n" +
+          "- 必須在訂單內仍有商品尚未抵達韓國倉庫時才能申請\n" +
+          "- 若所有商品都已到倉，會自動進入包裝流程，無法再申請合併\n" +
+          "- 合併後運費會依實際重量、材積重量與包裹尺寸重新計算，不一定比分開寄送便宜\n" +
+          "- 部分大型、易碎或特殊包裝商品可能無法合併\n\n" +
+          "如有其他問題，歡迎隨時詢問！",
+        "ko": "합배송은 마이페이지에서 직접 신청할 수 있어요!\n\n" +
+          "신청 링크: https://www.veasly.com/tw/my-page/orders/combined-shipping/request\n\n" +
+          "주의사항:\n" +
+          "- 주문 내 상품이 아직 한국 창고에 도착하지 않았을 때만 신청 가능\n" +
+          "- 모든 상품이 창고에 도착하면 자동으로 포장 절차에 들어가 합배송 불가\n" +
+          "- 합배송 후 운임은 실제 중량/부피/사이즈로 재계산, 반드시 저렴하지 않을 수 있음\n" +
+          "- 대형/파손 위험/특수 포장 상품은 합배송 불가할 수 있음",
+        "en": "You can request combined shipping from My Page!\n\n" +
+          "Link: https://www.veasly.com/tw/my-page/orders/combined-shipping/request\n\n" +
+          "Notes:\n" +
+          "- Only available while at least one item has not yet arrived at the Korea warehouse\n" +
+          "- Once all items arrive, packaging begins automatically\n" +
+          "- Fees are recalculated based on actual weight and dimensions - not always cheaper",
+        "ja": "合併配送はマイページから申請できます！\n\n" +
+          "リンク: https://www.veasly.com/tw/my-page/orders/combined-shipping/request\n\n" +
+          "注意：商品が韓国倉庫に届く前のみ申請可能です。送料は再計算されます。"
       };
-      await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: mergeMsg[detectedLang] || mergeMsg["zh-TW"] }] });
-      await connectManager(chatId, detectedLang);
-      aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "escalation", userMessage: userText.substring(0, 200), aiResponse: "합배송 요청 → 즉시 에스컬레이션", escalated: true, escalationReason: 'merge_shipping', confidence: 0, category: 'shipping' });
+      await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: mergeGuide[detectedLang] || mergeGuide["zh-TW"] }] });
+      aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "faq_answer", userMessage: userText.substring(0, 200), aiResponse: "합배송 → 마이페이지 안내 (에스컬레이션 없음)", escalated: false, confidence: 1.0, category: "merge_shipping" });
       return res.status(200).send("OK");
     }
+
 
     // === 통합 인텐트 감지 (키워드 조합 + 문맥 판단, isActionRequest보다 먼저) ===
     var _lower = userText.toLowerCase();
@@ -1015,9 +1060,22 @@ router.post('/channeltalk', async function(req, res) {
           "ja": "注文内容の変更はスタッフが対応いたします！接続中です 🙋‍♀️"
         }
       };
-      var actionMsg = (actionMsgs[actionType] && actionMsgs[actionType][detectedLang]) || (actionMsgs[actionType] && actionMsgs[actionType]["zh-TW"]) || "正在為您轉接客服人員 🙋‍♀️";
-      await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: actionMsg }] });
-      await connectManager(chatId, detectedLang);
+      if (!isBusinessHours()) {
+              // 오프시간: 안내 메시지 + 매니저 초대(출근 후 확인용)
+              var _holAct = getHolidayNotice(detectedLang);
+              var offHourActionMsgs = {
+                "zh-TW": (_holAct ? _holAct + "\n\n" : "") + "\ud83d\udca1 目前非客服時間（台灣 09:00~18:00），此問題需要客服人員為您處理。\n\n\ud83d\udcdd 請先留下相關資訊（如訂單號碼），客服人員上班後會優先為您處理！\n\n\u23f0 客服時間：週一至週五 台灣 09:00~18:00\n我們一定會回覆您！\ud83d\ude0a",
+                "ko": "\ud83d\udca1 현재 영업시간이 아닙니다 (평일 10:00~19:00 KST). 이 문의는 상담사 확인이 필요합니다.\n\n\ud83d\udcdd 관련 정보(주문번호 등)를 남겨주시면 업무 시작 후 우선 처리해드리겠습니다!\n\n\u23f0 상담시간: 평일 10:00~19:00 (한국시간)",
+                "en": "\ud83d\udca1 Currently outside business hours (Mon-Fri 10:00-19:00 KST). This request needs agent assistance.\n\n\ud83d\udcdd Please leave the details (e.g. order number) and our team will prioritize it first thing!",
+                "ja": "\ud83d\udca1 現在営業時間外です（月〜金 10:00〜19:00 KST）。このお問い合わせはスタッフの対応が必要です。\n\n\ud83d\udcdd 関連情報（注文番号など）を残してください。営業開始後すぐに対応いたします！"
+              };
+              await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: offHourActionMsgs[detectedLang] || offHourActionMsgs["zh-TW"] }] });
+              await connectManager(chatId, detectedLang);
+            } else {
+              var actionMsg = (actionMsgs[actionType] && actionMsgs[actionType][detectedLang]) || (actionMsgs[actionType] && actionMsgs[actionType]["zh-TW"]) || "正在為您轉接客服人員 \ud83d\ude4b\u200d\u2640\ufe0f";
+              await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: actionMsg }] });
+              await connectManager(chatId, detectedLang);
+            }
       aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "escalation", userMessage: userText.substring(0, 200), aiResponse: "행동요청(" + actionType + ") → 안내 후 에스컬레이션", escalated: true, escalationReason: 'action_request_' + actionType, confidence: 0, category: actionType || 'other' });
       return res.status(200).send("OK");
     }
@@ -1119,7 +1177,7 @@ router.post('/channeltalk', async function(req, res) {
         "ja": "📷 ファイルを確認しました！\n\nAIアシスタントはまだ画像/ファイルを読み取れません。テキストで問題をご説明いただければ対応いたします！"
       };
       await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: fileMsgs[detectedLang] || fileMsgs["zh-TW"] }] });
-      aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", lang: detectedLang, type: "file_message", userMessage: userText, aiResponse: "파일/이미지 수신 안내", escalated: false, confidence: 0.5 });
+      aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", lang: detectedLang, type: "file_message", userMessage: userText, aiResponse: "파일/이미지 수신 안내", escalated: false, confidence: 0.5, category: "other" });
       return res.status(200).send("OK");
     }
     var isSticker = skipPatterns.some(function(p) { return userText.indexOf(p) > -1; });
@@ -1211,7 +1269,7 @@ router.post('/channeltalk', async function(req, res) {
         multiReply = (multiHeaders[detectedLang] || multiHeaders["zh-TW"]) + multiReply;
         multiReply += "💡 " + (detectedLang === "ko" ? "특정 주문의 상세 상태를 보려면 주문번호를 입력해주세요! 배송 지연 시 「독촉해줘」라고 입력하시면 도움드릴게요." : detectedLang === "en" ? "Enter a specific order number for details! If delayed, type 'follow up' and I will help!" : detectedLang === "ja" ? "詳細は注文番号を入力！遅延の場合は「確認して」と入力してください！" : "想看特定訂單詳情？請輸入完整訂單編號！如果配送延遲，可以告訴我「幫我催一下」喔！");
         await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: multiReply }] });
-        aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "order_lookup", userMessage: userText.substring(0, 200), aiResponse: "복수 주문조회: " + orderMatches.length + "건 (" + successCount + "건 성공)", escalated: false, confidence: 0.8 });
+        aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "order_lookup", userMessage: userText.substring(0, 200), aiResponse: "복수 주문조회: " + orderMatches.length + "건 (" + successCount + "건 성공)", escalated: false, confidence: 0.8, category: "order" });
         recordFCRResolved(memberId || personId || "", chatId, "order_lookup_multi");
         return res.status(200).send("OK");
       } catch(multiErr) { console.error("[Order] Multi-order error:", multiErr.message); return res.status(200).send("OK"); }
@@ -1400,6 +1458,14 @@ router.post('/channeltalk', async function(req, res) {
     // Order status keyword - show user's recent orders
     var orderKeywords = ["訂單", "주문", "order", "注文", "배송", "配送", "出貨"];
     var isOrderQuery = orderKeywords.some(function(kw) { return userText.toLowerCase().indexOf(kw) !== -1; });
+    // 질문형 패턴 감지: 정책 FAQ 질문이면 주문목록 대신 AI로 라우팅
+    var policyQuestionPatterns = ["嗎", "？", "怎麼", "為什麼", "為何", "一定", "可以嗎", "多少", "如何", "是否", "能不能", "會不會", "什麼時候", "할까", "인가요", "인가", "일까", "나요", "ですか", "でしょうか"];
+    var hasQuestionPattern = policyQuestionPatterns.some(function(p) { return userText.indexOf(p) !== -1; });
+    var hasOrderNumber = /\d{8}(TW|KR|JP|US)\d+/i.test(userText);
+    if (isOrderQuery && hasQuestionPattern && !hasOrderNumber) {
+      console.log("[Route] Question pattern detected - skip order list, route to AI:", userText.substring(0, 50));
+      isOrderQuery = false;
+    }
     if (isOrderQuery && veaslyUser && veaslyUser.email) {
       try {
         var userOrders = await veaslyApi.getUserOrders(veaslyUser.email, 500, memberId);
@@ -1420,7 +1486,7 @@ router.post('/channeltalk', async function(req, res) {
           await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: listReply }] });
           console.log("[Order] Listed", recentOrders.length, "orders for", veaslyUser.email);
           
-      aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "order_list", userMessage: userText, aiResponse: "주문 목록 " + recentOrders.length + "건 조회", escalated: false, confidence: 0.8 });
+      aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "order_list", userMessage: userText, aiResponse: "주문 목록 " + recentOrders.length + "건 조회", escalated: false, confidence: 0.8, category: "order" });
       recordFCRResolved(memberId || personId || "", chatId, "order_list");
       return res.status(200).send("OK");
         }
@@ -1438,7 +1504,7 @@ router.post('/channeltalk', async function(req, res) {
             var _fbLines = _fbRecent.map(function(o, i) { return (i+1) + ". " + o.orderNumber + " (" + veaslyApi.getStatusText(o.status, detectedLang) + ")"; });
             var _fbReply = (_fbHeader[detectedLang] || _fbHeader["zh-TW"]) + "\n" + _fbLines.join("\n") + "\n\n" + (detectedLang === "ko" ? "주문번호를 입력하면 상세 조회할 수 있어요!" : detectedLang === "en" ? "Enter order number for details!" : detectedLang === "ja" ? "注文番号を入力すると詳細確認できます！" : "輸入訂單編號可查看詳細狀態喔！");
             await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: _fbReply }] });
-            aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || "", lang: detectedLang, type: "order_list", userMessage: userText, aiResponse: "userId fallback 주문조회 " + _fbRecent.length + "건", escalated: false, confidence: 0.8 });
+            aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || "", lang: detectedLang, type: "order_list", userMessage: userText, aiResponse: "userId fallback 주문조회 " + _fbRecent.length + "건", escalated: false, confidence: 0.8, category: "order" });
             return res.status(200).send("OK");
           }
         }
@@ -1466,7 +1532,7 @@ router.post('/channeltalk', async function(req, res) {
           var _shipReply = (_shipHeaders[detectedLang] || _shipHeaders["zh-TW"]) + "\n\n" + _shipLines.join("\n\n");
           _shipReply += "\n\n💡 " + (detectedLang === "ko" ? "주문번호를 입력하면 더 자세한 상태를 확인할 수 있어요!" : detectedLang === "en" ? "Enter order number for more details!" : detectedLang === "ja" ? "注文番号を入力すると詳細確認できます！" : "輸入訂單編號可查看更詳細狀態喔！");
           await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: _shipReply }] });
-          aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "shipping_status", userMessage: userText.substring(0, 200), aiResponse: "실시간 배송추적 " + _activeOrders.length + "건", escalated: false, confidence: 0.9 });
+          aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "shipping_status", userMessage: userText.substring(0, 200), aiResponse: "실시간 배송추적 " + _activeOrders.length + "건", escalated: false, confidence: 0.9, category: "shipping" });
           recordFCRResolved(memberId || personId || "", chatId, "shipping_status");
           return res.status(200).send("OK");
         }
@@ -1521,7 +1587,7 @@ router.post('/channeltalk', async function(req, res) {
                   "ja": (_holAI ? _holAI + "\n\n" : "") + "ご質問ありがとうございます！🙏\n\n💡 現在営業時間外ですが、まずお手伝いします：\n・注文番号を入力 → すぐに確認\n・お問い合わせ内容をご記入ください\n\n⏰ 営業時間：月〜金 10:00〜19:00 KST\n営業開始後、優先的に対応いたします！"
                 };
                 await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: offHourLowMsgs[detectedLang] || offHourLowMsgs["zh-TW"] }] });
-                aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", lang: detectedLang, type: "ai_answer", userMessage: userText.substring(0, 200), aiResponse: "오프시간 low-confidence → AI 안내 (에스컬레이션 안 함)", escalated: false, escalationReason: "off_hour_low_confidence", confidence: confidence });
+                aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", lang: detectedLang, type: "ai_answer", userMessage: userText.substring(0, 200), aiResponse: "오프시간 low-confidence → AI 안내 (에스컬레이션 안 함)", escalated: false, escalationReason: "off_hour_low_confidence", confidence: confidence, category: (aiResult && aiResult.category) || "other" });
               } catch(olcErr) { console.error("[AI] Off-hour low conf error:", olcErr.message); }
             } else {
               // 영업시간: 기존 로직 유지 - 매니저 연결
@@ -1563,7 +1629,7 @@ router.post('/channeltalk', async function(req, res) {
                 aiAnswer += offHourMedNote[detectedLang] || offHourMedNote["zh-TW"];
                 // 오프시간은 에스컬레이션 스킵 - 아래 connectManager를 건너뜀
                 await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: aiAnswer }] });
-                aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "ai_answer", userMessage: userText.substring(0, 200), aiResponse: aiAnswer.substring(0, 300), escalated: false, escalationReason: "off_hour_medium_confidence", confidence: confidence });
+                aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "ai_answer", userMessage: userText.substring(0, 200), aiResponse: aiAnswer.substring(0, 300), escalated: false, escalationReason: "off_hour_medium_confidence", confidence: confidence, category: (aiResult && aiResult.category) || "other" });
                 return res.status(200).send("OK");
               }
               // 영업시간: 기존 로직 유지
@@ -1581,7 +1647,7 @@ router.post('/channeltalk', async function(req, res) {
         }
       } catch(aiErr) {
         console.error("[AI] Error:", aiErr.message);
-        aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "ai_error", userMessage: userText.substring(0, 200), aiResponse: "AI Error: " + aiErr.message, escalated: false, confidence: 0 });
+        aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "ai_error", userMessage: userText.substring(0, 200), aiResponse: "AI Error: " + aiErr.message, escalated: false, confidence: 0, category: "other" });
       }
     }
     if (aiAnswer) {

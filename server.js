@@ -53,6 +53,8 @@ app.use('/webhook', webhookRouter);
 app.use('/api/bot', botRouter);
 app.use('/api/analytics', analyticsRouter);
 app.use('/api/marketing', marketingRouter);
+var surveyRouter = require('./routes/survey');
+app.use('/api/csat', surveyRouter);
 
 app.get('/health', function(req, res) {
   res.json({ status: 'ok', ai: aiEngine.isReady() ? 'active' : 'fallback', timestamp: new Date().toISOString(), env: process.env.NODE_ENV || 'development' });

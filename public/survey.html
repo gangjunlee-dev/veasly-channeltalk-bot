@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>VEASLY 服務滿意度調查</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; min-height: 100vh; display: flex; justify-content: center; align-items: center; padding: 20px; }
+.container { background: #fff; border-radius: 16px; padding: 32px 24px; max-width: 420px; width: 100%; box-shadow: 0 4px 24px rgba(0,0,0,0.08); }
+.logo { text-align: center; margin-bottom: 8px; }
+.logo-text { font-size: 20px; font-weight: 700; color: #1a1a1a; }
+.promo-banner { background: linear-gradient(135deg, #7C3AED 0%, #a78bfa 100%); color: #fff; border-radius: 10px; padding: 12px 16px; text-align: center; margin-bottom: 24px; font-size: 13px; line-height: 1.5; }
+.promo-banner .promo-title { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+.promo-banner .promo-detail { font-size: 12px; opacity: 0.9; }
+.step { display: none; animation: fadeIn 0.3s ease; }
+.step.active { display: block; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+h2 { font-size: 18px; color: #1a1a1a; margin-bottom: 8px; text-align: center; }
+.subtitle { font-size: 14px; color: #888; text-align: center; margin-bottom: 24px; }
+.progress { display: flex; justify-content: center; gap: 8px; margin-bottom: 20px; }
+.progress-dot { width: 8px; height: 8px; border-radius: 50%; background: #e0e0e0; transition: background 0.3s; }
+.progress-dot.active { background: #7C3AED; }
+.btn-group { display: flex; gap: 12px; margin-top: 16px; }
+.btn-sat { flex: 1; padding: 16px; border: 2px solid #e0e0e0; border-radius: 12px; background: #fff; font-size: 16px; cursor: pointer; transition: all 0.2s; text-align: center; }
+.btn-sat:hover { border-color: #7C3AED; background: #f8f5ff; }
+.btn-sat.selected { border-color: #7C3AED; background: #7C3AED; color: #fff; }
+.btn-sat .emoji { font-size: 32px; display: block; margin-bottom: 8px; }
+.reason-list { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
+.reason-item { padding: 14px 16px; border: 2px solid #e0e0e0; border-radius: 10px; background: #fff; font-size: 14px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 10px; }
+.reason-item:hover { border-color: #7C3AED; background: #f8f5ff; }
+.reason-item.selected { border-color: #7C3AED; background: #f0ebff; }
+.reason-item .check { width: 20px; height: 20px; border: 2px solid #ccc; border-radius: 4px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 12px; color: transparent; }
+.reason-item.selected .check { background: #7C3AED; border-color: #7C3AED; color: #fff; }
+textarea { width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 10px; font-size: 14px; resize: none; height: 80px; margin-top: 12px; font-family: inherit; }
+textarea:focus { outline: none; border-color: #7C3AED; }
+.submit-btn { width: 100%; padding: 14px; background: #7C3AED; color: #fff; border: none; border-radius: 10px; font-size: 16px; font-weight: 600; cursor: pointer; margin-top: 16px; transition: background 0.2s; }
+.submit-btn:hover { background: #6D28D9; }
+.submit-btn:disabled { background: #ccc; cursor: not-allowed; }
+.back-btn { background: none; border: none; color: #888; font-size: 13px; cursor: pointer; margin-top: 12px; display: block; margin-left: auto; margin-right: auto; }
+.thank-you { text-align: center; padding: 40px 0; }
+.thank-you .emoji { font-size: 48px; margin-bottom: 16px; }
+.thank-you h2 { font-size: 20px; margin-bottom: 8px; }
+.thank-you p { color: #888; font-size: 14px; line-height: 1.6; }
+.email-input { width: 100%; padding: 14px; border: 2px solid #e0e0e0; border-radius: 10px; font-size: 16px; font-family: inherit; margin-top: 16px; }
+.email-input:focus { outline: none; border-color: #7C3AED; }
+.email-input.valid { border-color: #10B981; }
+.email-input.invalid { border-color: #EF4444; }
+.expired { text-align: center; padding: 40px 0; color: #888; }
+.already-done { text-align: center; padding: 40px 0; color: #888; }
+.already-done .emoji { font-size: 48px; margin-bottom: 16px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="logo"><span class="logo-text">VEASLY</span></div>
+
+  <!-- Promo Banner -->
+  <div class="promo-banner" id="promo-banner">
+    <div class="promo-title" id="promo-title">🎁 填寫問卷，參加每月抽獎！</div>
+    <div class="promo-detail" id="promo-detail">1等 10,000P (1名) ｜ 2等 5,000P (3名) ｜ 3等 1,000P (10名)</div>
+  </div>
+
+  <!-- Step 0: Expired -->
+  <div class="step" id="step-expired">
+    <div class="expired"><p id="expired-msg">此問卷已過期</p></div>
+  </div>
+
+  <!-- Step 0b: Already submitted -->
+  <div class="step" id="step-already">
+    <div class="already-done">
+      <div class="emoji">✅</div>
+      <h2 id="already-title">您已填寫過此問卷</h2>
+      <p id="already-sub">感謝您的參與！抽獎結果將於每月1日公佈</p>
+    </div>
+  </div>
+
+
+  <!-- Step 0c: Email input for non-members -->
+  <div class="step" id="step-email">
+    <div class="progress"><span class="progress-dot active"></span><span class="progress-dot"></span><span class="progress-dot"></span><span class="progress-dot"></span></div>
+    <h2 id="email-title">抽獎需要您的Email</h2>
+    <p class="subtitle" id="email-sub">填寫Email即可參加每月抽獎</p>
+    <input type="email" id="email-input" class="email-input" placeholder="example@email.com" />
+    <button class="submit-btn" id="email-next-btn" onclick="submitEmail()" disabled>下一步</button>
+    <div class="skip-link"><a href="#" onclick="skipEmail(); return false;" id="email-skip-text">跳過，不參加抽獎</a></div>
+  </div>
+
+  <!-- Step 1: Satisfied / Unsatisfied -->
+  <div class="step" id="step1">
+    <div class="progress"><span class="progress-dot active"></span><span class="progress-dot"></span><span class="progress-dot"></span></div>
+    <h2 id="q1-title">這次的服務體驗如何？</h2>
+    <p class="subtitle" id="q1-sub">請選擇一個選項</p>
+    <div class="btn-group">
+      <button class="btn-sat" onclick="selectSatisfaction(true)">
+        <span class="emoji">😊</span>
+        <span id="btn-sat-text">滿意</span>
+      </button>
+      <button class="btn-sat" onclick="selectSatisfaction(false)">
+        <span class="emoji">😞</span>
+        <span id="btn-unsat-text">不滿意</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Step 2: Category (inquiry type) -->
+  <div class="step" id="step2">
+    <div class="progress"><span class="progress-dot active"></span><span class="progress-dot active"></span><span class="progress-dot"></span></div>
+    <h2 id="q2-title">這次諮詢的主題是？</h2>
+    <p class="subtitle" id="q2-sub">請選擇一個</p>
+    <div class="reason-list" id="category-list"></div>
+    <button class="back-btn" onclick="goBack(1)" id="back-btn-2">← 返回</button>
+  </div>
+
+  <!-- Step 3a: Satisfied reasons -->
+  <div class="step" id="step3a">
+    <div class="progress"><span class="progress-dot active"></span><span class="progress-dot active"></span><span class="progress-dot active"></span></div>
+    <h2 id="q3a-title">哪方面做得好呢？</h2>
+    <p class="subtitle" id="q3a-sub">可複選</p>
+    <div class="reason-list" id="good-reason-list"></div>
+    <textarea id="comment-box-good" placeholder="" style="display:none"></textarea>
+    <button class="submit-btn" id="submit-good" onclick="submitSurvey()" disabled>提交</button>
+    <button class="back-btn" onclick="goBack(2)" id="back-btn-3a">← 返回</button>
+  </div>
+
+  <!-- Step 3b: Unsatisfied reasons -->
+  <div class="step" id="step3b">
+    <div class="progress"><span class="progress-dot active"></span><span class="progress-dot active"></span><span class="progress-dot active"></span></div>
+    <h2 id="q3b-title">具體哪方面需要改善呢？</h2>
+    <p class="subtitle" id="q3b-sub">可複選</p>
+    <div class="reason-list" id="bad-reason-list"></div>
+    <textarea id="comment-box-bad" placeholder="" style="display:none"></textarea>
+    <button class="submit-btn" id="submit-bad" onclick="submitSurvey()" disabled>提交</button>
+    <button class="back-btn" onclick="goBack(2)" id="back-btn-3b">← 返回</button>
+  </div>
+
+  <!-- Step 4: Thank you -->
+  <div class="step" id="step4">
+    <div class="thank-you">
+      <div class="emoji">🎉</div>
+      <h2 id="ty-title">感謝您的寶貴意見！</h2>
+      <p id="ty-sub">您已自動參加本月抽獎<br/>結果將於每月1日公佈，届時會發送Email通知</p>
+    </div>
+  </div>
+</div>
+
+<script>
+var params = new URLSearchParams(window.location.search);
+var chatId = params.get('cid') || '';
+var userId = params.get('uid') || '';
+var lang = params.get('lang') || 'zh-TW';
+var customerName = decodeURIComponent(params.get('name') || '');
+var type = params.get('type') || 'bot';
+var ts = parseInt(params.get('ts') || '0');
+var isMember = params.get('member') === '1';
+var userEmail = decodeURIComponent(params.get('email') || '');
+var veaslyId = params.get('vid') || '';
+
+var i18n = {
+  'zh-TW': {
+    promoTitle: '🎁 填寫問卷，參加每月抽獎！',
+    promoDetail: '1等 10,000P (1名) ｜ 2等 5,000P (3名) ｜ 3等 1,000P (10名)',
+    q1Title: '這次的服務體驗如何？', q1Sub: '請選擇一個選項',
+    satText: '滿意', unsatText: '不滿意',
+    q2Title: '這次諮詢的主題是？', q2Sub: '請選擇一個',
+    categories: ['訂單/配送', '取消/退款', '商品問題', '付款問題', '合併配送', '帳號/網站', '其他'],
+    q3aTitle: '哪方面做得好呢？', q3aSub: '可複選',
+    goodReasons: ['回覆快速', '回覆準確且詳細', '態度親切', '問題順利解決', '其他'],
+    q3bTitle: '具體哪方面需要改善呢？', q3bSub: '可複選',
+    badReasons: ['等了很久才回覆', '回覆內容不相關', '提供了錯誤的資訊', '需要重複說明問題', '問題最終沒有解決', '轉接真人後等很久', '機器人回覆看不懂', '其他'],
+    commentPh: '請告訴我們更具體的意見（選填）',
+    submitBtn: '提交', backBtn: '← 返回',
+    tyTitle: '感謝您的寶貴意見！',
+    tySub: '您已自動參加本月抽獎\n結果將於每月1日公佈，届時會發送Email通知',
+    tySatTitle: '感謝您的肯定！',
+    tySatSub: '您已自動參加本月抽獎\n結果將於每月1日公佈，届時會發送Email通知',
+    expired: '此問卷已過期',
+    emailTitle: '抽獎需要您的Email', emailSub: '填寫Email即可參加每月抽獎', emailPh: 'example@email.com', emailNext: '下一步', emailSkip: '跳過，不參加抽獎',
+    alreadyTitle: '您已填寫過此問卷', alreadySub: '感謝您的參與！抽獎結果將於每月1日公佈'
+  },
+  'ko': {
+    promoTitle: '🎁 설문 참여하고 매월 추첨에 응모하세요!',
+    promoDetail: '1등 10,000P (1명) ｜ 2등 5,000P (3명) ｜ 3등 1,000P (10명)',
+    q1Title: '이번 서비스 경험은 어떠셨나요?', q1Sub: '하나를 선택해주세요',
+    satText: '만족', unsatText: '불만족',
+    q2Title: '이번 문의 주제는 무엇이었나요?', q2Sub: '하나를 선택해주세요',
+    categories: ['주문/배송', '취소/환불', '상품 문제', '결제 문제', '합배송', '계정/사이트', '기타'],
+    q3aTitle: '어떤 점이 좋으셨나요?', q3aSub: '복수 선택 가능',
+    goodReasons: ['빠른 응답', '정확하고 자세한 답변', '친절한 태도', '문제가 잘 해결됨', '기타'],
+    q3bTitle: '구체적으로 어떤 점이 아쉬우셨나요?', q3bSub: '복수 선택 가능',
+    badReasons: ['응답 대기 시간이 길었음', '답변이 질문과 무관했음', '잘못된 정보를 안내받음', '같은 설명을 반복해야 했음', '결국 문제가 해결 안 됨', '상담원 연결 후 오래 기다림', '봇 답변을 이해하기 어려움', '기타'],
+    commentPh: '더 구체적인 의견을 남겨주세요 (선택)',
+    submitBtn: '제출', backBtn: '← 뒤로',
+    tyTitle: '소중한 의견 감사합니다!',
+    tySub: '이번 달 추첨에 자동 응모되었습니다\n결과는 매월 1일에 이메일로 안내드립니다',
+    tySatTitle: '감사합니다!',
+    tySatSub: '이번 달 추첨에 자동 응모되었습니다\n결과는 매월 1일에 이메일로 안내드립니다',
+    expired: '설문이 만료되었습니다',
+    emailTitle: '추첨 참여를 위해 이메일을 입력해주세요', emailSub: '이메일 입력 시 매월 추첨에 자동 응모됩니다', emailPh: 'example@email.com', emailNext: '다음', emailSkip: '건너뛰기 (추첨 미참여)',
+    alreadyTitle: '이미 참여하신 설문입니다', alreadySub: '감사합니다! 추첨 결과는 매월 1일에 안내됩니다'
+  },
+  'en': {
+    promoTitle: '🎁 Take the survey & enter monthly draw!',
+    promoDetail: '1st 10,000P (1) ｜ 2nd 5,000P (3) ｜ 3rd 1,000P (10)',
+    q1Title: 'How was your experience?', q1Sub: 'Choose one',
+    satText: 'Satisfied', unsatText: 'Unsatisfied',
+    q2Title: 'What was your inquiry about?', q2Sub: 'Choose one',
+    categories: ['Order/Shipping', 'Cancel/Refund', 'Product issue', 'Payment issue', 'Combined shipping', 'Account/Website', 'Other'],
+    q3aTitle: 'What did we do well?', q3aSub: 'Select all that apply',
+    goodReasons: ['Fast response', 'Accurate & detailed answer', 'Friendly attitude', 'Issue resolved smoothly', 'Other'],
+    q3bTitle: 'What specifically needs improvement?', q3bSub: 'Select all that apply',
+    badReasons: ['Long wait for response', 'Reply was irrelevant', 'Given wrong information', 'Had to repeat my question', 'Issue was not resolved', 'Long wait after agent transfer', 'Bot reply was confusing', 'Other'],
+    commentPh: 'Any additional comments? (optional)',
+    submitBtn: 'Submit', backBtn: '← Back',
+    tyTitle: 'Thank you for your feedback!',
+    tySub: 'You are entered in this month\'s draw\nWinners announced on the 1st — we\'ll notify via email',
+    tySatTitle: 'Thank you!',
+    tySatSub: 'You are entered in this month\'s draw\nWinners announced on the 1st — we\'ll notify via email',
+    expired: 'This survey has expired',
+    emailTitle: 'Enter your email to join the draw', emailSub: 'Provide your email to enter the monthly draw', emailPh: 'example@email.com', emailNext: 'Next', emailSkip: 'Skip (no draw entry)',
+    alreadyTitle: 'You already completed this survey', alreadySub: 'Thank you! Draw results announced on the 1st of each month'
+  },
+  'ja': {
+    promoTitle: '🎁 アンケートに答えて毎月抽選に参加！',
+    promoDetail: '1等 10,000P (1名) ｜ 2等 5,000P (3名) ｜ 3等 1,000P (10名)',
+    q1Title: '今回のサービスはいかがでしたか？', q1Sub: '一つ選んでください',
+    satText: '満足', unsatText: '不満',
+    q2Title: '今回のお問い合わせ内容は？', q2Sub: '一つ選んでください',
+    categories: ['注文/配送', 'キャンセル/返金', '商品の問題', '決済の問題', '同梱配送', 'アカウント/サイト', 'その他'],
+    q3aTitle: 'どの点が良かったですか？', q3aSub: '複数選択可',
+    goodReasons: ['返信が早い', '正確で詳しい回答', '親切な対応', '問題がスムーズに解決', 'その他'],
+    q3bTitle: '具体的にどの点を改善すべきですか？', q3bSub: '複数選択可',
+    badReasons: ['返信待ち時間が長い', '回答が質問と無関係', '誤った情報を案内された', '同じ説明を繰り返す必要があった', '結局問題が未解決', 'オペレーター接続後の待ち時間が長い', 'ボットの回答が分かりにくい', 'その他'],
+    commentPh: '具体的なご意見をお聞かせください（任意）',
+    submitBtn: '送信', backBtn: '← 戻る',
+    tyTitle: '貴重なご意見ありがとうございます！',
+    tySub: '今月の抽選に自動エントリーされました\n結果は毎月1日にメールでお知らせします',
+    tySatTitle: 'ありがとうございます！',
+    tySatSub: '今月の抽選に自動エントリーされました\n結果は毎月1日にメールでお知らせします',
+    expired: 'このアンケートは期限切れです',
+    emailTitle: '抽選参加にはメールアドレスが必要です', emailSub: 'メールアドレスを入力して毎月の抽選に参加', emailPh: 'example@email.com', emailNext: '次へ', emailSkip: 'スキップ（抽選不参加）',
+    alreadyTitle: 'このアンケートは回答済みです', alreadySub: 'ご参加ありがとうございます！抽選結果は毎月1日に発表されます'
+  }
+};
+
+var t = i18n[lang] || i18n['zh-TW'];
+var categoryKeys = ['order_shipping', 'cancel_refund', 'product_issue', 'payment_issue', 'combined_shipping', 'account_website', 'other'];
+var goodReasonKeys = ['fast_response', 'accurate_answer', 'friendly', 'resolved', 'other'];
+var badReasonKeys = ['slow_response', 'irrelevant_reply', 'wrong_info', 'repeat_question', 'not_resolved', 'long_wait_agent', 'bot_confusing', 'other'];
+
+var isSatisfied = null;
+var selectedCategory = '';
+var selectedReasons = [];
+
+// Apply promo banner
+document.getElementById('promo-title').textContent = t.promoTitle;
+document.getElementById('promo-detail').textContent = t.promoDetail;
+
+// Check expiry (72 hours)
+if (ts > 0 && (Date.now() / 1000 - ts) > 259200) {
+  document.getElementById('step1').classList.remove('active');
+  document.getElementById('step-expired').classList.add('active');
+  document.getElementById('expired-msg').textContent = t.expired;
+  document.getElementById('promo-banner').style.display = 'none';
+} else {
+  applyI18n();
+  buildLists();
+  // 비회원이고 이메일 없으면 이메일 입력 스텝 먼저 표시
+  if (!isMember && !userEmail) {
+    document.getElementById('step1').classList.remove('active');
+    document.getElementById('step-email').classList.add('active');
+  }
+}
+
+function applyI18n() {
+  document.getElementById('q1-title').textContent = t.q1Title;
+  document.getElementById('q1-sub').textContent = t.q1Sub;
+  document.getElementById('btn-sat-text').textContent = t.satText;
+  document.getElementById('btn-unsat-text').textContent = t.unsatText;
+  document.getElementById('q2-title').textContent = t.q2Title;
+  document.getElementById('q2-sub').textContent = t.q2Sub;
+  document.getElementById('q3a-title').textContent = t.q3aTitle;
+  document.getElementById('q3a-sub').textContent = t.q3aSub;
+  document.getElementById('q3b-title').textContent = t.q3bTitle;
+  document.getElementById('q3b-sub').textContent = t.q3bSub;
+  document.getElementById('submit-good').textContent = t.submitBtn;
+  document.getElementById('submit-bad').textContent = t.submitBtn;
+  document.getElementById('comment-box-good').placeholder = t.commentPh;
+  document.getElementById('comment-box-bad').placeholder = t.commentPh;
+  document.getElementById('back-btn-2').textContent = t.backBtn;
+  document.getElementById('back-btn-3a').textContent = t.backBtn;
+  document.getElementById('back-btn-3b').textContent = t.backBtn;
+  document.getElementById('already-title').textContent = t.alreadyTitle;
+  document.getElementById('already-sub').textContent = t.alreadySub;
+    document.getElementById('email-title').textContent = t.emailTitle || '';
+  document.getElementById('email-sub').textContent = t.emailSub || '';
+  document.getElementById('email-input').placeholder = t.emailPh || 'example@email.com';
+  document.getElementById('email-next-btn').textContent = t.emailNext || 'Next';
+  document.getElementById('email-skip-text').textContent = t.emailSkip || 'Skip';
+  document.getElementById('step1').classList.add('active');
+}
+
+function buildLists() {
+  // Category list
+  var catEl = document.getElementById('category-list');
+  t.categories.forEach(function(c, idx) {
+    var div = document.createElement('div');
+    div.className = 'reason-item';
+    div.innerHTML = '<span class="check">✓</span><span>' + c + '</span>';
+    div.onclick = function() { selectCategory(this, idx); };
+    catEl.appendChild(div);
+  });
+  // Good reasons
+  var goodEl = document.getElementById('good-reason-list');
+  t.goodReasons.forEach(function(r, idx) {
+    var div = document.createElement('div');
+    div.className = 'reason-item';
+    div.innerHTML = '<span class="check">✓</span><span>' + r + '</span>';
+    div.onclick = function() { toggleReason(this, goodReasonKeys[idx], 'good'); };
+    goodEl.appendChild(div);
+  });
+  // Bad reasons
+  var badEl = document.getElementById('bad-reason-list');
+  t.badReasons.forEach(function(r, idx) {
+    var div = document.createElement('div');
+    div.className = 'reason-item';
+    div.innerHTML = '<span class="check">✓</span><span>' + r + '</span>';
+    div.onclick = function() { toggleReason(this, badReasonKeys[idx], 'bad'); };
+    badEl.appendChild(div);
+  });
+}
+
+function showStep(stepId) {
+  document.querySelectorAll('.step').forEach(function(s) { s.classList.remove('active'); });
+  document.getElementById(stepId).classList.add('active');
+}
+
+function selectSatisfaction(sat) {
+  isSatisfied = sat;
+  var btns = document.querySelectorAll('.btn-sat');
+  btns[0].classList.toggle('selected', sat);
+  btns[1].classList.toggle('selected', !sat);
+  setTimeout(function() { showStep('step2'); }, 300);
+}
+
+function selectCategory(el, idx) {
+  document.querySelectorAll('#category-list .reason-item').forEach(function(item) { item.classList.remove('selected'); });
+  el.classList.add('selected');
+  selectedCategory = categoryKeys[idx];
+  setTimeout(function() { showStep(isSatisfied ? 'step3a' : 'step3b'); }, 300);
+}
+
+function toggleReason(el, key, type) {
+  el.classList.toggle('selected');
+  var i = selectedReasons.indexOf(key);
+  if (i > -1) selectedReasons.splice(i, 1);
+  else selectedReasons.push(key);
+
+  var commentId = type === 'good' ? 'comment-box-good' : 'comment-box-bad';
+  var submitId = type === 'good' ? 'submit-good' : 'submit-bad';
+  document.getElementById(commentId).style.display = selectedReasons.indexOf('other') > -1 ? 'block' : 'none';
+  document.getElementById(submitId).disabled = selectedReasons.length === 0;
+}
+
+function goBack(toStep) {
+  selectedReasons = [];
+  document.querySelectorAll('.reason-item.selected').forEach(function(el) {
+    var parent = el.parentElement;
+    if (parent.id !== 'category-list') el.classList.remove('selected');
+  });
+  if (toStep === 1) {
+    selectedCategory = '';
+    document.querySelectorAll('#category-list .reason-item').forEach(function(item) { item.classList.remove('selected'); });
+    showStep('step1');
+  } else if (toStep === 2) {
+    showStep('step2');
+  }
+}
+
+function submitEmail() {
+  var input = document.getElementById('email-input');
+  var email = input.value.trim();
+  if (email && email.indexOf('@') > 0 && email.indexOf('.') > 0) {
+    userEmail = email;
+    showStep('step1');
+  }
+}
+
+function skipEmail() {
+  userEmail = '';
+  showStep('step1');
+}
+
+// 이메일 입력 실시간 검증
+document.addEventListener('DOMContentLoaded', function() {
+  var emailInput = document.getElementById('email-input');
+  if (emailInput) {
+    emailInput.addEventListener('input', function() {
+      var val = this.value.trim();
+      var valid = val && val.indexOf('@') > 0 && val.indexOf('.') > 0;
+      this.classList.toggle('valid', valid);
+      this.classList.toggle('invalid', val.length > 0 && !valid);
+      document.getElementById('email-next-btn').disabled = !valid;
+    });
+  }
+});
+
+function submitSurvey() {
+  var commentBox = isSatisfied ? document.getElementById('comment-box-good') : document.getElementById('comment-box-bad');
+  var data = {
+    chatId: chatId,
+    userId: userId,
+    lang: lang,
+    type: type,
+    satisfied: isSatisfied,
+    category: selectedCategory,
+    reasons: selectedReasons,
+    comment: (commentBox.value || '').trim(),
+    submittedAt: new Date().toISOString(),
+    surveyVersion: 'v3',
+    email: userEmail,
+    veaslyId: veaslyId,
+    isMember: isMember,
+    customerName: customerName
+  };
+
+  showStep('step4');
+  if (isSatisfied) {
+    document.getElementById('ty-title').textContent = t.tySatTitle;
+    document.getElementById('ty-sub').textContent = t.tySatSub;
+  } else {
+    document.getElementById('ty-title').textContent = t.tyTitle;
+    document.getElementById('ty-sub').textContent = t.tySub;
+  }
+
+  fetch('/api/csat/submit', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  }).then(function(res) { return res.json(); })
+    .then(function(result) {
+      if (result.duplicate) {
+        showStep('step-already');
+      }
+    })
+    .catch(function(e) { console.error('Submit error:', e); });
+}
+</script>
+</body>
+</html>

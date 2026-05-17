@@ -1,6 +1,6 @@
 export default {
   async fetch(request) {
-    const TUNNEL_URL = "https://league-curious-weblog-busy.trycloudflare.com";
+    const TUNNEL_URL = "https://readings-sacred-attachment-retain.trycloudflare.com";
     const url = new URL(request.url);
     const targetUrl = TUNNEL_URL + url.pathname + url.search;
     const newHeaders = new Headers(request.headers);
@@ -14,9 +14,11 @@ export default {
       });
       const respHeaders = new Headers(resp.headers);
       respHeaders.set("Access-Control-Allow-Origin", "*");
+      respHeaders.set("Cache-Control", "no-store, no-cache, must-revalidate");
+      respHeaders.set("Pragma", "no-cache");
       return new Response(resp.body, { status: resp.status, headers: respHeaders });
     } catch (e) {
-      return new Response("Dashboard temporarily unavailable: " + e.message, { status: 502 });
+      return new Response("Temporarily unavailable: " + e.message, { status: 502 });
     }
   }
 }

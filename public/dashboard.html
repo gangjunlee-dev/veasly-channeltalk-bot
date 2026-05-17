@@ -67,8 +67,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .controls button:hover { background: var(--accent-hover); }
 .controls .auto-refresh { font-size: 12px; color: var(--text-muted); margin-left: auto; display: flex; align-items: center; gap: 6px; }
 .controls .auto-refresh input { accent-color: var(--accent); }
-.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; padding: 0 32px 16px; }
-.card { background: var(--bg-secondary); border-radius: 12px; padding: 20px; border: 1px solid var(--border-primary); box-shadow: var(--shadow-sm); transition: transform 0.2s, box-shadow 0.2s; cursor: pointer; position: relative; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; overflow: hidden; padding: 0 32px 16px; }
+.card { background: var(--bg-secondary); border-radius: 12px; padding: 20px; border: 1px solid var(--border-primary); box-shadow: var(--shadow-sm); overflow: hidden; min-width: 0; transition: transform 0.2s, box-shadow 0.2s; cursor: pointer; position: relative; }
 .card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
 .card-detail { display: none; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-primary); font-size: 12px; color: var(--text-muted); line-height: 1.6; }
 .card-detail.open { display: block; }
@@ -84,7 +84,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .purple { color: #a855f7; }
 .cyan { color: #06b6d4; }
 .charts { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 0 32px 16px; }
-.chart-card { background: var(--bg-secondary); border-radius: 12px; padding: 20px; border: 1px solid var(--border-primary); box-shadow: var(--shadow-sm); }
+.chart-card { background: var(--bg-secondary); border-radius: 12px; padding: 20px; border: 1px solid var(--border-primary); box-shadow: var(--shadow-sm); width: 100%; max-width: 100%; box-sizing: border-box; overflow: hidden; }
 .chart-card h3 { font-size: 16px; margin-bottom: 16px; color: var(--text-primary); }
 .chart-card.full { grid-column: span 2; }
 .bar-chart .bar-row { display: flex; align-items: center; margin-bottom: 8px; }
@@ -132,7 +132,7 @@ td { padding: 10px 8px; border-bottom: 1px solid var(--border-secondary); font-s
 .strat-gauge-box canvas { display:block; margin:0 auto; }
 .strat-gauge-val { font-size:32px; font-weight:800; margin-top:4px; text-shadow: 0 0 20px currentColor, 0 2px 4px rgba(0,0,0,0.5); letter-spacing: -1px; }
 .strat-gauge-label { font-size:12px; color:var(--text-secondary); font-weight:600; }
-.strat-subs { flex:1; display:grid; grid-template-columns:repeat(5,1fr); gap:8px; }
+.strat-subs { flex:1; display:grid; grid-template-columns:repeat(5,1fr); gap:8px; overflow:hidden; }
 .strat-sub { background:var(--bg-secondary); box-shadow:var(--shadow-sm); border-radius:10px; padding:10px 12px; cursor:pointer; border-left:3px solid var(--border-primary); transition:all 0.2s; border:1px solid var(--border-primary); border-left-width:3px; }
 .strat-sub:hover { background:var(--bg-hover); }
 .strat-sub .sub-icon { font-size:14px; }
@@ -254,7 +254,7 @@ td { padding: 10px 8px; border-bottom: 1px solid var(--border-secondary); font-s
 
 <!-- TAB: Managers -->
 <div id="tab-managers" class="tab-content">
-  <div id="managersContent"><div class="loading">매니저 데이터 로딩 중...</div></div>
+  <div id="managersContent" style="max-width:900px;width:100%;margin:0 auto;"><div class="loading">매니저 데이터 로딩 중...</div></div>
 </div>
 
 <!-- TAB: AI Monitoring -->
@@ -528,10 +528,14 @@ function loadOverview() {
   // === PHASE 1: v2 운영 카드 + 차트 (기본) ===
   Promise.all([
     fetch(API_BASE + '/api/analytics/report?days=' + days).then(function(r) { return r.json(); }),
-    fetch('/api/analytics/auto-close').then(function(r) { return r.json(); }).catch(function() { return null; })
+    fetch('/api/analytics/auto-close').then(function(r) { return r.json(); }).catch(function() { return null; }),
+    fetch('/api/analytics/csat-v2-stats?days=' + days).then(function(r) { return r.json(); }).catch(function() { return null; }),
+    fetch('/api/analytics/cs-score-metrics?days=' + days).then(function(r) { return r.json(); }).catch(function() { return null; })
   ]).then(function(results) {
     var data = results[0];
     var autoClose = results[1];
+    var csatV2 = results[2];
+    var csMetrics = results[3];
     if (!data.success) throw new Error(data.error);
     var r = data.raw;
     cachedData.overview = r;
@@ -561,8 +565,24 @@ function loadOverview() {
         html += card('기타 채널', cs.other, '건 (' + _otherPct + '%)', 'yellow', 'API/이메일 등', '📨 기타 채널을 통해 접수된 상담입니다.');
       }
     }
-    if (autoClose && autoClose.success) {
-      html += card('CSAT 대기', autoClose.csatPending, '건', autoClose.csatPending > 10 ? 'yellow' : 'green', '12h 경고 → 16h 종료', '📋 CSAT 설문 발송(12h 경고 시) 후 미응답 건수입니다. 영업시간 16h에 자동종료됩니다.');
+    // CSAT v2 만족률
+    if (csatV2 && csatV2.total > 0) {
+      var _csatRate = csatV2.satisfactionRate || 0;
+      var _csatColor = _csatRate >= 80 ? 'green' : _csatRate >= 50 ? 'yellow' : 'red';
+      html += card('고객 만족률', _csatRate + '%', '', _csatColor, '응답 ' + csatV2.total + '건', '📋 CSAT v2 설문 기준 만족률입니다. 만족+불만족 응답 비율.');
+    } else {
+      html += card('고객 만족률', '-', '', 'yellow', '설문 수집 중', '📋 CSAT v2 설문 응답이 아직 없습니다.');
+    }
+    // 오프시간 비율
+    if (csMetrics && csMetrics.businessHours) {
+      var _bh = csMetrics.businessHours;
+      var _offRate = _bh.offHourRate || 0;
+      var _offColor = _offRate > 60 ? 'red' : _offRate > 40 ? 'yellow' : 'green';
+      html += card('오프시간 문의', _offRate + '%', '', _offColor, '영업 ' + _bh.bizHour + '건 / 오프 ' + _bh.offHour + '건', '🌙 영업시간(평일 10-19시) 외 접수된 문의 비율입니다.');
+    }
+    // CSAT 대기 (기존 유지)
+    if (autoClose && autoClose.success && autoClose.csatPending > 0) {
+      html += card('설문 대기', autoClose.csatPending, '건', autoClose.csatPending > 5 ? 'yellow' : 'green', 'CSAT 발송 후 미응답', '📋 CSAT 설문 발송 후 미응답 건수입니다.');
     }
     html += '</div>';
 
@@ -914,7 +934,7 @@ function loadManagerData() {
   
   Promise.all([
     fetch('/api/analytics/manager-performance?days=' + days).then(function(r) { return r.json(); }),
-    fetch('/api/analytics/ai-reviews').then(function(r) { return r.json(); }).catch(function() { return null; })
+    fetch('/api/analytics/ai-review-summary?days=' + days).then(function(r) { return r.json(); }).catch(function() { return {totalReviews:0,managers:{},scoreDistribution:{}}; })
   ]).then(function(results) {
     var mgrPerf = results[0];
     var aiReviews = results[1];
@@ -927,24 +947,85 @@ function loadManagerData() {
 
     var html = '';
 
-    // AI Quality Review Summary Cards
+    // AI Quality Review Summary (from ai-review-summary API)
     var reviewData = {};
-    if (aiReviews && aiReviews.recent) {
-      aiReviews.recent.forEach(function(rev) {
-        // Only process AI auto-scored reviews (have scores.totalScore)
-        if (!rev.scores || !rev.scores.totalScore) return;
-        if (!rev.managerId) return;
-        if (!reviewData[rev.managerId]) reviewData[rev.managerId] = { scores: [], count: 0 };
-        reviewData[rev.managerId].scores.push(rev.scores);
-        reviewData[rev.managerId].count++;
-      });
+    if (aiReviews && aiReviews.managers) {
+      var _rmKeys = Object.keys(aiReviews.managers);
+      for (var _ri = 0; _ri < _rmKeys.length; _ri++) {
+        var _rmk = _rmKeys[_ri];
+        var _rmv = aiReviews.managers[_rmk];
+        reviewData[_rmk] = {
+          count: _rmv.reviews || 0,
+          name: _rmv.name || _rmk,
+          avgTotal: _rmv.avgTotal || 0,
+          avgResolution: _rmv.avgResolution || 0,
+          avgAttitude: _rmv.avgAttitude || 0,
+          avgAccuracy: _rmv.avgAccuracy || 0,
+          avgResponsiveness: _rmv.avgResponsiveness || 0,
+          avgProfessionalism: _rmv.avgProfessionalism || 0
+        };
+      }
     }
 
     // Manager Cards
+    
+    // === AI 품질 리뷰 종합 ===
+    if (aiReviews && aiReviews.totalReviews > 0) {
+      var _dist = aiReviews.scoreDistribution || {};
+      html += '<div class="section-title">🤖 CS 응대 품질 AI 리뷰 <span style="font-size:12px;color:var(--text-muted);font-weight:400;">(Gemini 자동 평가 · ' + aiReviews.totalReviews + '건)</span></div>';
+      html += '<div class="grid">';
+      html += card('우수 (20+)', _dist.excellent || 0, '건', 'green', '', '총점 25점 만점 중 20점 이상');
+      html += card('양호 (15-19)', _dist.good || 0, '건', 'blue', '', '총점 15~19점');
+      html += card('보통 (10-14)', _dist.average || 0, '건', 'yellow', '', '총점 10~14점');
+      html += card('개선필요 (<10)', _dist.poor || 0, '건', 'red', '', '총점 10점 미만');
+      html += '</div>';
+
+      // 매니저별 AI 점수 테이블
+      var _rmKeys2 = Object.keys(reviewData);
+      if (_rmKeys2.length > 0) {
+        html += '<div class="charts"><div class="chart-card full">';
+        html += '<h3>📊 매니저별 AI 품질 점수 (5점 만점 · 5개 항목)</h3>';
+        html += '<table><thead><tr><th>매니저</th><th>리뷰 수</th><th>총점 평균</th><th>해결력</th><th>태도</th><th>정확성</th><th>응답성</th><th>전문성</th></tr></thead><tbody>';
+        function _tdS(v) { var c = v >= 4 ? '#22c55e' : v >= 3 ? '#3b82f6' : v >= 2 ? '#f59e0b' : '#ef4444'; return '<td style="color:' + c + ';font-weight:600;">' + v + '</td>'; }
+        for (var _ti = 0; _ti < _rmKeys2.length; _ti++) {
+          var _tk = _rmKeys2[_ti];
+          var _tv = reviewData[_tk];
+          var _tg = (_tv.avgTotal||0) >= 20 ? 'A' : (_tv.avgTotal||0) >= 15 ? 'B' : (_tv.avgTotal||0) >= 10 ? 'C' : 'D';
+          html += '<tr>';
+          html += '<td>' + (_tv.name || _tk) + ' <span style="background:' + (_tg==='A'?'#22c55e':_tg==='B'?'#3b82f6':_tg==='C'?'#f59e0b':'#ef4444') + ';color:#fff;padding:2px 6px;border-radius:4px;font-size:11px;">' + _tg + '</span></td>';
+          html += '<td>' + (_tv.count||0) + '건</td>';
+          html += '<td style="font-weight:700;">' + (_tv.avgTotal||0) + '/25</td>';
+          html += _tdS(_tv.avgResolution||0);
+          html += _tdS(_tv.avgAttitude||0);
+          html += _tdS(_tv.avgAccuracy||0);
+          html += _tdS(_tv.avgResponsiveness||0);
+          html += _tdS(_tv.avgProfessionalism||0);
+          html += '</tr>';
+        }
+        html += '</tbody></table></div></div>';
+      }
+    }
+
     html += '<div class="section-title" style="display:flex;justify-content:space-between;align-items:center;">매니저별 성과 요약 <button onclick="exportManagerData()" style="background:var(--bg-secondary);border:1px solid var(--border-primary);color:var(--text-secondary);padding:6px 14px;border-radius:8px;cursor:pointer;font-size:12px;">📥 CSV 내보내기</button></div>';
+    // 전체 매니저 중 일별 최대 답변수 (차트 스케일 통일)
+    var _globalMaxReplies = 0;
+    mgrPerf.managers.forEach(function(mgr) {
+      if (mgr.dailyTrend) mgr.dailyTrend.forEach(function(t) {
+        if (t.replies > _globalMaxReplies) _globalMaxReplies = t.replies;
+      });
+    });
+
     mgrPerf.managers.filter(function(m) { return m.status === 'active'; }).forEach(function(m) {
       var rd = reviewData[m.managerId];
-      html += '<div style="padding:0 32px 16px;">';
+
+      // AI 리뷰 점수 표시
+      var _aiGrade = '-';
+      var _aiTotal = 0;
+      if (rd && rd.avgTotal) {
+        _aiTotal = rd.avgTotal;
+        _aiGrade = _aiTotal >= 20 ? 'A' : _aiTotal >= 15 ? 'B' : _aiTotal >= 10 ? 'C' : 'D';
+      }
+      html += '<div style="padding:0 16px 16px;width:100%;box-sizing:border-box;">';
       html += '<div class="chart-card">';
       html += '<div style="display:flex;justify-content:space-between;align-items:center;">';
       html += '<div><h3 style="margin:0;">' + m.name + '</h3><span style="color:var(--text-secondary);font-size:12px;">' + (m.email || '') + '</span></div>';
@@ -956,7 +1037,7 @@ function loadManagerData() {
       html += '</div>';
 
       // Stats row
-      html += '<div class="grid" style="padding:16px 0 0;margin:0;">';
+      html += '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;padding:16px 0 0;width:100%;box-sizing:border-box;">';
       html += miniCard('답변 수', m.totalReplies, 'blue', '💬 해당 매니저가 고객에게 보낸 총 메시지 수입니다.');
       html += miniCard('담당 채팅', m.uniqueChats, 'purple', '🗂️ 해당 매니저가 참여한 고유 채팅 수입니다. 한 채팅에 여러 메시지를 보내도 1건으로 집계됩니다.');
       html += miniCard('평균 답변길이', m.avgReplyLength + '자', 'cyan', '📏 매니저 답변의 평균 글자 수입니다. 너무 짧으면 정보 부족, 너무 길면 가독성 저하. 50~200자가 적정 범위입니다.');
@@ -968,49 +1049,85 @@ function loadManagerData() {
 
       
       // Daily Trend Chart
-      if (m.dailyTrend && m.dailyTrend.length > 1) {
+      if (m.dailyTrend && m.dailyTrend.length > 0) {
+        // 빈 날짜 채우기 (선택 기간 전체 표시)
+        var _today = new Date();
+        var _daysNum = parseInt(days) || 7;
+        var _allDates = [];
+        for (var _di = _daysNum - 1; _di >= 0; _di--) {
+          var _d = new Date(_today);
+          _d.setDate(_d.getDate() - _di);
+          _allDates.push(_d.toISOString().substring(0, 10));
+        }
+        var _trendMap = {};
+        m.dailyTrend.forEach(function(t) { _trendMap[t.date] = t; });
+        var _filledTrend = _allDates.map(function(date) {
+          return _trendMap[date] || { date: date, replies: 0, avgRT: 0 };
+        });
+        m.dailyTrend = _filledTrend;
         html += '<div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border-primary);">';
-        html += '<div style="color:var(--text-secondary);font-size:13px;margin-bottom:12px;">📈 일별 추이 (답변수 / 평균응답시간)</div>';
-        html += '<div style="display:flex;gap:4px;align-items:flex-end;height:80px;">';
-        var maxReplies = 0; var maxRT = 0;
-        m.dailyTrend.forEach(function(t) { if (t.replies > maxReplies) maxReplies = t.replies; if (t.avgRT > maxRT) maxRT = t.avgRT; });
-        m.dailyTrend.forEach(function(t) {
-          var barH = maxReplies > 0 ? Math.max(4, Math.round(t.replies / maxReplies * 70)) : 4;
+        html += '<div style="margin-top:16px;padding:16px 16px 8px;background:var(--bg-primary);border-radius:12px;min-height:180px;">';
+        html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">';
+        html += '<span style="color:var(--text-secondary);font-size:13px;font-weight:600;">📈 일별 추이</span>';
+        html += '<div style="display:flex;gap:12px;font-size:11px;color:var(--text-secondary);">';
+        html += '<span>🟦 답변수</span><span style="color:#22c55e;">● 응답시간</span></div></div>';
+        
+        var maxReplies = _globalMaxReplies; var maxRT = 0;
+        m.dailyTrend.forEach(function(t) { if (t.avgRT > maxRT) maxRT = t.avgRT; });
+        
+        // 차트 영역
+        html += '<div style="position:relative;height:100px;display:flex;align-items:flex-end;gap:4px;padding-bottom:24px;box-sizing:border-box;">';
+        
+        m.dailyTrend.forEach(function(t, idx) {
+          var barH = maxReplies > 0 ? (t.replies > 0 ? Math.max(8, Math.round(t.replies / maxReplies * 60)) : 2) : 2;
           var rtColor2 = t.avgRT > 120 ? '#ef4444' : t.avgRT > 60 ? '#f59e0b' : '#22c55e';
           var dateLabel = t.date.substring(5);
-          html += '<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;">';
-          html += '<span style="font-size:10px;color:'+rtColor2+';">' + t.avgRT + '분</span>';
-          html += '<div style="width:100%;height:'+barH+'px;background:linear-gradient(180deg,#3b82f6,#1d4ed8);border-radius:3px;" title="'+t.replies+'건"></div>';
-          html += '<span style="font-size:10px;color:var(--text-secondary);">' + dateLabel + '</span>';
-          html += '<span style="font-size:9px;color:var(--text-secondary);">' + t.replies + '건</span>';
+          
+          html += '<div style="flex:1;display:flex;flex-direction:column;align-items:center;position:relative;">';
+          
+          // 막대 위 답변수 (hover 효과용 title만)
+          html += '<div style="width:100%;height:' + barH + 'px;background:linear-gradient(180deg,' + (t.replies > 0 ? '#60a5fa,#3b82f6' : 'rgba(96,165,250,0.15),rgba(59,130,246,0.15)') + ');border-radius:4px 4px 2px 2px;position:relative;cursor:pointer;transition:opacity 0.2s;" title="' + dateLabel + ' | ' + t.replies + '건 | 응답 ' + t.avgRT + '분">';
+          html += '<div style="position:absolute;top:-18px;left:50%;transform:translateX(-50%);font-size:11px;font-weight:700;color:var(--text-primary);white-space:nowrap;">' + (t.replies > 0 ? t.replies : '') + '</div>';
+          html += '</div>';
+          
+          // 응답시간 점 표시 (막대 아래)
+          html += '<div style="width:8px;height:8px;border-radius:50%;background:' + (t.replies > 0 ? rtColor2 : 'transparent') + ';margin-top:4px;border:1.5px solid var(--bg-primary);" title="응답시간 ' + t.avgRT + '분"></div>';
+          
+          // 날짜 라벨 (간격 조절 - 7일 이상이면 짝수만)
+          var showLabel = m.dailyTrend.length <= 7 || idx % 2 === 0 || idx === m.dailyTrend.length - 1;
+          html += '<div style="position:absolute;bottom:-24px;font-size:' + (m.dailyTrend.length > 10 ? '9' : '10') + 'px;color:var(--text-secondary);white-space:nowrap;' + (showLabel ? '' : 'visibility:hidden;') + '">' + dateLabel + '</div>';
+          
           html += '</div>';
         });
-        html += '</div></div>';
+        
+        html += '</div>';
+        
+        // 하단 요약 바
+        var totalReplies = 0; var totalRT = 0; var rtCount = 0;
+        m.dailyTrend.forEach(function(t) { totalReplies += t.replies; if (t.avgRT > 0) { totalRT += t.avgRT; rtCount++; } });
+        var avgRT = rtCount > 0 ? Math.round(totalRT / rtCount) : 0;
+        var rtSumColor = avgRT > 120 ? '#ef4444' : avgRT > 60 ? '#f59e0b' : '#22c55e';
+        
+        html += '<div style="display:flex;justify-content:space-between;margin-top:4px;padding-top:6px;border-top:1px solid var(--border-primary);font-size:11px;color:var(--text-secondary);">';
+        html += '<span>총 <strong style="color:var(--text-primary);">' + totalReplies + '</strong>건</span>';
+        html += '<span>평균 응답 <strong style="color:' + rtSumColor + ';">' + avgRT + '분</strong></span>';
+        html += '</div>';
+        html += '</div>';
       }
 
-      // AI Quality Scores (if available)
+      // AI Quality Scores (from ai-review-summary API)
       if (rd && rd.count > 0) {
-        var avg = { resolution: 0, attitude: 0, accuracy: 0, responsiveness: 0, professionalism: 0, total: 0 };
-        rd.scores.forEach(function(s) {
-          avg.resolution += (s.resolution || 0);
-          avg.attitude += (s.attitude || 0);
-          avg.accuracy += (s.accuracy || 0);
-          avg.responsiveness += (s.responsiveness || 0);
-          avg.professionalism += (s.professionalism || 0);
-          avg.total += (s.totalScore || 0);
-        });
-        var n = rd.count;
-        html += '<div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border-primary);">';
-        html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><span style="color:var(--text-secondary);font-size:13px;">AI 품질 채점 (' + n + '건 분석)</span>';
-        var aiTotal = (avg.total / n);
+        var aiTotal = rd.avgTotal || 0;
         var aiClass = aiTotal >= 20 ? 'score-high' : aiTotal >= 15 ? 'score-mid' : 'score-low';
+        html += '<div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border-primary);">';
+        html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><span style="color:var(--text-secondary);font-size:13px;">AI 품질 채점 (' + rd.count + '건 분석)</span>';
         html += '<span class="score-badge ' + aiClass + '">' + aiTotal.toFixed(1) + '/25</span></div>';
         html += '<div class="radar-scores">';
-        html += radarItem('문제해결 💡', (avg.resolution/n).toFixed(1));
-        html += radarItem('응대태도 🤝', (avg.attitude/n).toFixed(1));
-        html += radarItem('정보정확 ✅', (avg.accuracy/n).toFixed(1));
-        html += radarItem('응답속도 ⏱️', (avg.responsiveness/n).toFixed(1));
-        html += radarItem('전문성 🎓', (avg.professionalism/n).toFixed(1));
+        html += radarItem('문제해결 💡', (rd.avgResolution || 0).toFixed(1));
+        html += radarItem('응대태도 🤝', (rd.avgAttitude || 0).toFixed(1));
+        html += radarItem('정보정확 ✅', (rd.avgAccuracy || 0).toFixed(1));
+        html += radarItem('응답속도 ⏱️', (rd.avgResponsiveness || 0).toFixed(1));
+        html += radarItem('전문성 🎓', (rd.avgProfessionalism || 0).toFixed(1));
         html += '</div></div>';
       } else {
         html += '<div style="margin-top:12px;padding:12px;background:var(--bg-primary);border-radius:8px;color:var(--text-secondary);font-size:13px;text-align:center;">AI 품질 채점 데이터 수집 중...</div>';
@@ -1085,8 +1202,25 @@ function loadAIData() {
     // === Row 1: 핵심 지표 카드 ===
     var totalConv = convs.length;
     var escCount = convs.filter(function(c){ return c.escalated; }).length;
-    var aiResolved = totalConv - escCount;
-    var resolveRate = totalConv > 0 ? Math.round((aiResolved / totalConv) * 100) : 0;
+    // chatGroups 기반 해결률 (v2)
+    var _cgKeys = Object.keys(chatGroups || {});
+    var _cgTotal = 0, _cgResolved = 0, _cgEsc = 0, _cgUncertain = 0;
+    var _skipT = ['greeting','thank_you','csat_feedback','ces_response','sticker'];
+    _cgKeys.forEach(function(ck) {
+      var cg = chatGroups[ck];
+      var hasReal = cg.msgs.some(function(m){ return _skipT.indexOf(m.type) === -1; });
+      if (!hasReal) return;
+      _cgTotal++;
+      if (cg.escalated) { _cgEsc++; return; }
+      var aiM = cg.msgs.filter(function(m){ return m.type==='ai_answer'||m.type==='faq_answer'; });
+      var realM = cg.msgs.filter(function(m){ return _skipT.indexOf(m.type)===-1; }).length;
+      var confM = cg.msgs.filter(function(m){ return m.confidence && m.confidence>0; });
+      var avgC = confM.length>0 ? confM.reduce(function(s,m){return s+m.confidence;},0)/confM.length : 0;
+      if (realM<=2 && avgC>=0.6) _cgResolved++;
+      else _cgUncertain++;
+    });
+    var aiResolved = _cgResolved;
+    var resolveRate = _cgTotal > 0 ? Math.round((_cgResolved / _cgTotal) * 100) : 0;
 
     var confs = convs.filter(function(c){ return c.confidence > 0; }).map(function(c){ return c.confidence; });
     var avgConf = confs.length > 0 ? (confs.reduce(function(a,b){return a+b;},0) / confs.length) : 0;
@@ -1095,7 +1229,7 @@ function loadAIData() {
 
     h += '<div class="grid">';
     h += card('오늘 AI 대화', st.today || 0, '건', 'blue', '금일 처리량', '금일 AI가 처리한 대화 건수');
-    h += card('AI 자동해결률', resolveRate + '%', '', resolveRate >= 70 ? 'green' : resolveRate >= 50 ? 'yellow' : 'red', aiResolved + '/' + totalConv + '건 해결', '에스컬레이션 없이 AI가 직접 해결한 비율. 70% 이상이 목표');
+    h += card('AI 자동해결률', resolveRate + '%', '', resolveRate >= 70 ? 'green' : resolveRate >= 50 ? 'yellow' : 'red', '해결 ' + _cgResolved + ' / 에스컬 ' + _cgEsc + ' / 불확실 ' + _cgUncertain, '채팅 단위 판정: 1~2회+고신뢰=해결, 에스컬=미해결, 재질문+저신뢰=불확실');
     h += card('평균 Confidence', avgConf > 0 ? avgConf.toFixed(2) : 'N/A', '', avgConf >= 0.6 ? 'green' : avgConf >= 0.4 ? 'yellow' : 'red', '높음 ' + highConf + ' | 낮음 ' + lowConf, 'AI 답변 신뢰도. 0.6 이상이 목표');
     h += card('에스컬레이션률', (st.escalatedRate || 0) + '%', '', (st.escalatedRate || 0) > 30 ? 'red' : (st.escalatedRate || 0) > 20 ? 'yellow' : 'green', '목표: 20% 이하', 'AI가 처리 못해 매니저에게 전달된 비율');
     h += '</div>';
@@ -1184,21 +1318,67 @@ function loadAIData() {
       'account':'계정/로그인','howto':'사이트이용/주문방법','agent_request':'상담사 전환요청',
       'complaint':'클레임/불만','greeting':'인사/감사','points':'포인트/쿠폰',
       'sticker':'스티커/이모지','address':'주소/수령','fee':'국제배송비/운임',
-      'escalation':'에스컬레이션','other':'기타','unknown':'미분류'
+      'escalation':'에스컬레이션','other':'기타','unknown':'미분류','payment_mismatch':'결제금액 불일치','price_inquiry':'가격문의','cancel_reason':'취소사유','quote_request':'견적/보가요청','merge_shipping':'합배송요청','file_message':'파일/이미지','shipping_status':'배송추적','order_list':'주문목록조회'
     };
-    var catStats = {};
+    // === 채팅 단위 해결률 계산 (v2) ===
+    // Step 1: chatId별로 메시지 그룹핑
+    var chatGroups = {};
     convs.forEach(function(c) {
+      var cid = c.chatId || ('_' + Math.random());
+      if (!chatGroups[cid]) chatGroups[cid] = { msgs: [], escalated: false, categories: {}, types: {} };
+      chatGroups[cid].msgs.push(c);
+      if (c.escalated) chatGroups[cid].escalated = true;
       var cat = c.category || 'unknown';
       if (typeof cat === 'object') cat = cat.category || 'unknown';
-      if (!catStats[cat]) catStats[cat] = {total:0, resolved:0, escalated:0, confSum:0, confCount:0};
-      catStats[cat].total++;
-      if (!c.escalated) catStats[cat].resolved++;
-      else catStats[cat].escalated++;
-      if (c.confidence && c.confidence > 0) { catStats[cat].confSum += c.confidence; catStats[cat].confCount++; }
+      chatGroups[cid].categories[cat] = (chatGroups[cid].categories[cat] || 0) + 1;
+      chatGroups[cid].types[c.type || '?'] = true;
+    });
+
+    // Step 2: 채팅별 해결 판정
+    var catStats = {};
+    Object.keys(chatGroups).forEach(function(cid) {
+      var g = chatGroups[cid];
+      var mainCat = Object.keys(g.categories).sort(function(a,b){ return g.categories[b]-g.categories[a]; })[0] || 'unknown';
+      // greeting, thank_you, csat_feedback, ces_response 제외
+      var skipTypes = ['greeting','thank_you','csat_feedback','ces_response','sticker'];
+      var hasRealMsg = g.msgs.some(function(m){ return skipTypes.indexOf(m.type) === -1; });
+      if (!hasRealMsg) return;
+
+      if (!catStats[mainCat]) catStats[mainCat] = {total:0, resolved:0, escalated:0, uncertain:0, confSum:0, confCount:0};
+      catStats[mainCat].total++;
+
+      if (g.escalated) {
+        // 에스컬레이션 발생 → 미해결
+        catStats[mainCat].escalated++;
+      } else {
+        var aiMsgs = g.msgs.filter(function(m){ return m.type === 'ai_answer' || m.type === 'faq_answer'; });
+        var msgCount = g.msgs.filter(function(m){ return skipTypes.indexOf(m.type) === -1; }).length;
+        var avgConf = 0;
+        var confMsgs = g.msgs.filter(function(m){ return m.confidence && m.confidence > 0; });
+        if (confMsgs.length > 0) avgConf = confMsgs.reduce(function(s,m){ return s+m.confidence; }, 0) / confMsgs.length;
+
+        if (msgCount <= 2 && avgConf >= 0.6) {
+          // 1~2회 메시지 + 높은 신뢰도 → 해결
+          catStats[mainCat].resolved++;
+        } else if (msgCount <= 2 && avgConf < 0.6 && avgConf > 0) {
+          // 1~2회 메시지 + 낮은 신뢰도 → 불확실
+          catStats[mainCat].uncertain++;
+        } else if (msgCount >= 3) {
+          // 3회 이상 재질문 → 불확실 (완전 해결 아닐 가능성)
+          catStats[mainCat].uncertain++;
+        } else {
+          catStats[mainCat].resolved++;
+        }
+      }
+
+      // 신뢰도 합산
+      g.msgs.forEach(function(m) {
+        if (m.confidence && m.confidence > 0) { catStats[mainCat].confSum += m.confidence; catStats[mainCat].confCount++; }
+      });
     });
 
     // 유사 카테고리 병합
-    var mergeMap = {'cancel':'cancel_refund','fee':'shipping_fee','escalation':'agent_request'};
+    var mergeMap = {'cancel':'cancel_refund','fee':'shipping_fee','escalation':'agent_request','shipping_status':'shipping','order_list':'order','order_status':'order','price_inquiry':'product','cancel_reason':'cancel_refund','file_message':'other'};
     Object.keys(mergeMap).forEach(function(from) {
       var to = mergeMap[from];
       if (catStats[from] && catStats[to]) {
@@ -1218,8 +1398,8 @@ function loadAIData() {
     if (catArr.length > 0) {
       // 전체 요약 카드
       var totalCats = catArr.length;
-      var goodCats = catArr.filter(function(k){return Math.round((catStats[k].resolved/catStats[k].total)*100) >= 70;}).length;
-      var badCats = catArr.filter(function(k){return Math.round((catStats[k].resolved/catStats[k].total)*100) < 50;}).length;
+      var goodCats = catArr.filter(function(k){return catStats[k].total > 0 && Math.round((catStats[k].resolved/catStats[k].total)*100) >= 70;}).length;
+      var badCats = catArr.filter(function(k){return catStats[k].total > 0 && Math.round((catStats[k].resolved/catStats[k].total)*100) < 50;}).length;
 
       h += '<div class="chart-card"><h3>카테고리별 AI 해결률 상세</h3>';
       h += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px;">';
@@ -1235,6 +1415,7 @@ function loadAIData() {
       h += '<th style="padding:8px 6px;color:var(--text-secondary);text-align:center;">총건수</th>';
       h += '<th style="padding:8px 6px;color:var(--text-secondary);text-align:center;">해결</th>';
       h += '<th style="padding:8px 6px;color:var(--text-secondary);text-align:center;">에스컬</th>';
+      h += '<th style="padding:8px 6px;color:var(--text-secondary);text-align:center;">불확실</th>';
       h += '<th style="padding:8px 6px;color:var(--text-secondary);min-width:120px;">해결률</th>';
       h += '<th style="padding:8px 6px;color:var(--text-secondary);text-align:center;">평균신뢰도</th>';
       h += '<th style="padding:8px 6px;color:var(--text-secondary);text-align:center;">상태</th>';
@@ -1254,6 +1435,7 @@ function loadAIData() {
         h += '<td style="padding:8px 6px;text-align:center;color:var(--text-primary);">' + s.total + '</td>';
         h += '<td style="padding:8px 6px;text-align:center;color:#22c55e;">' + s.resolved + '</td>';
         h += '<td style="padding:8px 6px;text-align:center;color:#ef4444;">' + s.escalated + '</td>';
+        h += '<td style="padding:8px 6px;text-align:center;color:#f59e0b;">' + (s.uncertain || 0) + '</td>';
         h += '<td style="padding:8px 6px;"><div style="display:flex;align-items:center;gap:6px;">';
         h += '<div style="flex:1;height:6px;background:var(--bg-primary);border-radius:3px;overflow:hidden;"><div style="width:' + rate + '%;height:100%;background:' + color + ';border-radius:3px;"></div></div>';
         h += '<span style="color:' + color + ';font-weight:700;min-width:36px;text-align:right;">' + rate + '%</span></div></td>';
@@ -1274,7 +1456,7 @@ function loadAIData() {
           var rate = Math.round((s.resolved / s.total) * 100);
           var label = catNameKo[k] || k;
           h += '<div style="font-size:12px;color:var(--text-secondary);padding:2px 0;">';
-          h += '• <strong>' + label + '</strong>: 해결률 ' + rate + '% (' + s.escalated + '/' + s.total + '건 에스컬) → FAQ/시나리오 보강 시급</div>';
+          h += '• <strong>' + label + '</strong>: 해결률 ' + rate + '% (에스컬 ' + s.escalated + ' / 불확실 ' + (s.uncertain||0) + ' / 총 ' + s.total + '건) → FAQ/시나리오 보강 시급</div>';
         });
         h += '</div>';
       }
@@ -1902,168 +2084,146 @@ function loadCSATData() {
   var days = document.getElementById('days').value;
   document.getElementById('csatContent').innerHTML = '<div class="loading">고객 피드백 데이터 로딩 중...</div>';
 
-  Promise.all([
-    fetch('/api/analytics/csat?days=' + days).then(function(r) { return r.json(); }),
-    fetch('/api/analytics/ces').then(function(r) { return r.json(); }).catch(function() { return null; }),
-    fetch('/api/analytics/csat-feedback?days=' + days).then(function(r) { return r.json(); }).catch(function() { return null; })
-  ]).then(function(results) {
-    var csat = results[0];
-    var ces = results[1];
-    var feedback = results[2];
-    cachedData.csat = true;
-
+  fetch('/api/analytics/csat-v2-stats?days=' + days).then(function(r) { return r.json(); })
+  .then(function(csat) {
     var html = '';
 
-    // ========== 상단 요약 카드 ==========
-    html += '<div class="section-title" style="display:flex;justify-content:space-between;align-items:center;">고객 피드백 종합 <button onclick="exportCSATData()" style="background:var(--bg-secondary);border:1px solid var(--border-primary);color:var(--text-secondary);padding:6px 14px;border-radius:8px;cursor:pointer;font-size:12px;">📥 CSV 내보내기</button></div>';
+    // ===== SECTION 1: CSAT 설문 결과 =====
+    html += '<div class="section-title">📋 고객 만족도 설문 (CSAT v2)</div>';
     html += '<div class="grid">';
 
-    if (csat && csat.success && csat.totalResponses > 0) {
-      var starColor = csat.averageScore <= 2 ? 'green' : csat.averageScore <= 3 ? 'yellow' : 'red';
-      var highSat = (csat.distribution ? (csat.distribution[1] || 0) + (csat.distribution[2] || 0) : 0);
-      var lowSat = (csat.distribution ? (csat.distribution[4] || 0) + (csat.distribution[5] || 0) : 0);
-      var satRate = csat.totalResponses > 0 ? Math.round((highSat / csat.totalResponses) * 100) : 0;
+    // 만족률 게이지
+    var rate = csat.satisfactionRate || 0;
+    var rateColor = rate >= 80 ? 'green' : rate >= 50 ? 'yellow' : 'red';
+    html += card('만족률', rate + '%', '', rateColor, '총 ' + csat.total + '건 응답', '만족: ' + csat.satisfied + ' / 불만족: ' + csat.unsatisfied);
+    html += card('이번 달 응답', csat.thisMonth || 0, '건', 'blue', '전체 누적: ' + csat.allFeedback + '건', '');
+    html += card('추첨 대기', csat.recentFeedback ? csat.recentFeedback.filter(function(f){return f.rewardStatus==="pending_draw"}).length : 0, '명', 'purple', '매월 1일 자동 추첨', '1등 10,000P / 2등 5,000P / 3등 1,000P');
 
-      html += card('CSAT 평균', csat.averageScore.toFixed(1), '/ 5', starColor, '1=최고 5=최저', '⭐ 고객 만족도. 1=매우만족, 5=매우불만족. 2.0 이하가 우수.');
-      html += card('총 응답', csat.totalResponses, '건', 'blue', '설문 응답 수', '📮 상담 종료 시 자동 발송된 CSAT 설문 응답 수');
-      html += card('만족률', satRate + '%', '', satRate >= 70 ? 'green' : satRate >= 50 ? 'yellow' : 'red', '1~2점 비율', '😊 매우만족+만족 응답 비율. 70% 이상 목표');
-      html += card('불만족', lowSat, '건', lowSat > 3 ? 'red' : lowSat > 0 ? 'yellow' : 'green', '4~5점 응답', '😟 불만족+매우불만족 응답. 0건 유지 목표');
-    } else {
-      html += card('CSAT', '-', '', 'yellow', '데이터 수집 중', '아직 CSAT 응답이 없습니다');
-    }
+    // 채널별
+    var byType = csat.byType || {};
+    html += card('봇 응대', byType.bot || 0, '건', 'cyan', '', '');
+    html += card('매니저 응대', byType.manager || 0, '건', 'blue', '', '');
 
-    // CES 카드
-    if (ces && ces.success && ces.total > 0) {
-      var cesColor = ces.average >= 4 ? 'green' : ces.average >= 3 ? 'yellow' : 'red';
-      html += card('CES 평균', ces.average.toFixed(1), '/ 5', cesColor, '고객 노력도', '💪 문제 해결 용이성. 1=매우어려움, 5=매우쉬움. 4.0 이상 목표');
-      html += card('CES 응답', ces.total, '건', 'blue', 'CSAT 후속 질문', '📊 CSAT 1~3점 응답 고객에게 추가 질문한 결과');
-    } else {
-      html += card('CES', '-', '', 'yellow', '데이터 수집 중', '💪 CSAT 응답 후 자동 발송. 데이터 축적 중');
-    }
-
+    // 언어별
+    var langs = csat.byLang || {};
+    var langStr = Object.keys(langs).map(function(k) { return k + ': ' + langs[k]; }).join(' / ');
+    html += card('언어별', csat.total || 0, '건', 'purple', langStr, '');
     html += '</div>';
 
-    // ========== 차트 영역 ==========
-    html += '<div class="charts">';
-
-    // CSAT 점수 분포
-    if (csat && csat.success && csat.totalResponses > 0) {
-      var csatLabels = { 1: '1 - 😍 매우만족', 2: '2 - 😊 만족', 3: '3 - 😐 보통', 4: '4 - 😕 불만족', 5: '5 - 😞 매우불만족' };
-      var csatColors = { 1: '#22c55e', 2: '#84cc16', 3: '#eab308', 4: '#f97316', 5: '#ef4444' };
-      var csatMax = 1;
-      for (var s = 1; s <= 5; s++) { if ((csat.distribution[s] || 0) > csatMax) csatMax = csat.distribution[s]; }
-
-      html += '<div class="chart-card"><h3>CSAT 점수 분포</h3><div class="bar-chart">';
-      for (var s = 1; s <= 5; s++) {
-        var cnt = csat.distribution[s] || 0;
-        var pct = Math.round((cnt / csatMax) * 100);
-        html += '<div class="bar-row"><div class="bar-label" style="width:180px;">' + csatLabels[s] + '</div><div class="bar-track"><div class="bar-fill" style="width:' + pct + '%;background:' + csatColors[s] + ';"></div><span class="bar-count">' + cnt + '</span></div></div>';
+    // ===== 카테고리별 불만 분석 =====
+    var cats = csat.categories || {};
+    var catKeys = Object.keys(cats);
+    if (catKeys.length > 0) {
+      html += '<div class="charts">';
+      html += '<div class="chart-card">';
+      html += '<h3>📊 카테고리별 불만 분석</h3>';
+      html += '<div class="bar-chart">';
+      var catNames = {
+        "order_shipping": "주문/배송", "cancel_refund": "취소/환불", "product_quality": "상품 품질",
+        "payment": "결제", "bot_response": "봇 응답", "manager_response": "상담사 응답",
+        "website_app": "웹사이트/앱", "other": "기타"
+      };
+      var maxCat = Math.max.apply(null, catKeys.map(function(k){ return cats[k].total; }));
+      for (var ci = 0; ci < catKeys.length; ci++) {
+        var ck = catKeys[ci];
+        var cv = cats[ck];
+        var pct = maxCat > 0 ? Math.round(cv.total / maxCat * 100) : 0;
+        var barColor = cv.unsatisfied > cv.satisfied ? '#ef4444' : '#22c55e';
+        html += '<div class="bar-row"><div class="bar-label">' + (catNames[ck] || ck) + '</div>';
+        html += '<div class="bar-track"><div class="bar-fill" style="width:' + pct + '%;background:' + barColor + '"></div>';
+        html += '<div class="bar-count">' + cv.total + '건 (불만 ' + cv.unsatisfied + ')</div></div></div>';
       }
-      html += '</div>';
-
-      // 만족/불만족 비율 바
-      var highSat2 = (csat.distribution[1] || 0) + (csat.distribution[2] || 0);
-      var midSat = csat.distribution[3] || 0;
-      var lowSat2 = (csat.distribution[4] || 0) + (csat.distribution[5] || 0);
-      var total2 = csat.totalResponses || 1;
-      html += '<div style="margin-top:16px;">';
-      html += '<div style="display:flex;height:24px;border-radius:12px;overflow:hidden;">';
-      html += '<div style="width:' + Math.round(highSat2/total2*100) + '%;background:#22c55e;" title="만족 ' + highSat2 + '건"></div>';
-      html += '<div style="width:' + Math.round(midSat/total2*100) + '%;background:#eab308;" title="보통 ' + midSat + '건"></div>';
-      html += '<div style="width:' + Math.round(lowSat2/total2*100) + '%;background:#ef4444;" title="불만족 ' + lowSat2 + '건"></div>';
-      html += '</div>';
-      html += '<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-secondary);margin-top:4px;">';
-      html += '<span style="color:#22c55e;">😊 만족 ' + Math.round(highSat2/total2*100) + '%</span>';
-      html += '<span style="color:#eab308;">😐 보통 ' + Math.round(midSat/total2*100) + '%</span>';
-      html += '<span style="color:#ef4444;">😟 불만족 ' + Math.round(lowSat2/total2*100) + '%</span>';
       html += '</div></div>';
-      html += '</div>';
-    }
 
-    // CES 점수 분포
-    if (ces && ces.success && ces.total > 0 && ces.distribution) {
-      var cesLabels = { 1: '1 - 매우 어려움', 2: '2 - 어려움', 3: '3 - 보통', 4: '4 - 쉬움', 5: '5 - 매우 쉬움' };
-      var cesColors = { 1: '#ef4444', 2: '#f97316', 3: '#eab308', 4: '#84cc16', 5: '#22c55e' };
-      var cesMax = 1;
-      for (var cs = 1; cs <= 5; cs++) { if ((ces.distribution[cs] || 0) > cesMax) cesMax = ces.distribution[cs]; }
-
-      html += '<div class="chart-card"><h3>CES 점수 분포 (고객 노력도)</h3><div class="bar-chart">';
-      for (var cs = 1; cs <= 5; cs++) {
-        var cnt = ces.distribution[cs] || 0;
-        var pct = Math.round((cnt / cesMax) * 100);
-        html += '<div class="bar-row"><div class="bar-label" style="width:180px;">' + cesLabels[cs] + '</div><div class="bar-track"><div class="bar-fill" style="width:' + pct + '%;background:' + cesColors[cs] + ';"></div><span class="bar-count">' + cnt + '</span></div></div>';
+      // 상세 사유
+      var reasons = csat.reasons || {};
+      var reasonKeys = Object.keys(reasons).sort(function(a,b){ return reasons[b] - reasons[a]; });
+      html += '<div class="chart-card">';
+      html += '<h3>🔍 불만족 상세 사유</h3>';
+      var reasonNames = {
+        "slow_response": "응답 느림", "wrong_info": "잘못된 정보", "not_resolved": "문제 미해결",
+        "bot_confusing": "봇 답변 혼란", "rude_attitude": "불친절", "too_many_transfers": "잦은 전환",
+        "long_shipping": "배송 지연", "refund_delay": "환불 지연", "other": "기타"
+      };
+      if (reasonKeys.length > 0) {
+        html += '<ul class="keyword-list">';
+        for (var ri = 0; ri < reasonKeys.length; ri++) {
+          html += '<li><span class="kw">' + (reasonNames[reasonKeys[ri]] || reasonKeys[ri]) + '</span><span class="kc">' + reasons[reasonKeys[ri]] + '건</span></li>';
+        }
+        html += '</ul>';
+      } else {
+        html += '<div style="color:var(--text-muted);font-size:13px;">아직 사유 데이터가 없습니다.</div>';
       }
-      html += '</div>';
-      html += '<div style="margin-top:8px;font-size:12px;color:var(--text-secondary);">CES는 CSAT 1~3점 응답 고객에게 "문제 해결이 쉬웠나요?" 추가 질문. 높을수록 좋음.</div>';
-      html += '</div>';
+      html += '</div></div>';
     }
 
-    html += '</div>';
-
-    // ========== 불만족 사유 (csat-feedback) ==========
-    if (feedback && feedback.success && feedback.total > 0) {
-      html += '<div style="padding:0 32px 16px;"><div class="chart-card">';
-      html += '<h3>😟 불만족 고객 피드백 (' + feedback.total + '건)</h3>';
-      html += '<div style="max-height:400px;overflow-y:auto;">';
-      (feedback.feedback || []).forEach(function(fb) {
-        var time = fb.timestamp ? new Date(fb.timestamp).toLocaleString('ko-KR', {timeZone:'Asia/Seoul', month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit'}) : '-';
-        var scoreColor = fb.csatScore >= 4 ? '#ef4444' : '#f97316';
-        html += '<div style="padding:12px;border-bottom:1px solid var(--border-primary);">';
-        html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">';
-        html += '<div style="display:flex;align-items:center;gap:8px;">';
-        html += '<span style="padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;color:#fff;background:' + scoreColor + ';">CSAT ' + (fb.csatScore || '?') + '</span>';
-        html += '<span style="font-size:11px;color:var(--text-secondary);">' + time + '</span>';
-        html += '</div></div>';
-        html += '<div style="font-size:13px;color:var(--text-primary);line-height:1.5;">"' + (fb.reason || fb.feedback || '사유 미입력') + '"</div>';
+    // ===== 월별 트렌드 =====
+    var monthly = csat.monthly || {};
+    var monKeys = Object.keys(monthly).sort();
+    if (monKeys.length > 0) {
+      html += '<div class="charts"><div class="chart-card full">';
+      html += '<h3>📈 월별 만족도 트렌드</h3>';
+      html += '<div style="display:flex;gap:16px;align-items:flex-end;height:120px;">';
+      var maxMon = Math.max.apply(null, monKeys.map(function(k){ return monthly[k].total; }));
+      for (var mi = 0; mi < monKeys.length; mi++) {
+        var mk = monKeys[mi];
+        var mv = monthly[mk];
+        var mRate = mv.total > 0 ? Math.round(mv.satisfied / mv.total * 100) : 0;
+        var barH = maxMon > 0 ? Math.max(Math.round(mv.total / maxMon * 100), 10) : 10;
+        var mColor = mRate >= 80 ? '#22c55e' : mRate >= 50 ? '#eab308' : '#ef4444';
+        html += '<div style="flex:1;text-align:center;">';
+        html += '<div style="font-size:11px;color:var(--text-muted);margin-bottom:4px;">' + mRate + '%</div>';
+        html += '<div style="height:' + barH + 'px;background:' + mColor + ';border-radius:4px;margin:0 auto;width:80%;"></div>';
+        html += '<div style="font-size:10px;color:var(--text-secondary);margin-top:4px;">' + mk.substring(5) + '월</div>';
+        html += '<div style="font-size:10px;color:var(--text-muted);">' + mv.total + '건</div>';
         html += '</div>';
-      });
+      }
       html += '</div></div></div>';
     }
 
-    // ========== 최근 CSAT 응답 타임라인 ==========
-    if (csat && csat.success && csat.recent && csat.recent.length > 0) {
-      html += '<div style="padding:0 32px 16px;"><div class="chart-card">';
-      html += '<h3>📋 최근 CSAT 응답</h3>';
-      html += '<div style="max-height:400px;overflow-y:auto;">';
-      csat.recent.forEach(function(r) {
-        var time = r.timestamp ? new Date(r.timestamp).toLocaleString('ko-KR', {timeZone:'Asia/Seoul', month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit'}) : '-';
-        var emoji = r.score === 1 ? '😍' : r.score === 2 ? '😊' : r.score === 3 ? '😐' : r.score === 4 ? '😕' : '😞';
-        var bgColor = r.score <= 2 ? 'rgba(34,197,94,0.08)' : r.score === 3 ? 'rgba(234,179,8,0.08)' : 'rgba(239,68,68,0.08)';
-        var borderColor = r.score <= 2 ? '#22c55e' : r.score === 3 ? '#eab308' : '#ef4444';
-        html += '<div style="padding:10px 12px;margin-bottom:4px;background:' + bgColor + ';border-left:3px solid ' + borderColor + ';border-radius:0 8px 8px 0;">';
-        html += '<div style="display:flex;justify-content:space-between;align-items:center;">';
-        html += '<span style="font-size:20px;">' + emoji + ' ' + r.score + '점</span>';
-        html += '<span style="font-size:11px;color:var(--text-secondary);">' + time + '</span>';
-        html += '</div>';
-        html += '</div>';
-      });
-      html += '</div></div></div>';
+
+    // ===== 추첨 현황 =====
+    var draws = csat.draws || [];
+    if (draws.length > 0) {
+      html += '<div class="section-title" style="margin-top:24px;">🎁 월별 추첨 현황</div>';
+      html += '<div class="charts"><div class="chart-card full">';
+      html += '<table><thead><tr><th>월</th><th>추첨일</th><th>참여자</th><th>당첨자</th></tr></thead><tbody>';
+      for (var di = 0; di < draws.length; di++) {
+        var dv = draws[di];
+        var winStr = (dv.winners || []).map(function(w) { return w.rank + ' ' + w.name + ' (' + w.points + 'P)'; }).join(', ');
+        html += '<tr><td>' + dv.month + '</td><td>' + (dv.date || '-') + '</td><td>' + dv.totalCandidates + '명</td><td>' + (winStr || '-') + '</td></tr>';
+      }
+      html += '</tbody></table></div></div>';
     }
 
-    // ========== CES 최근 응답 ==========
-    if (ces && ces.success && ces.recent && ces.recent.length > 0) {
-      html += '<div style="padding:0 32px 16px;"><div class="chart-card">';
-      html += '<h3>💪 최근 CES 응답</h3>';
-      html += '<div style="max-height:300px;overflow-y:auto;">';
-      ces.recent.forEach(function(r) {
-        var time = r.timestamp ? new Date(r.timestamp).toLocaleString('ko-KR', {timeZone:'Asia/Seoul', month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit'}) : '-';
-        var emoji = r.score >= 4 ? '👍' : r.score === 3 ? '🤷' : '👎';
-        var bgColor = r.score >= 4 ? 'rgba(34,197,94,0.08)' : r.score === 3 ? 'rgba(234,179,8,0.08)' : 'rgba(239,68,68,0.08)';
-        html += '<div style="padding:8px 12px;margin-bottom:4px;background:' + bgColor + ';border-radius:8px;display:flex;justify-content:space-between;align-items:center;">';
-        html += '<span>' + emoji + ' ' + r.score + '점 (1=어려움 ~ 5=쉬움)</span>';
-        html += '<span style="font-size:11px;color:var(--text-secondary);">' + time + '</span>';
-        html += '</div>';
-      });
-      html += '</div></div></div>';
-    }
-
-    // ========== 빈 상태 ==========
-    if (!csat || !csat.success || csat.totalResponses === 0) {
-      html += '<div style="padding:32px;text-align:center;">';
-      html += '<div style="font-size:48px;margin-bottom:16px;">📊</div>';
-      html += '<div style="color:var(--text-secondary);font-size:16px;">아직 고객 피드백 데이터가 없습니다</div>';
-      html += '<div style="color:var(--text-secondary);font-size:13px;margin-top:8px;">상담 종료 시 자동 발송되는 CSAT 설문에 고객이 응답하면 여기에 표시됩니다</div>';
-      html += '</div>';
+    // ===== 최근 피드백 목록 =====
+    var recent = csat.recentFeedback || [];
+    if (recent.length > 0) {
+      html += '<div class="section-title" style="margin-top:24px;">📝 최근 피드백</div>';
+      html += '<div style="padding:0 32px 16px;">';
+      html += '<table><thead><tr><th>일시</th><th>고객</th><th>만족</th><th>카테고리</th><th>사유</th><th>코멘트</th><th>추첨</th></tr></thead><tbody>';
+      for (var fi = 0; fi < recent.length; fi++) {
+        var fv = recent[fi];
+        var satIcon = fv.satisfied ? '😊' : '😞';
+        var satStyle = fv.satisfied ? 'color:#22c55e' : 'color:#ef4444';
+        var _custName = fv.customerName || fv.email || fv.veaslyId || fv.userId || '-';
+        if (_custName.length > 20) _custName = _custName.substring(0, 18) + '..';
+        var _custBadge = fv.isMember ? '<span style="background:#7c3aed;color:#fff;padding:1px 5px;border-radius:4px;font-size:9px;margin-left:4px;">회원</span>' : '<span style="background:#6b7280;color:#fff;padding:1px 5px;border-radius:4px;font-size:9px;margin-left:4px;">비회원</span>';
+        var _comment = (fv.comment || '-');
+        if (_comment.length > 30) _comment = _comment.substring(0, 28) + '..';
+        var _reasonStr = (fv.reasons || []).join(', ') || '-';
+        var _drawBadge = fv.rewardStatus === 'won' ? '<span style="color:#f59e0b">🏆 당첨</span>' : fv.rewardStatus === 'pending_draw' ? '⏳ 대기' : fv.rewardStatus || '-';
+        html += '<tr>';
+        html += '<td style="font-size:11px;white-space:nowrap;">' + new Date(fv.submittedAt).toLocaleString('ko-KR', {month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}) + '</td>';
+        html += '<td style="font-size:11px;">' + _custName + _custBadge + '</td>';
+        html += '<td style="' + satStyle + ';font-weight:600;">' + satIcon + '</td>';
+        html += '<td><span style="padding:2px 8px;border-radius:8px;font-size:11px;background:rgba(99,102,241,0.15);color:#818cf8;">' + (fv.category || '-') + '</span></td>';
+        html += '<td style="font-size:11px;">' + _reasonStr + '</td>';
+        html += '<td style="font-size:11px;color:var(--text-secondary);">' + _comment + '</td>';
+        html += '<td style="font-size:11px;">' + _drawBadge + '</td>';
+        html += '</tr>';
+      }
+      html += '</tbody></table></div>';
     }
 
     document.getElementById('csatContent').innerHTML = html;
@@ -2072,7 +2232,12 @@ function loadCSATData() {
   });
 }
 
-// ===== HELPERS =====
+function tdScore(val) {
+  var color = val >= 4 ? '#22c55e' : val >= 3 ? '#eab308' : '#ef4444';
+  return '<td style="color:' + color + ';font-weight:600;">' + val + '</td>';
+}
+
+
 function card(label, value, unit, color, sub, detail) {
     var colors = { green: '#10b981', blue: '#3b82f6', red: '#ef4444', yellow: '#f59e0b', purple: '#8b5cf6' };
     var detailHtml = detail ? '<div class="card-detail">' + detail + '</div>' : '';
@@ -2296,11 +2461,13 @@ function loadCSScoreData() {
   var days = document.getElementById('days').value;
   Promise.all([
     fetch('/api/analytics/cs-score-metrics?days=' + days).then(function(r){ return r.json(); }),
-    fetch('/api/analytics/manager-performance?days=' + days).then(function(r){ return r.json(); }).catch(function(){ return null; })
+    fetch('/api/analytics/manager-performance?days=' + days).then(function(r){ return r.json(); }).catch(function(){ return null; }),
+    fetch('/api/analytics/csat-v2-stats?days=' + days).then(function(r){ return r.json(); }).catch(function(){ return null; })
   ])
     .then(function(results) {
       var d = results[0];
       var mgrPerf = results[1];
+      var csatV2CS = results[2];
       if (!d.success) return;
       var container = document.getElementById('csscoreContent');
       // Build manager name map
@@ -2408,7 +2575,42 @@ function loadCSScoreData() {
         html += '</div></div>';
       }
 
-      // CES Detail
+      // CSAT v2 + CES Detail
+      // --- CSAT v2 상세 ---
+      html += '<div style="background:var(--bg-secondary);border-radius:12px;padding:20px;margin-bottom:16px;border:1px solid var(--border-primary)">';
+      html += '<div style="font-size:14px;font-weight:600;color:var(--text-primary);margin-bottom:12px">고객 만족도 설문 (CSAT v2)</div>';
+      if (csatV2CS && csatV2CS.total > 0) {
+        var _cv2Rate = csatV2CS.satisfactionRate || 0;
+        var _cv2Color = _cv2Rate >= 80 ? '#10b981' : _cv2Rate >= 50 ? '#f59e0b' : '#ef4444';
+        html += '<div style="display:flex;gap:20px">';
+        html += '<div style="flex:1;text-align:center"><div style="font-size:36px;font-weight:700;color:' + _cv2Color + '">' + _cv2Rate + '%</div><div style="font-size:11px;color:var(--text-secondary)">만족률</div></div>';
+        html += '<div style="flex:1;text-align:center"><div style="font-size:36px;font-weight:700;color:#22c55e">' + (csatV2CS.satisfied||0) + '</div><div style="font-size:11px;color:var(--text-secondary)">만족</div></div>';
+        html += '<div style="flex:1;text-align:center"><div style="font-size:36px;font-weight:700;color:#ef4444">' + (csatV2CS.unsatisfied||0) + '</div><div style="font-size:11px;color:var(--text-secondary)">불만족</div></div>';
+        html += '<div style="flex:1;text-align:center"><div style="font-size:36px;font-weight:700;color:#3b82f6">' + (csatV2CS.total||0) + '</div><div style="font-size:11px;color:var(--text-secondary)">총 응답</div></div>';
+        html += '</div>';
+        // 카테고리별 불만족 분석
+        var _cats = csatV2CS.categories || {};
+        var _catKeys = Object.keys(_cats);
+        if (_catKeys.length > 0) {
+          html += '<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border-primary)">';
+          html += '<div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px">카테고리별 분석</div>';
+          html += '<div style="display:flex;gap:8px;flex-wrap:wrap">';
+          for (var _ci=0; _ci<_catKeys.length; _ci++) {
+            var _ck = _catKeys[_ci]; var _cv = _cats[_ck];
+            html += '<span style="padding:4px 10px;border-radius:12px;font-size:11px;background:rgba(99,102,241,0.15);color:#818cf8">' + _ck + ' ' + _cv.total + '건</span>';
+          }
+          html += '</div></div>';
+        }
+      } else {
+        html += '<div style="text-align:center;padding:20px;color:var(--text-secondary)">';
+        html += '<div style="font-size:36px;margin-bottom:8px">📋</div>';
+        html += '<div style="font-size:14px">설문 응답 수집 중</div>';
+        html += '<div style="font-size:12px;margin-top:4px">채팅 종료 시 CSAT v2 설문이 자동 발송됩니다</div>';
+        html += '</div>';
+      }
+      html += '</div>';
+
+      // --- CES 축소 표시 ---
       html += '<div style="background:var(--bg-secondary);border-radius:12px;padding:20px;margin-bottom:16px;border:1px solid var(--border-primary)">';
       html += '<div style="font-size:14px;font-weight:600;color:var(--text-primary);margin-bottom:12px">고객 노력 점수 (CES)</div>';
       if (d.ces && d.ces.totalResponses > 0) {
