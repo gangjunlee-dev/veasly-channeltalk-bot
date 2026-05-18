@@ -89,8 +89,8 @@ function getHolidayNotice(lang) {
   var m = {
     "zh-TW": "\ud83c\udfd6\ufe0f 今天是韓國國定假日（" + tw + "），客服人員休假中。\nAI小幫手可以先為您服務！",
     "ko": "\ud83c\udfd6\ufe0f 오늘은 " + kr + "(공휴일)으로 상담원이 휴무입니다.\nAI가 먼저 도와드릴게요!",
-    "en": "\ud83c\udfd6\ufe0f Today is a Korean national holiday (" + kr + "). Our agents are off.\nAI assistant is here to help!",
-    "ja": "\ud83c\udfd6\ufe0f 本日は韓国の祝日（" + kr + "）のため、オペレーターはお休みです。\nAIがまずお手伝いします！"
+    "en": "\ud83c\udfd6\ufe0f Today is a Korean national holiday (" + tw + "). Our agents are off.\nAI assistant is here to help!",
+    "ja": "\ud83c\udfd6\ufe0f 本日は韓国の祝日（" + tw + "）のため、オペレーターはお休みです。\nAIがまずお手伝いします！"
   };
   return m[lang] || m["zh-TW"];
 }
