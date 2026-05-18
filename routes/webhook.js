@@ -945,27 +945,9 @@ router.post('/channeltalk', async function(req, res) {
     // Merge shipping -> AI policy guide (no escalation, direct mypage link)
     if (isMergeShippingRequest(userText)) {
       var mergeGuide = {
-        "zh-TW": "關於合併配送，您可以在「我的頁面」直接申請喔！\n\n" +
-          "申請連結：https://www.veasly.com/tw/my-page/orders/combined-shipping/request\n\n" +
-          "請注意以下幾點：\n" +
-          "- 必須在訂單內仍有商品尚未抵達韓國倉庫時才能申請\n" +
-          "- 若所有商品都已到倉，會自動進入包裝流程，無法再申請合併\n" +
-          "- 合併後運費會依實際重量、材積重量與包裹尺寸重新計算，不一定比分開寄送便宜\n" +
-          "- 部分大型、易碎或特殊包裝商品可能無法合併\n\n" +
-          "如有其他問題，歡迎隨時詢問！",
-        "ko": "합배송은 마이페이지에서 직접 신청할 수 있어요!\n\n" +
-          "신청 링크: https://www.veasly.com/tw/my-page/orders/combined-shipping/request\n\n" +
-          "주의사항:\n" +
-          "- 주문 내 상품이 아직 한국 창고에 도착하지 않았을 때만 신청 가능\n" +
-          "- 모든 상품이 창고에 도착하면 자동으로 포장 절차에 들어가 합배송 불가\n" +
-          "- 합배송 후 운임은 실제 중량/부피/사이즈로 재계산, 반드시 저렴하지 않을 수 있음\n" +
-          "- 대형/파손 위험/특수 포장 상품은 합배송 불가할 수 있음",
-        "en": "You can request combined shipping from My Page!\n\n" +
-          "Link: https://www.veasly.com/tw/my-page/orders/combined-shipping/request\n\n" +
-          "Notes:\n" +
-          "- Only available while at least one item has not yet arrived at the Korea warehouse\n" +
-          "- Once all items arrive, packaging begins automatically\n" +
-          "- Fees are recalculated based on actual weight and dimensions - not always cheaper",
+        "zh-TW": "合併配送可以在這裡直接申請喔～\nhttps://www.veasly.com/tw/my-page/orders/combined-shipping/request\n\n只要訂單裡還有商品沒到韓國倉庫就能申請！合併後運費會重新計算，多退少補。\n⚠️ 免運訂單和一般訂單不能合併，預約配送也不能跟一般訂單合併喔。\n\n還有其他問題嗎？隨時問我～",
+        "ko": "합배송은 여기서 바로 신청할 수 있어요～\nhttps://www.veasly.com/tw/my-page/orders/combined-shipping/request\n\n창고에 아직 안 도착한 상품이 있으면 신청 가능! 합배송 후 운임은 재계산돼서 차액은 환불/추가결제 처리됩니다.\n⚠️ 무료배송+일반배송, 예약배송+일반배송은 합배송 불가예요.\n\n다른 궁금한 거 있으면 말씀해주세요~",
+        "en": "You can request combined shipping here~\nhttps://www.veasly.com/tw/my-page/orders/combined-shipping/request\n\nAvailable as long as at least one item hasn't arrived at our Korea warehouse yet! Fees are recalculated after combining - difference will be refunded or charged.\n⚠️ Free-shipping orders can't be combined with regular orders.\n\nAnything else I can help with?",
         "ja": "合併配送はマイページから申請できます！\n\n" +
           "リンク: https://www.veasly.com/tw/my-page/orders/combined-shipping/request\n\n" +
           "注意：商品が韓国倉庫に届く前のみ申請可能です。送料は再計算されます。"
