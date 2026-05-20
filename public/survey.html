@@ -146,9 +146,9 @@ textarea:focus { outline: none; border-color: #7C3AED; }
 
 <script>
 var params = new URLSearchParams(window.location.search);
-var chatId = params.get('cid') || '';
+var chatId = params.get('cid') || params.get('c') || '';
 var userId = params.get('uid') || '';
-var lang = params.get('lang') || 'zh-TW';
+var lang = params.get('lang') || params.get('l') || 'zh-TW';
 var customerName = decodeURIComponent(params.get('name') || '');
 var type = params.get('type') || 'bot';
 var ts = parseInt(params.get('ts') || '0');
