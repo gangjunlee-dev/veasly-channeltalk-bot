@@ -156,6 +156,13 @@ var isMember = params.get('member') === '1';
 var userEmail = decodeURIComponent(params.get('email') || '');
 var veaslyId = params.get('vid') || '';
 
+// 설문 페이지 열람 추적 비콘 (Phase 1)
+try {
+  if (chatId) {
+    fetch('/api/csat/track?c=' + encodeURIComponent(chatId) + '&l=' + encodeURIComponent(lang) + '&ts=' + ts, { method: 'GET', keepalive: true }).catch(function() {});
+  }
+} catch(e) {}
+
 var i18n = {
   'zh-TW': {
     promoTitle: '🎁 填寫問卷，參加每月抽獎！',
@@ -405,8 +412,16 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 });
 
+var SUBMIT_ERR_MSG = {
+  'zh-TW': '提交失敗，請檢查網路後再試一次 🙏',
+  'ko': '제출에 실패했습니다. 네트워크 확인 후 다시 시도해주세요 🙏',
+  'en': 'Submission failed. Please check your connection and try again 🙏',
+  'ja': '送信に失敗しました。通信環境を確認して再度お試しください 🙏'
+};
+
 function submitSurvey() {
   var commentBox = isSatisfied ? document.getElementById('comment-box-good') : document.getElementById('comment-box-bad');
+  var submitBtn = document.getElementById(isSatisfied ? 'submit-good' : 'submit-bad');
   var data = {
     chatId: chatId,
     userId: userId,
@@ -424,26 +439,42 @@ function submitSurvey() {
     customerName: customerName
   };
 
-  showStep('step4');
-  if (isSatisfied) {
-    document.getElementById('ty-title').textContent = t.tySatTitle;
-    document.getElementById('ty-sub').textContent = t.tySatSub;
-  } else {
-    document.getElementById('ty-title').textContent = t.tyTitle;
-    document.getElementById('ty-sub').textContent = t.tySub;
-  }
+  // 전송 중 표시 (중복 클릭 방지)
+  var origText = submitBtn.textContent;
+  submitBtn.disabled = true;
+  submitBtn.textContent = '⏳';
 
   fetch('/api/csat/submit', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data)
-  }).then(function(res) { return res.json(); })
-    .then(function(result) {
-      if (result.duplicate) {
-        showStep('step-already');
-      }
+  }).then(function(res) {
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return res.json();
     })
-    .catch(function(e) { console.error('Submit error:', e); });
+    .then(function(result) {
+      if (result && result.duplicate) {
+        showStep('step-already');
+        return;
+      }
+      if (!result || !result.ok) throw new Error('save failed');
+      // 저장 성공이 확인된 후에만 감사 화면 표시
+      if (isSatisfied) {
+        document.getElementById('ty-title').textContent = t.tySatTitle;
+        document.getElementById('ty-sub').textContent = t.tySatSub;
+      } else {
+        document.getElementById('ty-title').textContent = t.tyTitle;
+        document.getElementById('ty-sub').textContent = t.tySub;
+      }
+      showStep('step4');
+    })
+    .catch(function(e) {
+      // 실패 시: 가짜 감사 화면 대신 에러를 보여주고 재시도 허용
+      console.error('Submit error:', e);
+      submitBtn.disabled = false;
+      submitBtn.textContent = origText;
+      alert(SUBMIT_ERR_MSG[lang] || SUBMIT_ERR_MSG['zh-TW']);
+    });
 }
 </script>
 </body>

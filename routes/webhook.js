@@ -554,7 +554,10 @@ router.post('/channeltalk', async function(req, res) {
           if (pendingEscalations[chatId]) { cleanWaitingMsg(chatId);
       delete pendingEscalations[chatId]; }
         }
-        if (mgrText && mgrText.length > 10 && aiEngine.isReady()) {
+        // [② 2026-05-22 비활성화] 매니저 메시지 KB 자동적재 중단.
+        // 검증 없는 일회성/고객특정 발언이 RAG '참고자료'를 오염시킴(원인 D).
+        // 재활성화: 아래 조건의 'false &&' 제거. (기존 manager 네임스페이스 누적분은 별도 정리 필요)
+        if (false && mgrText && mgrText.length > 10 && aiEngine.isReady()) {
           aiEngine.addToKnowledgeBase(
             "mgr_" + chatId + "_" + Date.now(),
             mgrText,

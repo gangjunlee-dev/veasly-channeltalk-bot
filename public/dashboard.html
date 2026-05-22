@@ -2084,9 +2084,27 @@ function loadCSATData() {
   var days = document.getElementById('days').value;
   document.getElementById('csatContent').innerHTML = '<div class="loading">고객 피드백 데이터 로딩 중...</div>';
 
-  fetch('/api/analytics/csat-v2-stats?days=' + days).then(function(r) { return r.json(); })
-  .then(function(csat) {
+  Promise.all([
+    fetch('/api/analytics/csat-v2-stats?days=' + days).then(function(r) { return r.json(); }),
+    fetch('/api/csat/funnel').then(function(r) { return r.json(); }).catch(function() { return null; })
+  ])
+  .then(function(results) {
+    var csat = results[0];
+    var funnel = results[1];
     var html = '';
+
+    // ===== SECTION 0: 설문 발송 깔때기 (Funnel) =====
+    if (funnel) {
+      html += '<div class="section-title">📨 설문 발송 → 열람 → 제출 깔때기</div>';
+      html += '<div class="grid">';
+      html += card('설문 발송(누적)', funnel.sentTotal || 0, '건', 'blue', '채팅에 설문 링크 발송', '채팅에 설문 링크를 보낸 누적 건수입니다.');
+      html += card('설문 열람', funnel.openedUnique || 0, '명', 'cyan', '집계 시작 2026-05-22', '설문 페이지를 실제로 연 고유 고객 수입니다.');
+      html += card('설문 제출', funnel.submittedUnique || 0, '명', 'green', '응답 완료', '설문을 끝까지 제출한 고유 고객 수입니다.');
+      html += '</div>';
+      html += '<div style="padding:0 32px 8px;color:var(--text-muted);font-size:12px;">※ 집계 시작일: 2026-05-22 (KST). 이 날짜 이후 발송분부터 열람·제출 비율이 의미를 가집니다.</div>';
+      html += '<div style="padding:0 32px 16px;"><button onclick="toggleCSATRecipients()" style="padding:8px 14px;background:#7c3aed;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:13px;">📋 수신자 ' + (funnel.sentTotal || 0) + '건 상세 보기 (감사)</button></div>';
+      html += '<div id="csatRecipients" style="display:none;"></div>';
+    }
 
     // ===== SECTION 1: CSAT 설문 결과 =====
     html += '<div class="section-title">📋 고객 만족도 설문 (CSAT v2)</div>';
@@ -2894,6 +2912,107 @@ function exportCSATData() {
     });
     downloadCSV('CSAT_' + new Date().toISOString().slice(0,10) + '.csv', headers, rows);
   });
+}
+
+// ===== CSAT 수신자 상세 (감사용 표) =====
+var _recipData = null;
+
+function toggleCSATRecipients() {
+  var box = document.getElementById('csatRecipients');
+  if (!box) return;
+  if (box.style.display === 'none' || !box.style.display) {
+    box.style.display = 'block';
+    if (!_recipData) loadCSATRecipients();
+  } else {
+    box.style.display = 'none';
+  }
+}
+
+function loadCSATRecipients() {
+  var box = document.getElementById('csatRecipients');
+  box.innerHTML = '<div class="loading">수신자 데이터 로딩 중...</div>';
+  fetch('/api/csat/recipients').then(function(r) { return r.json(); })
+  .then(function(d) {
+    _recipData = d;
+    var s = d.summary || {};
+    var html = '';
+    html += '<div style="padding:8px 32px;font-size:12px;color:var(--text-muted);">집계 시작일: ' + (d.aggregationStartDate || '-') + ' (KST) · 발송 ' + s.total + '건 (건너뜀 ' + s.skipped + ' / 발송 ' + s.sent + ' / 열람 ' + s.opened + ' / 제출 ' + s.submitted + ') · 이름·이메일 보강 ' + (d.enrichedCount || 0) + '건</div>';
+    html += '<div style="display:flex;gap:8px;flex-wrap:wrap;padding:0 32px 8px;align-items:center;">';
+    html += '<select id="recipStatus" onchange="renderRecipTable()" style="padding:6px;border-radius:6px;"><option value="">상태 전체</option><option value="submitted">제출</option><option value="opened">열람</option><option value="sent">발송</option><option value="skipped">건너뜀</option></select>';
+    html += '<select id="recipSource" onchange="renderRecipTable()" style="padding:6px;border-radius:6px;"><option value="">source 전체</option></select>';
+    html += '<input id="recipSearch" oninput="renderRecipTable()" placeholder="chatId/이름/이메일 검색" style="padding:6px;border-radius:6px;flex:1;min-width:160px;"/>';
+    html += '<button onclick="exportRecipientsCSV()" style="padding:6px 12px;background:#7c3aed;color:#fff;border:none;border-radius:6px;cursor:pointer;">CSV 내보내기</button>';
+    html += '</div>';
+    html += '<div id="recipTableWrap" style="padding:0 32px 24px;"></div>';
+    box.innerHTML = html;
+    var sources = {};
+    d.rows.forEach(function(r) { sources[r.source] = 1; });
+    var sel = document.getElementById('recipSource');
+    Object.keys(sources).sort().forEach(function(sv) {
+      var o = document.createElement('option'); o.value = sv; o.textContent = sv; sel.appendChild(o);
+    });
+    renderRecipTable();
+  })
+  .catch(function(e) {
+    box.innerHTML = '<div class="loading" style="color:#ef4444;">오류: ' + e.message + '</div>';
+  });
+}
+
+function _recipFiltered() {
+  if (!_recipData) return [];
+  var st = (document.getElementById('recipStatus') || {}).value || '';
+  var src = (document.getElementById('recipSource') || {}).value || '';
+  var q = ((document.getElementById('recipSearch') || {}).value || '').toLowerCase().trim();
+  return _recipData.rows.filter(function(r) {
+    if (st && r.status !== st) return false;
+    if (src && r.source !== src) return false;
+    if (q && ((r.chatId || '') + ' ' + (r.customerName || '') + ' ' + (r.email || '')).toLowerCase().indexOf(q) < 0) return false;
+    return true;
+  });
+}
+
+function renderRecipTable() {
+  var wrap = document.getElementById('recipTableWrap');
+  if (!wrap) return;
+  var rows = _recipFiltered();
+  var stColor = { submitted:'#22c55e', opened:'#06b6d4', sent:'#3b82f6', skipped:'#6b7280' };
+  var stLabel = { submitted:'제출', opened:'열람', sent:'발송', skipped:'건너뜀' };
+  var fmt = function(v) { return v ? new Date(v).toLocaleString('ko-KR',{timeZone:'Asia/Seoul',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : '-'; };
+  var miss = '<span style="color:var(--text-muted)">미수집</span>';
+  var h = '<div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;">' + rows.length + '건 표시</div>';
+  h += '<table><thead><tr><th>발송시각</th><th>상태</th><th>source</th><th>고객명</th><th>이메일</th><th>점수</th><th>열람</th><th>제출시각</th><th>경로</th><th>chatId</th></tr></thead><tbody>';
+  rows.forEach(function(r) {
+    h += '<tr>';
+    h += '<td style="font-size:11px;white-space:nowrap;">' + fmt(r.sentAt) + '</td>';
+    h += '<td><span style="padding:2px 8px;border-radius:8px;font-size:11px;background:' + (stColor[r.status]||'#6b7280') + ';color:#fff;">' + (stLabel[r.status]||r.status) + '</span></td>';
+    h += '<td style="font-size:11px;">' + r.source + '</td>';
+    h += '<td style="font-size:11px;">' + (r.customerName || miss) + '</td>';
+    h += '<td style="font-size:11px;">' + (r.email || miss) + '</td>';
+    h += '<td style="font-size:11px;">' + (r.score != null ? r.score : '-') + '</td>';
+    h += '<td style="font-size:11px;">' + (r.opened ? 'O' : '-') + '</td>';
+    h += '<td style="font-size:11px;white-space:nowrap;">' + fmt(r.submittedAt) + '</td>';
+    h += '<td style="font-size:11px;">' + (r.submitChannel || '-') + '</td>';
+    h += '<td style="font-size:10px;color:var(--text-muted);">' + r.chatId + '</td>';
+    h += '</tr>';
+  });
+  h += '</tbody></table>';
+  if (rows.length === 0) h += '<div style="color:var(--text-muted);padding:16px;">조건에 맞는 데이터가 없습니다.</div>';
+  wrap.innerHTML = h;
+}
+
+function exportRecipientsCSV() {
+  var rows = _recipFiltered();
+  if (rows.length === 0) { alert('내보낼 데이터가 없습니다'); return; }
+  var headers = ['발송시각','상태','source','고객명','이메일','전화','점수','열람','열람시각','제출시각','제출경로','userId','chatId'];
+  var out = rows.map(function(r) {
+    return [
+      r.sentAt ? new Date(r.sentAt).toLocaleString('ko-KR',{timeZone:'Asia/Seoul'}) : '',
+      r.status, r.source, r.customerName || '', r.email || '', r.phone || '',
+      r.score != null ? r.score : '', r.opened ? 'Y' : 'N', r.openedAt || '',
+      r.submittedAt || '', r.submitChannel || '', r.userId || '', r.chatId
+    ];
+  });
+  downloadCSV('CSAT_recipients_' + new Date().toISOString().slice(0,10) + '.csv', headers, out);
 }
 
 function exportAILogData() {

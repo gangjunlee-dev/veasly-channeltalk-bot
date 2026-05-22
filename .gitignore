@@ -1,7 +1,16 @@
 node_modules/
 .env
+.env.*
+!.env.example
+.dev.vars
 *.log
 .pm2/
+.wrangler/
+dist/
+build/
+.DS_Store
+tmp/
+*.tmp
 
 data/
 *.bak.*
