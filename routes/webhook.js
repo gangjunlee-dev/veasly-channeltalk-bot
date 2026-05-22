@@ -1558,6 +1558,11 @@ router.post('/channeltalk', async function(req, res) {
           aiAnswer = aiResult.answer;
           var confidence = aiResult.confidence || 0;
           console.log("[AI] Confidence:", confidence.toFixed(3));
+          // [⑤ 근거 검증 실패 시 fallback] 검증에서 NO 판정된 답변은 저신뢰로 강등 → 기존 에스컬레이션 경로로
+          if (aiResult.grounded === false) {
+            console.log("[AI] Grounding validation FAILED - forcing escalation path");
+            confidence = 0;
+          }
           if (confidence < 0.25) {
             console.log("[AI] Very low confidence (" + confidence.toFixed(3) + ") - " + (isBusinessHours() ? "auto-escalate" : "off-hour AI guide only") + " [threshold: 0.25]");
             
