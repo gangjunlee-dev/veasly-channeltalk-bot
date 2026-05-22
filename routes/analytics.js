@@ -643,31 +643,22 @@ router.get('/cs-score-metrics', async function(req, res) {
   else if (fcrRate >= 55) fcrScore = 3;
   else fcrScore = 2;
 
+  // CSAT: csat-results.json (채팅 내 1~5 평점). [수정 2026-05-22] days 기간 내 데이터만 사용.
+  // (기존 버그: 기간필터된 평균을 만들어놓고도 전체기간 평균 csatAvg2 를 우선 사용해 days 와 불일치)
   var csatAvg = 0;
+  var csatWindowCount = 0;
   try {
     var csatData = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'data', 'csat-results.json'), 'utf8'));
     var recentCSAT = csatData.filter(function(c) { return c.timestamp >= cutoffMs; });
-    if (recentCSAT.length > 0) {
-      csatAvg = recentCSAT.reduce(function(sum, c) { return sum + c.score; }, 0) / recentCSAT.length;
+    csatWindowCount = recentCSAT.length;
+    if (csatWindowCount > 0) {
+      csatAvg = recentCSAT.reduce(function(sum, c) { return sum + (typeof c.score === 'number' ? c.score : 0); }, 0) / csatWindowCount;
     }
   } catch(e) {}
 
-    // CSAT 데이터 로드
-    var csatFile2 = require('path').join(__dirname, '..', 'data', 'csat-results.json');
-    var csatResults2 = [];
-    try { csatResults2 = JSON.parse(fs.readFileSync(csatFile2, 'utf8')); } catch(e) {}
-    var csatAvg2 = 0;
-    var csatCount2 = csatResults2.length;
-    if (csatCount2 > 0) {
-      var csatSum2 = 0;
-      csatResults2.forEach(function(r) { csatSum2 += (typeof r.score === 'number' ? r.score : 0); });
-      csatAvg2 = Math.round((csatSum2 / csatCount2) * 10) / 10;
-    }
-
-  // CSAT: 1=매우만족 ~ 5=매우불만족 → CS Score는 높을수록 좋으므로 역변환 (6 - score)
-  var csatRaw = csatAvg2 > 0 ? csatAvg2 : (csatAvg > 0 ? csatAvg : 0);
-  var csatScore = csatRaw > 0 ? (6 - csatRaw) : 2.5; // 역변환: 1→5, 2→4, 3→3, 4→2, 5→1
-  if (csatAvg === 0 && csatAvg2 === 0) console.log('[CS Score] CSAT no data - using default 2.5');
+  // 1=매우만족 ~ 5=매우불만족 → 높을수록 좋게 역변환 (6 - score). 데이터 없으면 2.5 기본값.
+  var csatScore = csatAvg > 0 ? (6 - csatAvg) : 2.5;
+  if (csatAvg === 0) console.log('[CS Score] CSAT no windowed data - using default 2.5');
 
   var cesScoreVal = cesAvg > 0 ? cesAvg : 2.5; // default if no data
 
@@ -680,6 +671,18 @@ router.get('/cs-score-metrics', async function(req, res) {
 
   var integratedScore = (frtScore * 0.20) + (fcrScore * 0.25) + (csatScore * 0.20) + (cesScoreVal * 0.15) + (noReplyScore * 0.20);
   integratedScore = Math.round(integratedScore * 100) / 100;
+
+  // [검증] 데이터 부족으로 기본값이 섞인 컴포넌트 표시 - 대시보드가 "검증 필요" 배지에 사용
+  // 표본 10건 미만이면 신뢰도 낮음 (기본값 대체 + 통계적으로 무의미한 소표본 모두 포함)
+  var reliability = {
+    fcrLowConfidence: fcrSampleCount < 10,
+    cesLowConfidence: recentCES.length < 10,
+    csatLowConfidence: csatWindowCount < 10,
+    fcrSamples: fcrSampleCount,
+    cesSamples: recentCES.length,
+    csatSamples: csatWindowCount
+  };
+  reliability.needsVerification = reliability.fcrLowConfidence || reliability.cesLowConfidence || reliability.csatLowConfidence;
 
     res.json({
       success: true,
@@ -717,7 +720,8 @@ router.get('/cs-score-metrics', async function(req, res) {
     ,
       ces: { avgScore: cesAvg, totalResponses: recentCES.length },
       fcr: { rate: fcrRate, resolved: recentResolved.length, reopened: recentReopened.length },
-      integratedScore: { score: integratedScore, breakdown: { frt: { score: frtScore, weight: 0.20, bizScore: bizFrtScore }, fcr: { score: fcrScore, weight: 0.25 }, csat: { score: csatScore, weight: 0.20 }, ces: { score: cesScoreVal, weight: 0.15 }, noReply: { score: noReplyScore, weight: 0.20 } }, target: 3.0 }
+      integratedScore: { score: integratedScore, breakdown: { frt: { score: frtScore, weight: 0.20, bizScore: bizFrtScore }, fcr: { score: fcrScore, weight: 0.25 }, csat: { score: csatScore, weight: 0.20 }, ces: { score: cesScoreVal, weight: 0.15 }, noReply: { score: noReplyScore, weight: 0.20 } }, target: 3.0 },
+      reliability: reliability
   });
   } catch(e) {
     res.status(500).json({ success: false, error: e.message });
