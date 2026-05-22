@@ -649,7 +649,9 @@ router.get('/cs-score-metrics', async function(req, res) {
   var csatWindowCount = 0;
   try {
     var csatData = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'data', 'csat-results.json'), 'utf8'));
-    var recentCSAT = csatData.filter(function(c) { return c.timestamp >= cutoffMs; });
+    var recentCSAT = csatData.filter(function(c) {
+      return c.timestamp >= cutoffMs && !(typeof c.chatId === 'string' && c.chatId.indexOf('test') === 0);
+    });
     csatWindowCount = recentCSAT.length;
     if (csatWindowCount > 0) {
       csatAvg = recentCSAT.reduce(function(sum, c) { return sum + (typeof c.score === 'number' ? c.score : 0); }, 0) / csatWindowCount;
@@ -669,11 +671,7 @@ router.get('/cs-score-metrics', async function(req, res) {
   else noReplyScore = 1.5;
 
 
-  var integratedScore = (frtScore * 0.20) + (fcrScore * 0.25) + (csatScore * 0.20) + (cesScoreVal * 0.15) + (noReplyScore * 0.20);
-  integratedScore = Math.round(integratedScore * 100) / 100;
-
-  // [검증] 데이터 부족으로 기본값이 섞인 컴포넌트 표시 - 대시보드가 "검증 필요" 배지에 사용
-  // 표본 10건 미만이면 신뢰도 낮음 (기본값 대체 + 통계적으로 무의미한 소표본 모두 포함)
+  // [검증] 표본 10건 미만이면 신뢰도 낮음 (기본값 대체 + 통계적으로 무의미한 소표본 모두 포함)
   var reliability = {
     fcrLowConfidence: fcrSampleCount < 10,
     cesLowConfidence: recentCES.length < 10,
@@ -683,6 +681,25 @@ router.get('/cs-score-metrics', async function(req, res) {
     csatSamples: csatWindowCount
   };
   reliability.needsVerification = reliability.fcrLowConfidence || reliability.cesLowConfidence || reliability.csatLowConfidence;
+
+  // [①③ 가중치 재정규화] 저표본 컴포넌트(FCR/CES/CSAT)는 종합점수에서 제외하고 남은 가중치로 재정규화.
+  // [④] FRT는 영업시간 기준 점수(bizFrtScore)를 사용 (벽시계 frtScore는 breakdown에 참고용으로 남김).
+  var _components = [
+    { key: 'frt',     score: bizFrtScore,  weight: 0.20, lowConf: false },
+    { key: 'fcr',     score: fcrScore,     weight: 0.25, lowConf: reliability.fcrLowConfidence },
+    { key: 'csat',    score: csatScore,    weight: 0.20, lowConf: reliability.csatLowConfidence },
+    { key: 'ces',     score: cesScoreVal,  weight: 0.15, lowConf: reliability.cesLowConfidence },
+    { key: 'noReply', score: noReplyScore, weight: 0.20, lowConf: false }
+  ];
+  var _trusted = _components.filter(function(c) { return !c.lowConf; });
+  var _trustedWeight = _trusted.reduce(function(s, c) { return s + c.weight; }, 0);
+  var integratedScore = 0;
+  if (_trustedWeight > 0) {
+    integratedScore = _trusted.reduce(function(s, c) { return s + c.score * (c.weight / _trustedWeight); }, 0);
+  }
+  integratedScore = Math.round(integratedScore * 100) / 100;
+  reliability.scoredComponents = _trusted.map(function(c) { return c.key; });
+  reliability.excludedComponents = _components.filter(function(c) { return c.lowConf; }).map(function(c) { return c.key; });
 
     res.json({
       success: true,

@@ -2522,8 +2522,8 @@ function loadCSScoreData() {
         if (rel.csatLowConfidence) est.push('CSAT(표본 ' + (rel.csatSamples || 0) + ')');
         if (rel.cesLowConfidence) est.push('CES(표본 ' + (rel.cesSamples || 0) + ')');
         html += '<div style="background:rgba(248,113,113,0.12);border:1px solid #f87171;border-radius:10px;padding:12px 16px;margin-bottom:20px;color:#f87171;font-size:13px;line-height:1.6">';
-        html += '&#9888; <b>검증 필요</b> &mdash; 다음 지표는 표본이 부족(10건 미만)해 신뢰도가 낮아, 위 종합 점수가 실제 상태와 다를 수 있습니다: ' + est.join(', ');
-        html += '<br/><span style="opacity:0.8;font-size:12px">이 점수를 단독 의사결정 근거로 사용하지 마세요.</span></div>';
+        html += '&#9888; <b>일부 지표 제외됨</b> &mdash; 다음 지표는 표본이 부족(10건 미만)해 <b>종합 점수 계산에서 제외</b>되었습니다: ' + est.join(', ');
+        html += '<br/><span style="opacity:0.8;font-size:12px">위 종합 점수는 신뢰 가능한 지표만으로 산출되었습니다. 제외된 지표는 표본 확보 후 자동 반영됩니다.</span></div>';
       }
 
       // 5 Metric Breakdown
