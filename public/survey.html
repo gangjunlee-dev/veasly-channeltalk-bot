@@ -272,11 +272,7 @@ if (ts > 0 && (Date.now() / 1000 - ts) > 259200) {
 } else {
   applyI18n();
   buildLists();
-  // 비회원이고 이메일 없으면 이메일 입력 스텝 먼저 표시
-  if (!isMember && !userEmail) {
-    document.getElementById('step1').classList.remove('active');
-    document.getElementById('step-email').classList.add('active');
-  }
+  // [A] 이메일 입력은 설문 제출 직전 단계로 이동 (설문을 먼저 보여줘 이탈 감소)
 }
 
 function applyI18n() {
@@ -389,13 +385,13 @@ function submitEmail() {
   var email = input.value.trim();
   if (email && email.indexOf('@') > 0 && email.indexOf('.') > 0) {
     userEmail = email;
-    showStep('step1');
+    submitSurvey();
   }
 }
 
 function skipEmail() {
   userEmail = '';
-  showStep('step1');
+  submitSurvey();
 }
 
 // 이메일 입력 실시간 검증
@@ -419,7 +415,15 @@ var SUBMIT_ERR_MSG = {
   'ja': '送信に失敗しました。通信環境を確認して再度お試しください 🙏'
 };
 
+var _emailStepShown = false;
+
 function submitSurvey() {
+  // [A] 비회원이고 이메일 미입력 → 제출 직전 1회만 이메일(추첨용) 단계 표시
+  if (!isMember && !userEmail && !_emailStepShown) {
+    _emailStepShown = true;
+    showStep('step-email');
+    return;
+  }
   var commentBox = isSatisfied ? document.getElementById('comment-box-good') : document.getElementById('comment-box-bad');
   var submitBtn = document.getElementById(isSatisfied ? 'submit-good' : 'submit-bad');
   var data = {

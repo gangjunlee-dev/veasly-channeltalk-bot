@@ -867,7 +867,9 @@ router.post('/channeltalk', async function(req, res) {
     // Thank you response
     if (isThankYou(userText)) {
       // CSAT 인라인 포함 여부 결정
-      var _inlineCSAT = !csatHelper.alreadySent(chatId);
+      // [C 2026-05-22] 인라인 thank-you CSAT 비활성화 — 자동종료 웹설문(auto-close-csat)으로 일원화.
+      // 인라인이 먼저 발송되면 alreadySent 때문에 웹설문이 차단되던 문제 해소. 되살리려면 아래를 !csatHelper.alreadySent(chatId)로.
+      var _inlineCSAT = false;
       var _csatLine = {
         'zh-TW': '\n\n📋 最後想請問，這次的服務體驗如何呢？\n1️⃣ 非常滿意  2️⃣ 滿意  3️⃣ 普通  4️⃣ 不滿意  5️⃣ 非常不滿意\n💬 請回覆數字 1~5 即可，非常感謝！',
         'ko': '\n\n📋 마지막으로, 이번 서비스는 어떠셨나요?\n1️⃣ 매우 만족  2️⃣ 만족  3️⃣ 보통  4️⃣ 불만족  5️⃣ 매우 불만족\n💬 숫자 1~5만 입력해주시면 큰 도움이 됩니다!',
