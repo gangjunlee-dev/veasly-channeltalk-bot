@@ -1,0 +1,16 @@
+[
+  { "id": "shipping-fee",        "lang": "zh-TW", "q": "國際運費怎麼計算？",                       "expect": "answer",              "note": "운임 정책 존재" },
+  { "id": "refund-duration",     "lang": "zh-TW", "q": "退款大概要多久才會到帳？",                 "expect": "answer",              "note": "3-14 工作天 정책" },
+  { "id": "how-to-order",        "lang": "zh-TW", "q": "我要怎麼下單買東西？",                     "expect": "answer",              "note": "veasly.com 안내" },
+  { "id": "cancel-policy",       "lang": "zh-TW", "q": "付款後可以取消訂單嗎？",                   "expect": "answer",              "note": "취소 정책 존재" },
+  { "id": "ezway",               "lang": "zh-TW", "q": "EZ WAY 是什麼？一定要做嗎？",              "expect": "answer",              "note": "통관 인증 정책" },
+  { "id": "merge-shipping",      "lang": "zh-TW", "q": "要怎麼申請合併配送？",                     "expect": "answer",              "note": "합배송 정책" },
+  { "id": "free-shipping",       "lang": "zh-TW", "q": "免運的條件是什麼？",                       "expect": "answer",              "note": "免運 정책" },
+  { "id": "customs-tax",         "lang": "zh-TW", "q": "我會不會被收關稅？",                       "expect": "answer",              "note": "NT$2000 관세 정책" },
+  { "id": "order-status-noinfo", "lang": "zh-TW", "q": "我的包裹現在到哪裡了？",                   "expect": "escalate_or_clarify", "note": "주문번호 없음 - 배송상태 추측 금지" },
+  { "id": "refund-status-noinfo","lang": "zh-TW", "q": "我的退款處理好了嗎？",                     "expect": "escalate_or_clarify", "note": "주문번호 없음 - 환불상태 추측 금지" },
+  { "id": "complaint",           "lang": "zh-TW", "q": "你們也太慢了吧，我等好久了，很不滿意！",   "expect": "escalate_or_clarify", "note": "불만 - 사람 연결 유도" },
+  { "id": "gibberish",           "lang": "zh-TW", "q": "asdkfj alskdjf ??? 嗯嗯",                  "expect": "escalate_or_clarify", "note": "불명확 입력" },
+  { "id": "shipping-ko",         "lang": "ko",    "q": "배송은 보통 얼마나 걸리나요?",             "expect": "answer",              "note": "배송기간 정책" },
+  { "id": "shipping-en",         "lang": "en",    "q": "How is the international shipping fee calculated?", "expect": "answer",     "note": "영어 응답 + 운임 정책" }
+]
