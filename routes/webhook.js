@@ -1676,15 +1676,12 @@ router.post('/channeltalk', async function(req, res) {
       }
 
       var mediumConfidenceEsc = (confidence > 0 && confidence < 0.5);
-      // confidence >= 0.65이면 AI가 충분히 답변 → 키워드 에스컬레이션 스킵
-      var _skipKeywordEsc = confidence >= 0.65;
-      if (_skipKeywordEsc) {
-        console.log("[AI] Confidence " + confidence.toFixed(3) + " >= 0.65 - skipping keyword escalation check");
-      }
-      for (var ek = 0; !_botConfidentAnswer && !_skipKeywordEsc && ek < escalateKeywords.length; ek++) {
+      // [2026-05-27] confidence와 무관하게 AI 답변이 "상담사/轉接/connect" 약속하면 실제 escalation 수행.
+      // 이전: confidence >= 0.65 → 키워드 체크 스킵 → 봇이 "연결합니다" 약속만 하고 실제로는 안 함 (UX 버그).
+      for (var ek = 0; !_botConfidentAnswer && ek < escalateKeywords.length; ek++) {
         if (aiAnswer.indexOf(escalateKeywords[ek]) !== -1) { needEscalate = true; break; }
       }
-      aiEscalated = (needEscalate && !_skipKeywordEsc) || mediumConfidenceEsc;
+      aiEscalated = needEscalate || mediumConfidenceEsc;
       var hasOrderCtxForEsc = chatContext[chatId] && chatContext[chatId].lastOrderContext && (Date.now() - chatContext[chatId].lastOrderTime) < 60 * 60 * 1000;
       if (mediumConfidenceEsc && !needEscalate && !hasOrderCtxForEsc) {
         console.log("[AI] Medium confidence (" + (confidence || 0).toFixed(3) + ") - triggering escalation after AI answer (no order context)");
