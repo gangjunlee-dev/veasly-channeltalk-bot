@@ -313,7 +313,7 @@ module.exports = [
     id: 'FAQ_SHIPPING_FEE_DETAIL_001',
     category: '國際運費',
     keywords: ['國際運費','국제배송비','international shipping','運費多少','幾公斤','kg','重量','材積','免運','free shipping'],
-    answer: '國際運費：0~1kg TWD 310（每+1kg加TWD 310）\n\n🎉 免運活動：TWD 4,999以上5kg免運、TWD 9,999以上10kg免運\n\n⚠️ 以實際重量和材積重量較大者計算，VEASLY不加收額外費用！',
+    answer: '國際運費（台灣）：依重量階梯計費，0~1kg 起 TWD 295。不同重量級距費率不同（如 1~1.5kg TWD 405、1.5~2kg TWD 520 等），詳細以結帳頁顯示為準。\n\n🎉 免運活動：TWD 4,999以上5kg免運、TWD 9,999以上10kg免運、TWD 14,999以上15kg免運（每加 TWD 5,000 多 5kg）\n\n⚠️ 以實際重量與材積重量（長×寬×高 cm ÷ 5000）較大者計算。25kg 以上請先洽客服取得正式報價',
     escalate: false
   },
   {
