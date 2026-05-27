@@ -303,6 +303,9 @@ function isMergeShippingRequest(text) {
 function isActionRequest(text) {
   var patterns = [
     { type: "cancel_reason", keywords: ["為什麼被取消", "為何被取消", "取消的原因", "取消原因", "為什麼取消", "왜 취소", "취소 이유", "why cancel"] },
+    // [2026-05-27] refund_delay를 shipping_delay 위에 배치. "還沒收到 運費退款" 같은 환불 문의가
+    // shipping_delay의 너무 넓은 "還沒收到"에 먼저 매치되어 출고 답변이 나가던 버그 수정.
+    { type: "refund_delay", keywords: ["運費退款", "還沒退款", "退款還沒", "沒收到退款", "退款多久", "退款進度", "退費還沒", "退費沒收到", "退費多久", "退款怎麼還沒", "退款一直", "환불 안 됐", "환불 안 받", "환불 지연", "환불 언제", "환불 늦", "환불 안 와", "환불 안 오", "still no refund", "refund still", "refund pending", "where is my refund"] },
     { type: "shipping_delay", keywords: ["等很久", "等太久", "還沒到", "還沒收到", "一直沒收到", "遲遲沒有", "什麼時候出貨", "什麼時候寄", "何時出貨", "何時寄出", "배송 지연", "아직 안 왔", "when will ship"] },
     { type: "email_change", keywords: ["信箱填錯", "email修改", "修改信箱", "修改email", "更改信箱", "更改email", "이메일 변경", "이메일 수정", "change email"] },
     { type: "product_search", keywords: ["想找這款", "幫我找", "想找這個", "有沒有賣", "有賣嗎", "能不能幫我找", "상품 찾아", "이거 있어", "find this product"] },
@@ -1021,6 +1024,12 @@ router.post('/channeltalk', async function(req, res) {
           "ko": "오래 기다리셨죠! 출고 진행 상황을 상담사가 확인해드릴게요 🙋‍♀️",
           "en": "Sorry for the wait! Let me connect you with our team to check the shipping status 🙋‍♀️",
           "ja": "お待たせして申し訳ございません！配送状況をスタッフが確認いたします 🙋‍♀️"
+        },
+        "refund_delay": {
+          "zh-TW": "很抱歉讓您久等了！關於退款進度，讓客服人員幫您查詢最新狀態喔 🙋‍♀️",
+          "ko": "오래 기다리셨죠! 환불 진행 상황을 상담사가 확인해드릴게요 🙋‍♀️",
+          "en": "Sorry for the wait! Let me connect you with our team to check the refund status 🙋‍♀️",
+          "ja": "お待たせして申し訳ございません！返金状況をスタッフが確認いたします 🙋‍♀️"
         },
         "email_change": {
           "zh-TW": "修改信箱需要客服人員為您處理喔！正在為您轉接 🙋‍♀️",
