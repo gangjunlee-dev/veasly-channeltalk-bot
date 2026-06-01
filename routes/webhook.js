@@ -1485,6 +1485,18 @@ router.post('/channeltalk', async function(req, res) {
       aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "order_list", userMessage: userText, aiResponse: "주문 목록 " + recentOrders.length + "건 조회", escalated: false, confidence: 0.8, category: "order" });
       recordFCRResolved(memberId || personId || "", chatId, "order_list");
       return res.status(200).send("OK");
+        } else {
+          // No orders bound to this account (admin feed has none for this user.id).
+          // Guide to direct order-number lookup / human agent instead of silently falling through.
+          var noOrderMsgs = {
+            "zh-TW": "找不到與您帳戶綁定的訂單記錄 😥\n如果您有訂單編號，請直接輸入完整編號（例如 20260421TW...），我馬上為您查詢！\n或輸入「聯繫客服」，由專人協助您喔～",
+            "ko": "고객님 계정에 연결된 주문 내역을 찾지 못했어요 😥\n주문번호가 있으시면 전체 번호(예: 20260421TW...)를 입력해 주세요. 바로 조회해 드릴게요!\n또는 '상담원 연결'을 입력하시면 담당자가 도와드립니다.",
+            "en": "I couldn't find any orders linked to your account 😥\nIf you have an order number, please enter the full number (e.g. 20260421TW...) and I'll look it up right away!\nOr type \"contact support\" to reach a human agent.",
+            "ja": "お客様のアカウントに紐づくご注文が見つかりませんでした 😥\n注文番号がございましたら、完全な番号（例：20260421TW...）をご入力ください。すぐにお調べします！\nまたは「カスタマーサポート」とご入力ください。"
+          };
+          await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: noOrderMsgs[detectedLang] || noOrderMsgs["zh-TW"] }] });
+          aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "order_list_empty", userMessage: userText, aiResponse: "주문 없음 안내 (계정 연결 주문 0건)", escalated: false, confidence: 0.8, category: "order" });
+          return res.status(200).send("OK");
         }
       } catch(olErr) { console.error("[Order] List error:", olErr.message); }
 
