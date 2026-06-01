@@ -576,8 +576,6 @@ router.post('/channeltalk', async function(req, res) {
 
     var userText = extractText(message);
 
-    // Track FCR for returning users
-    trackFCR(memberId || personId || "", chatId, "");
     if (!userText || !chatId) return res.status(200).send('OK');
     mgrStats.recordUserMessage(chatId);
     if (isSystemEvent(userText)) return res.status(200).send('OK');
@@ -681,6 +679,8 @@ router.post('/channeltalk', async function(req, res) {
     try { var srcData = JSON.parse(req.body.entity || "{}"); if (srcData.source && srcData.source.medium && srcData.source.medium.mediumType === "app") chatSource = "LINE"; } catch(se) {}
     try { var lf = require("path").join(__dirname, "..", "data", "chat-languages.json"); var ld = {}; try { ld = JSON.parse(fs.readFileSync(lf, "utf8")); } catch(e) {} ld[chatId] = detectedLang; fs.writeFileSync(lf, JSON.stringify(ld), "utf8"); } catch(e) {}
 
+    // Track FCR for returning users (placed after member lookup so memberId is populated)
+    trackFCR(memberId || personId || "", chatId, "");
 
     // CSAT dissatisfaction reason handler
     if (pendingCSATReason[chatId]) {
@@ -929,7 +929,8 @@ router.post('/channeltalk', async function(req, res) {
 
     // Escalation request - multi-step process
     // Negative sentiment auto-escalation
-    var negativeKeywords = ['不滿', '不好', '生氣', '太差', '太慢', '騙', '詐騙', '投訴', '消保', '客訴', '退款', '退錢', '報警', '律師', '法律', '消費者保護', '不合理', '離譜', '誇張', '差勁', '爛', '沒用', '廢物', '垃圾', '화나', '열받', '짜증', '사기', '소보원', '환불', '신고', 'scam', 'fraud', 'refund', 'lawsuit', 'complaint', 'unacceptable', 'ridiculous', 'terrible', 'worst'];
+    // 환불/refund 같은 중립어는 제외(별도 refund_delay 핸들러가 처리) — 실제 분노 표현만 남김
+    var negativeKeywords = ['不滿', '不好', '生氣', '太差', '太慢', '騙', '詐騙', '投訴', '消保', '客訴', '報警', '律師', '法律', '消費者保護', '不合理', '離譜', '誇張', '差勁', '爛', '沒用', '廢物', '垃圾', '화나', '열받', '짜증', '사기', '소보원', '신고', 'scam', 'fraud', 'lawsuit', 'complaint', 'unacceptable', 'ridiculous', 'terrible', 'worst'];
     var isNegative = false;
     for (var ni = 0; ni < negativeKeywords.length; ni++) {
       if (userText.indexOf(negativeKeywords[ni]) !== -1) { isNegative = true; break; }
@@ -937,15 +938,25 @@ router.post('/channeltalk', async function(req, res) {
     if (isNegative && !managerActive[chatId]) {
       setEscalationStep(chatId, 1); // skip step 0 so next escalation request goes directly to step 2
       console.log('[Sentiment] Negative detected - auto escalating:', chatId);
+      var negAck = {
+        'zh-TW': '👨‍💼 正在為您轉接真人客服，請稍候！我們會盡快協助您處理～',
+        'ko': '👨‍💼 상담사를 연결해 드리겠습니다. 잠시만 기다려주세요!',
+        'en': '👨‍💼 Connecting you to a live agent, please wait! We will help you right away.',
+        'ja': '👨‍💼 オペレーターにお繋ぎします。少々お待ちください！'
+      };
+      await channeltalk.sendMessage(chatId, { blocks: [{ type: 'text', value: negAck[detectedLang] || negAck['zh-TW'] }] });
       try {
         var negMgrs = await getCachedManagers();
         var negArr = (negMgrs && negMgrs.managers) || [];
         for (var nj = 0; nj < negArr.length; nj++) {
-          if (negArr[nj].operator) { await channeltalk.inviteManager(chatId, negArr[nj].id); managerActive[chatId] = Date.now(); break; }
+          if (negArr[nj].operator) { await channeltalk.inviteManager(chatId, negArr[nj].id); managerActive[chatId] = Date.now(); pendingEscalations[chatId] = { time: Date.now(), managerId: negArr[nj].id, lang: detectedLang }; break; }
         }
         var allNegIds = negArr.map(function(m) { return m.id; });
         await channeltalk.addFollowers(chatId, allNegIds).catch(function() {});
       } catch(ne) {}
+      aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || '', userName: veaslyUser ? veaslyUser.name : '', lang: detectedLang, type: 'escalation', userMessage: userText, aiResponse: '부정감정 자동 에스컬레이션 - 매니저 연결', escalated: true, escalationReason: 'negative_sentiment', confidence: 0, category: 'agent_request' });
+      try { var schedulerNeg = require('../lib/scheduler'); schedulerNeg.savePendingEscalation(chatId, memberId || personId || '', userText); } catch(pe) {}
+      return res.status(200).send('OK');
     }
 
     // Merge shipping request → immediate escalation
@@ -1282,11 +1293,8 @@ router.post('/channeltalk', async function(req, res) {
         }
         // 합배송 주문 처리
         if (combinedOrder && combinedOrder.items && combinedOrder.items.length > 0) {
-          // 보안: 소유권 검증 (fallback 인증 포함)
-          if (!veaslyUser && combinedOrder.user && combinedOrder.user.email) {
-            veaslyUser = await veaslyApi.findUserByEmail(combinedOrder.user.email);
-            if (veaslyUser) console.log("[Security] Fallback auth via order email:", combinedOrder.user.email, "→", veaslyUser.name);
-          }
+          // 보안: 소유권 검증. 본인 신원은 ChannelTalk 프로필(personId)로만 복구한다.
+          // (주문의 이메일로 인증하면 "물어본 사람=주인"이 되어 소유권 검증이 무력화되므로 금지)
           if (!veaslyUser && personId) {
             try {
               var retryUser = await channeltalk.getUser(personId);
@@ -1345,18 +1353,9 @@ router.post('/channeltalk', async function(req, res) {
           return res.status(200).send("OK");
         }
         if (orderItems && orderItems.length > 0) {
-          // 보안: 소유권 검증 (fallback 인증 포함)
+          // 보안: 소유권 검증. 본인 신원은 ChannelTalk 프로필(personId)로만 복구한다.
+          // (주문의 이메일로 인증하면 "물어본 사람=주인"이 되어 소유권 검증이 무력화되므로 금지)
           if (!veaslyUser) {
-            var normalOwnerId_pre = (orderItems[0] && orderItems[0].order && orderItems[0].order.userId) || null;
-            if (normalOwnerId_pre) {
-              try {
-                var orderOwner = await veaslyApi.getOrderByNumber(orderNum);
-                if (orderOwner && orderOwner.user && orderOwner.user.email) {
-                  veaslyUser = await veaslyApi.findUserByEmail(orderOwner.user.email);
-                  if (veaslyUser) console.log("[Security] Fallback auth via order email:", orderOwner.user.email, "→", veaslyUser.name);
-                }
-              } catch(fbErr) {}
-            }
             if (!veaslyUser && personId) {
               try {
                 var retryUser2 = await channeltalk.getUser(personId);
@@ -1549,6 +1548,7 @@ router.post('/channeltalk', async function(req, res) {
     // === 업그레이드4 END ===
 
     var aiAnswer = null;
+    var softCaveatOnly = false; // confidence<0.70: AI 참고용 딱지만 붙이고 매니저 자동호출은 안 함 (Option A)
     if (aiEngine.isReady()) {
       try {
       var memberContext = veaslyUser ? "[회원: " + veaslyUser.name + ", 주문 " + (veaslyUser.requestCount || 0) + "건, 포인트 " + (veaslyUser.credit || 0) + "]" : "";
@@ -1573,8 +1573,9 @@ router.post('/channeltalk', async function(req, res) {
           if (chatHistory.length > 20) chatHistory = chatHistory.slice(-20);
         } catch(histErr) { console.error("[Context] History fetch error:", histErr.message); }
         // Inject recent order context if available (30min TTL)
-        if (chatContext[chatId] && chatContext[chatId].lastOrder && (Date.now() - chatContext[chatId].lastOrderTime) < 30 * 60 * 1000) {
-          chatHistory.unshift({ role: "bot", text: "[最近查詢的訂單資訊] " + chatContext[chatId].lastOrder.substring(0, 500) });
+        if (chatContext[chatId] && chatContext[chatId].lastOrderContext && (Date.now() - chatContext[chatId].lastOrderTime) < 30 * 60 * 1000) {
+          // lastOrderContext에는 'AI回答指南' 마커가 있어 ai-engine이 주문 상태를 인식한다 (lastOrder는 고객용 텍스트라 인식 못함)
+          chatHistory.unshift({ role: "bot", text: chatContext[chatId].lastOrderContext });
         }
         var aiResult = await aiEngine.generateAnswer(memberContext ? memberContext + " " + userText : userText, detectedLang, chatId, chatHistory);
         if (aiResult && typeof aiResult === "object") {
@@ -1624,13 +1625,15 @@ router.post('/channeltalk', async function(req, res) {
                 aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", lang: detectedLang, type: "escalation", userMessage: userText.substring(0, 200), aiResponse: "confidence " + confidence.toFixed(3) + " < 0.3 → 자동 에스컬레이션", escalated: true, escalationReason: "low_confidence", confidence: confidence, category: (aiResult && aiResult.category) || "other" });
               } catch(lcErr) { console.error("[AI] Low confidence escalation error:", lcErr.message); }
             }
-          } else if (confidence < 0.6) {
+          } else if (confidence < 0.70) {
+            // 실측 분포상 점수는 0.60~0.82에 몰려 있고 횡설수설도 ~0.69까지 나옴.
+            // 0.70 미만은 "AI 참고용" 딱지만 붙이고 매니저 자동호출은 하지 않는다 (Option A).
             var hasOrderCtx = chatContext[chatId] && chatContext[chatId].lastOrderContext && (Date.now() - chatContext[chatId].lastOrderTime) < 60 * 60 * 1000;
             if (hasOrderCtx) {
-              console.log("[AI] Medium confidence but order context exists - answer only, skip escalation");
-              // 주문 맥락 존재 → 경고 문구 없이 AI 답변만 전송
+              console.log("[AI] Medium confidence but order context exists - answer only, skip caveat");
+              // 주문 맥락 존재 → 딱지 없이 AI 답변만 전송
             } else {
-              console.log("[AI] Medium confidence (" + confidence.toFixed(3) + ") - answer + " + (isBusinessHours() ? "auto-escalate" : "off-hour AI only"));
+              console.log("[AI] Below-confident (" + confidence.toFixed(3) + ") - soft caveat" + (isBusinessHours() ? "" : ", off-hour"));
               if (!isBusinessHours()) {
                 // 오프시간: AI 답변 + 안내만, 에스컬레이션 안 함
                 var offHourMedNote = {
@@ -1645,14 +1648,16 @@ router.post('/channeltalk', async function(req, res) {
                 aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "ai_answer", userMessage: userText.substring(0, 200), aiResponse: aiAnswer.substring(0, 300), escalated: false, escalationReason: "off_hour_medium_confidence", confidence: confidence, category: (aiResult && aiResult.category) || "other" });
                 return res.status(200).send("OK");
               }
-              // 영업시간: 기존 로직 유지
-              var medConfNote = {
-                "zh-TW": "\n\n⚠️ 以上為AI初步回覆，客服人員會再為您確認，請稍候！",
-                "ko": "\n\n⚠️ 위 답변은 AI 초기 응답입니다. 상담사가 확인 후 정확한 안내를 드리겠습니다!",
-                "en": "\n\n⚠️ This is an AI preliminary answer. An agent will confirm shortly!",
-                "ja": "\n\n⚠️ 上記はAIの初期回答です。担当者が確認後、正確にご案内いたします！"
+              // 영업시간 (Option A): 약한 참고용 딱지만, 매니저 자동호출 안 함.
+              // 문구에 에스컬레이션 키워드(轉接/상담사/confirm 등)를 넣지 않아 키워드 기반 호출도 트리거하지 않음.
+              var softNote = {
+                "zh-TW": "\n\n💡 以上為AI回覆，僅供參考。若需要更進一步的協助，隨時再告訴我喔！",
+                "ko": "\n\n💡 위 답변은 참고용 AI 응답이에요. 더 도움이 필요하시면 언제든 말씀해주세요!",
+                "en": "\n\n💡 This is an AI reference answer. Feel free to ask if you'd like more help!",
+                "ja": "\n\n💡 上記は参考用のAI回答です。さらにお手伝いが必要でしたらいつでもどうぞ！"
               };
-              aiAnswer += medConfNote[detectedLang] || medConfNote["zh-TW"];
+              aiAnswer += softNote[detectedLang] || softNote["zh-TW"];
+              softCaveatOnly = true;
             } // close else (no order context)
           }
         } else {
@@ -1696,12 +1701,15 @@ router.post('/channeltalk', async function(req, res) {
         }
       }
 
-      var mediumConfidenceEsc = (confidence > 0 && confidence < 0.5);
+      // <0.6 구간엔 "상담사가 확인" 안내문구가 붙으므로(1655행) 실제 escalation도 같은 구간에 맞춘다.
+      // (이전 <0.5는 en/ja가 안내만 하고 매니저 초대는 안 되는 약속불이행 버그였음)
+      var mediumConfidenceEsc = (confidence > 0 && confidence < 0.6);
       // [2026-05-27] confidence와 무관하게 AI 답변이 "상담사/轉接/connect" 약속하면 실제 escalation 수행.
       // 이전: confidence >= 0.65 → 키워드 체크 스킵 → 봇이 "연결합니다" 약속만 하고 실제로는 안 함 (UX 버그).
       for (var ek = 0; !_botConfidentAnswer && ek < escalateKeywords.length; ek++) {
         if (aiAnswer.indexOf(escalateKeywords[ek]) !== -1) { needEscalate = true; break; }
       }
+      if (softCaveatOnly) { needEscalate = false; mediumConfidenceEsc = false; } // 참고용 딱지 구간은 매니저 자동호출 안 함
       aiEscalated = needEscalate || mediumConfidenceEsc;
       var hasOrderCtxForEsc = chatContext[chatId] && chatContext[chatId].lastOrderContext && (Date.now() - chatContext[chatId].lastOrderTime) < 60 * 60 * 1000;
       if (mediumConfidenceEsc && !needEscalate && !hasOrderCtxForEsc) {
