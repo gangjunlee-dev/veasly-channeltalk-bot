@@ -232,6 +232,34 @@ function isBusinessHours() {
   return bizHoursUtil.isBusinessHours();
 }
 
+// [2026-06-30 UX] 반복 푸터 억제 — 같은 대화에서 최근 10분 내 이미 '다른 질문?' 푸터를 붙였으면 생략(로봇 느낌 완화).
+var _footerShown = {};
+function appendFooter(chatId, text, footerMap, lang) {
+  var now = Date.now();
+  if (Object.keys(_footerShown).length > 3000) _footerShown = {}; // 메모리 가드
+  if (_footerShown[chatId] && (now - _footerShown[chatId]) < 10 * 60 * 1000) return text; // 최근 부착 → 생략
+  _footerShown[chatId] = now;
+  return text + (footerMap[lang] || footerMap['zh-TW']);
+}
+
+// [2026-06-30 UX] 영업외 안내에 붙일 '다음 오픈 시각(약 N시간 후)' 한 줄. (주말/공휴일은 getNextBusinessStart가 처리)
+function nextOpenText(lang) {
+  try {
+    var ms = bizHoursUtil.getNextBusinessStart(Date.now());
+    if (!ms) return '';
+    var hrs = Math.max(1, Math.round((ms - Date.now()) / 3600000));
+    var kst = new Date(ms + 9 * 3600 * 1000);
+    var md = (kst.getUTCMonth() + 1) + '/' + kst.getUTCDate();
+    var t = {
+      'zh-TW': '\n\n⏰ 預計 ' + md + ' 台灣時間 09:00（約 ' + hrs + ' 小時後）開始為您優先處理。',
+      'ko': '\n\n⏰ ' + md + ' 한국시간 10:00(약 ' + hrs + '시간 후)부터 우선 처리해드려요.',
+      'en': '\n\n⏰ We\'ll prioritize your message from 09:00 TW time on ' + md + ' (~' + hrs + 'h).',
+      'ja': '\n\n⏰ ' + md + ' 台湾時間 09:00（約' + hrs + '時間後）から優先対応します。'
+    };
+    return t[lang] || t['zh-TW'];
+  } catch (e) { return ''; }
+}
+
 
 // 대만 피크타임 감지 (대만 20:00~23:00 = KST 21:00~00:00)
 function isTaiwanPeakTime() {
@@ -683,7 +711,8 @@ router.post('/channeltalk', async function(req, res) {
     trackFCR(memberId || personId || "", chatId, "");
 
     // CSAT dissatisfaction reason handler
-    if (pendingCSATReason[chatId]) {
+    // [2026-06-30] 인-챗 점수/사유 폐지 — 링크 설문만 사용 (false 가드로 비활성화)
+    if (false && pendingCSATReason[chatId]) {
       var reasonText = (userText || '').trim();
       if (reasonText.length > 0 && reasonText.length <= 500) {
         var feedback = loadCSATFeedback();
@@ -714,7 +743,8 @@ router.post('/channeltalk', async function(req, res) {
       }
     }
     // CES response handler
-    if (cesHelper.isPending(chatId)) {
+    // [2026-06-30] 인-챗 CES 폐지 — 링크 설문만 사용 (false 가드로 비활성화)
+    if (false && cesHelper.isPending(chatId)) {
       var cesText = (userText || '').trim();
       var cesNum = parseInt(cesText);
       if (cesNum >= 1 && cesNum <= 5) {
@@ -760,7 +790,8 @@ router.post('/channeltalk', async function(req, res) {
     }
     
     // CSAT response handler
-    if (scheduler.isCSATPending(chatId)) {
+    // [2026-06-30] 인-챗 점수 수신 폐지 — 링크 설문만 사용 (메뉴 '1' 오인 버그도 해소; false 가드)
+    if (false && scheduler.isCSATPending(chatId)) {
       var csatScore = scheduler.parseCSATResponse(userText);
       if (csatScore !== null) {
         // Record CSAT score
@@ -1123,7 +1154,9 @@ router.post('/channeltalk', async function(req, res) {
             'ja': '👨‍💼 現在営業時間外です（平日 10:00~19:00 韓国時間）\n\n📝 メッセージを残してください。営業開始後すぐにご返信します！'
           };
         }
-        await channeltalk.sendMessage(chatId, { blocks: [{ type: 'text', value: escMsgs[detectedLang] || escMsgs['zh-TW'] }] });
+        var _escVal = escMsgs[detectedLang] || escMsgs['zh-TW'];
+        if (!bizOpen) _escVal += nextOpenText(detectedLang); // [2026-06-30] 영업외엔 다음 오픈 시각 안내
+        await channeltalk.sendMessage(chatId, { blocks: [{ type: 'text', value: _escVal }] });
         try {
           var mgrs2 = await getCachedManagers();
           var managers2 = (mgrs2 && mgrs2.managers) || [];
@@ -1675,7 +1708,7 @@ router.post('/channeltalk', async function(req, res) {
         "en": "\n\n💡 Need more help? Just type your question!",
         "ja": "\n\n💡 他にご質問がございましたら、そのままご入力ください！"
       };
-      aiAnswer += footers[detectedLang] || footers["zh-TW"];
+      aiAnswer = appendFooter(chatId, aiAnswer, footers, detectedLang); // [2026-06-30] 반복 푸터 억제
       // Prevent duplicate - only send if not already responded
       if (!res.headersSent) {
         await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: aiAnswer }] });
@@ -1773,7 +1806,7 @@ router.post('/channeltalk', async function(req, res) {
         "en": "\n\n💡 Need more help? Just type your question!",
         "ja": "\n\n💡 他にご質問がございましたら、そのままご入力ください！"
       };
-      answerText += footers2[detectedLang] || footers2["zh-TW"];
+      answerText = appendFooter(chatId, answerText, footers2, detectedLang); // [2026-06-30] 반복 푸터 억제
       await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: answerText }] });
       if (matched.escalate) {
         try {
@@ -1792,8 +1825,11 @@ router.post('/channeltalk', async function(req, res) {
           aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "escalation", userMessage: userText, aiResponse: "매니저 에스컬레이션 (수동)", escalated: true, escalationReason: "ai_self_escalate", confidence: 0, category: (aiResult && aiResult.category) || "other" });
           return res.status(200).send("OK");
     }
-    // Fallback
-    // Save unanswered question for learning
+    // Fallback — [FIX B 2026-06-29] AI가 답을 만들지 못하고 키워드 FAQ도 미스인 경우.
+    // 예전엔 '아직 학습 중' 제식 안내만 반복해(escalated:false) 손님이 무한 루프에 갇혔다
+    // (특히 Gemini 429 한도소진 구간). 이제 키워드 에스컬레이션과 동일하게 상담사에게 자동 연결한다.
+    // (참고: line 583에서 매니저 활성 시 이미 return하므로 여기 도달 = 활성 매니저 없음 → 중복초대 없음)
+    // 학습용 미응답 저장은 유지.
     if (userText && userText.length > 2 && aiEngine.isReady()) {
       aiEngine.addToKnowledgeBase(
         "unanswered_" + chatId + "_" + Date.now(),
@@ -1802,28 +1838,57 @@ router.post('/channeltalk', async function(req, res) {
       ).catch(function(e){ console.error("[Learn] unanswered save error:", e.message); });
       console.log("[Learn] Unanswered question saved:", userText.substring(0, 50));
     }
-    var fallbackMsgs = {
-      'zh-TW': '抱歉，我還在學習中 📚\n\n您可以試試以下方式：\n1️⃣ 用不同的關鍵字描述問題\n2️⃣ 輸入數字選擇分類查詢\n3️⃣ 輸入「客服」轉接真人\n\n',
-      'ko': '죄송합니다, 아직 학습 중입니다 📚\n\n다음 방법을 시도해보세요:\n1️⃣ 다른 키워드로 질문\n2️⃣ 번호를 입력해서 조회\n3️⃣ 「상담사」를 입력해서 연결\n\n',
-      'en': "Sorry, I'm still learning 📚\n\nTry:\n1️⃣ Rephrase your question\n2️⃣ Enter a number\n3️⃣ Type \"agent\" for live help\n\n",
-      'ja': '申し訳ございません、まだ学習中です 📚\n\n以下をお試しください：\n1️⃣ 別のキーワードで質問\n2️⃣ 番号を入力\n3️⃣ 「オペレーター」と入力\n\n'
-    };
+    var fbBizOpen = isBusinessHours();
+    var fbEscMsgs;
+    if (fbBizOpen) {
+      fbEscMsgs = {
+        'zh-TW': '抱歉，這個問題我無法立即為您解答 🙏 正在為您轉接真人客服，請稍候！',
+        'ko': '죄송합니다, 이 질문은 제가 바로 답변드리기 어려워요 🙏 상담사를 연결해 드릴게요, 잠시만 기다려주세요!',
+        'en': "Sorry, I can't answer this one right away 🙏 Connecting you to a live agent, please wait!",
+        'ja': '申し訳ございません、この質問にはすぐにお答えできません 🙏 オペレーターにお繋ぎします。少々お待ちください！'
+      };
+    } else {
+      var _fbHol = getHolidayNotice(detectedLang);
+      fbEscMsgs = {
+        'zh-TW': (_fbHol ? _fbHol + '\n\n' : '') + '抱歉，這個問題需要真人客服協助 🙏\n目前非客服時間（平日 台灣 09:00~18:00）。請留下您的問題（訂單問題請附上訂單號碼），我們上班後會優先回覆您！',
+        'ko': (_fbHol ? _fbHol + '\n\n' : '') + '죄송합니다, 이 질문은 상담사 확인이 필요해요 🙏\n지금은 상담 시간이 아니지만(평일 10:00~19:00 KST) 메시지를 남겨주시면 업무 시작 후 우선 답변드리겠습니다!',
+        'en': "Sorry, this needs a human agent 🙏\nWe're outside business hours (Mon-Fri 09:00~18:00 TW). Leave your message (include your order number for order issues) and we'll reply first thing!",
+        'ja': '申し訳ございません、この質問は担当者の確認が必要です 🙏\n現在営業時間外です（平日 10:00~19:00 KST）。メッセージを残していただければ、営業開始後すぐにご返信します！'
+      };
+    }
+    await channeltalk.sendMessage(chatId, { blocks: [{ type: 'text', value: fbEscMsgs[detectedLang] || fbEscMsgs['zh-TW'] }] });
+    // 사람 연결: 첫 operator 매니저 초대 + pending 등록 (키워드 경로 1126-1140과 동일 패턴)
+    var fbInvited = false;
+    try {
+      var fbMgrs = await getCachedManagers();
+      var fbManagers = (fbMgrs && fbMgrs.managers) || [];
+      for (var fbi = 0; fbi < fbManagers.length; fbi++) {
+        if (fbManagers[fbi].operator) {
+          await channeltalk.inviteManager(chatId, fbManagers[fbi].id);
+          if (fbBizOpen) managerActive[chatId] = Date.now();
+          pendingEscalations[chatId] = { time: Date.now(), managerId: fbManagers[fbi].id, lang: detectedLang };
+          fbInvited = true;
+          break;
+        }
+      }
+      if (!fbInvited) { pendingEscalations[chatId] = { time: Date.now(), lang: detectedLang }; } // operator 없어도 추적되게 (15분 reassign 타이머가 커버)
+    } catch(fbe) { console.error("[Fallback escalation] Error:", fbe.message); pendingEscalations[chatId] = { time: Date.now(), lang: detectedLang }; }
+    try { var schedulerFb = require('../lib/scheduler'); schedulerFb.savePendingEscalation(chatId, memberId || personId || '', userText); } catch(pfe) {}
     aiLog.saveConversation({
       timestamp: new Date().toISOString(),
       chatId: chatId,
-      userId: memberId || '',
+      userId: memberId || personId || '',
+      userName: veaslyUser ? veaslyUser.name : '',
       lang: detectedLang,
-      type: 'unanswered',
+      type: 'escalation',
       userMessage: userText.substring(0, 200),
-      aiResponse: 'AI 답변 실패 - fallback 메시지',
-      escalated: false,
+      aiResponse: 'AI 답변 실패 → 상담사 자동 연결 (fallback escalation)',
+      escalated: true,
+      escalationReason: 'ai_fallback_escalation',
       category: analytics.classifyMessage(userText),
-        confidence: 0,
+      confidence: 0,
     });
-    var fbMenu = getMenuText(detectedLang);
-    await channeltalk.sendMessage(chatId, { blocks: [{ type: 'text', value: (fallbackMsgs[detectedLang] || fallbackMsgs['zh-TW']) + fbMenu }] });
-
-    res.status(200).send('OK');
+    return res.status(200).send('OK');
   } catch (error) {
     console.error('[Webhook Error]', error.message, error.stack);
     errorAlert.sendAlert('Webhook Error', error.message);
