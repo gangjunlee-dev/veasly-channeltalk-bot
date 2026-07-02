@@ -96,6 +96,11 @@ function getHolidayNotice(lang) {
 }
 
 var analytics = require('../lib/analytics');
+var routing = require('../lib/routing');
+var managersLib = require('../lib/managers');
+
+// SOP §4 넘김 체계 태그 — 봇 핸드오프 시 자동 부여 (best-effort)
+var HANDOFF_TAG = '직원 처리 불가';
 
 var processedMessages = {};
 // Dedup cleanup handled below (120s TTL)
@@ -107,6 +112,7 @@ var _csatSendLock = {};
 var chatLanguage = {};
 var managerActive = {};
 var pendingEscalations = {};
+var teamFollowedChats = {}; // [SOP v2] 채팅별 팀 팔로워(MIA·우선·강준) 추가 여부
 var chatContext = {};
 var _chatHistoryCache = {};
 var _managerCache = { data: null, ts: 0 };
@@ -167,6 +173,9 @@ setInterval(function() {
   });
   Object.keys(waitingMessageSent).forEach(function(k) {
     if (now - waitingMessageSent[k] > 3600000) delete waitingMessageSent[k];
+  });
+  Object.keys(teamFollowedChats).forEach(function(k) {
+    if (now - teamFollowedChats[k] > 86400000) delete teamFollowedChats[k];
   });
 }, 60000);
 
@@ -260,18 +269,36 @@ function isEscalationRequest(text) {
 
 async function connectManager(chatId, lang) {
   try {
-    var mgrs = await getCachedManagers();
-    var managers = (mgrs && mgrs.managers) || [];
-    for (var i = 0; i < managers.length; i++) {
-      if (managers[i].operator) {
-        await channeltalk.inviteManager(chatId, managers[i].id);
-        managerActive[chatId] = Date.now();
-        console.log('[ESCALATION] Manager invited:', managers[i].id, 'for chat:', chatId);
-        pendingEscalations[chatId] = { time: Date.now(), managerId: managers[i].id, lang: lang || "zh-TW" };
-        break;
+    // [SOP v2 팔로워 정책] 핸드오프 = 기본 팔로워(MIA·우선) 초대 + 관리자(강준) 팔로워 + 「직원 처리 불가」 태그.
+    // 기존 "첫 operator 초대 / 전체 매니저 팔로워"에서 축소.
+    var followerIds = await managersLib.getFollowerIds();
+    if (followerIds.length === 0) {
+      // 이름 매칭 실패 안전장치: 기존 동작 (첫 operator)
+      var mgrs = await getCachedManagers();
+      var managers = (mgrs && mgrs.managers) || [];
+      for (var i = 0; i < managers.length; i++) {
+        if (managers[i].operator) { followerIds = [managers[i].id]; break; }
       }
     }
-  } catch(e) { console.error("[ConnectManager] Error:", e.message); }
+    var firstId = null;
+    for (var f = 0; f < followerIds.length; f++) {
+      try {
+        await channeltalk.inviteManager(chatId, followerIds[f]);
+        if (!firstId) firstId = followerIds[f];
+      } catch(ie) { /* 이미 초대된 매니저 등 - 무시 */ }
+    }
+    if (firstId) {
+      managerActive[chatId] = Date.now();
+      pendingEscalations[chatId] = { time: Date.now(), managerId: firstId, lang: lang || "zh-TW" };
+      console.log('[ESCALATION] Followers invited:', followerIds.join(','), 'for chat:', chatId);
+    }
+    try {
+      var teamIds = await managersLib.getTeamManagerIds();
+      if (teamIds.length > 0) { await channeltalk.addFollowers(chatId, teamIds); teamFollowedChats[chatId] = Date.now(); }
+    } catch(fe) { console.error("[ConnectManager] Follower error:", fe.message); }
+    try { await channeltalk.addChatTags(chatId, [HANDOFF_TAG]); } catch(te) { /* 태그 API 미지원 시 무시 */ }
+    return firstId;
+  } catch(e) { console.error("[ConnectManager] Error:", e.message); return null; }
 }
 
 // === 주문 소유권 검증 ===
@@ -682,6 +709,37 @@ router.post('/channeltalk', async function(req, res) {
     // Track FCR for returning users (placed after member lookup so memberId is populated)
     trackFCR(memberId || personId || "", chatId, "");
 
+    // [SOP v2 팔로워 정책] 모든 채팅에 기본 팔로워(MIA·우선) + 관리자(강준) 추가.
+    // 봇이 엉뚱하게 답할 수 있으므로 관리자가 모든 대화를 팔로우. (봇 응답은 계속 — managerActive 미설정)
+    if (!teamFollowedChats[chatId]) {
+      teamFollowedChats[chatId] = Date.now();
+      try {
+        var _teamIds = await managersLib.getTeamManagerIds();
+        if (_teamIds.length > 0) await channeltalk.addFollowers(chatId, _teamIds);
+        console.log('[Follower] Team followers set (' + _teamIds.length + ') for chat:', chatId);
+      } catch(_tfErr) { console.error('[Follower] Team add error:', _tfErr.message); }
+    }
+
+    // ============================================================
+    // [SOP v2 행동 규칙 — 최상위 우선순위. 다른 어떤 핸들러보다 먼저 평가]
+    // 규칙 2: 분쟁 키워드(詐騙·詐欺·消保官·律師·爆料·檢舉·提告) → 즉시 핸드오프.
+    // 내용에 대한 답변·반박 절대 금지 — 고정 문구만.
+    if (routing.isDisputeMessage(userText)) {
+      await channeltalk.sendMessage(chatId, { blocks: [{ type: 'text', value: routing.DISPUTE_REPLY }] });
+      await connectManager(chatId, detectedLang);
+      aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || '', lang: detectedLang, type: 'escalation', userMessage: userText.substring(0, 200), aiResponse: 'SOP v2 분쟁 키워드 → 즉시 핸드오프 (고정 문구)', escalated: true, escalationReason: 'dispute_keyword', confidence: 1.0, category: 'complaint' });
+      return res.status(200).send('OK');
+    }
+    // 규칙 1: 신고금액(申報金額/報關金額/海關申報) 문의 → 어떤 설명·확인·추측도 금지.
+    // 고정 문구만 응답 후 상담원 핸드오프.
+    if (routing.isDeclaredAmountInquiry(userText)) {
+      await channeltalk.sendMessage(chatId, { blocks: [{ type: 'text', value: routing.DECLARED_AMOUNT_REPLY }] });
+      await connectManager(chatId, detectedLang);
+      aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || '', lang: detectedLang, type: 'escalation', userMessage: userText.substring(0, 200), aiResponse: 'SOP v2 신고금액 → 고정 응답 + 핸드오프', escalated: true, escalationReason: 'declared_amount', confidence: 1.0, category: 'account_payment' });
+      return res.status(200).send('OK');
+    }
+    // ============================================================
+
     // CSAT dissatisfaction reason handler
     if (pendingCSATReason[chatId]) {
       var reasonText = (userText || '').trim();
@@ -945,15 +1003,8 @@ router.post('/channeltalk', async function(req, res) {
         'ja': '👨‍💼 オペレーターにお繋ぎします。少々お待ちください！'
       };
       await channeltalk.sendMessage(chatId, { blocks: [{ type: 'text', value: negAck[detectedLang] || negAck['zh-TW'] }] });
-      try {
-        var negMgrs = await getCachedManagers();
-        var negArr = (negMgrs && negMgrs.managers) || [];
-        for (var nj = 0; nj < negArr.length; nj++) {
-          if (negArr[nj].operator) { await channeltalk.inviteManager(chatId, negArr[nj].id); managerActive[chatId] = Date.now(); pendingEscalations[chatId] = { time: Date.now(), managerId: negArr[nj].id, lang: detectedLang }; break; }
-        }
-        var allNegIds = negArr.map(function(m) { return m.id; });
-        await channeltalk.addFollowers(chatId, allNegIds).catch(function() {});
-      } catch(ne) {}
+      // [SOP v2] 팔로워 정책: MIA·우선 초대 + 강준 팔로워 (전체 매니저 X)
+      await connectManager(chatId, detectedLang);
       aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || '', userName: veaslyUser ? veaslyUser.name : '', lang: detectedLang, type: 'escalation', userMessage: userText, aiResponse: '부정감정 자동 에스컬레이션 - 매니저 연결', escalated: true, escalationReason: 'negative_sentiment', confidence: 0, category: 'agent_request' });
       try { var schedulerNeg = require('../lib/scheduler'); schedulerNeg.savePendingEscalation(chatId, memberId || personId || '', userText); } catch(pe) {}
       return res.status(200).send('OK');
@@ -963,13 +1014,14 @@ router.post('/channeltalk', async function(req, res) {
     // Merge shipping → AI policy guide (no escalation)
     // Merge shipping -> AI policy guide (no escalation, direct mypage link)
     if (isMergeShippingRequest(userText)) {
+      // [SOP v2 §2-1·§2-2] 합배송 정책 문구
       var mergeGuide = {
-        "zh-TW": "合併配送可以在這裡直接申請喔～\nhttps://www.veasly.com/tw/my-page/orders/combined-shipping/request\n\n只要訂單裡還有商品沒到韓國倉庫就能申請！合併後運費會重新計算，多退少補。\n⚠️ 免運訂單和一般訂單不能合併，預約配送也不能跟一般訂單合併喔。\n\n還有其他問題嗎？隨時問我～",
-        "ko": "합배송은 여기서 바로 신청할 수 있어요～\nhttps://www.veasly.com/tw/my-page/orders/combined-shipping/request\n\n창고에 아직 안 도착한 상품이 있으면 신청 가능! 합배송 후 운임은 재계산돼서 차액은 환불/추가결제 처리됩니다.\n⚠️ 무료배송+일반배송, 예약배송+일반배송은 합배송 불가예요.\n\n다른 궁금한 거 있으면 말씀해주세요~",
-        "en": "You can request combined shipping here~\nhttps://www.veasly.com/tw/my-page/orders/combined-shipping/request\n\nAvailable as long as at least one item hasn't arrived at our Korea warehouse yet! Fees are recalculated after combining - difference will be refunded or charged.\n⚠️ Free-shipping orders can't be combined with regular orders.\n\nAnything else I can help with?",
+        "zh-TW": "合併寄送可以在這裡直接申請喔～\nhttps://www.veasly.com/tw/my-page/orders/combined-shipping/request\n\n只要要合併的訂單中有任一筆尚未抵達集運倉，即可申請合併寄送，並依訂單合計金額重新計算免運額度（例：5,000＋5,000 → 10kg 免運）。\n\n注意事項：\n・訂單全部抵達集運倉後即無法申請（與是否為免運訂單無關）\n・已被拒絕過的組合無法再次申請\n・未合併的訂單會分別從韓國寄出\n・合併寄送一律宅配到府；原本選擇超商取貨的訂單，申請合併時需改為宅配地址\n・想追加訂單時，請先取消原合併申請，再將要合併的訂單一起重新申請\n\n還有其他問題嗎？隨時問我～",
+        "ko": "합배송은 여기서 바로 신청할 수 있어요～\nhttps://www.veasly.com/tw/my-page/orders/combined-shipping/request\n\n묶으려는 주문 중 하나라도 집운창에 도착 전이면 신청 가능! 합배송 후 합계 금액 기준으로 무료배송 한도가 재계산됩니다 (예: 5,000＋5,000 → 10kg).\n\n주의사항:\n・전부 입고되면 신청 불가 (무료배송 여부와 무관)\n・거절된 조합은 재신청 불가\n・미합병 주문은 한국에서 각각 발송\n・합배송은 무조건 택배(집 배송) — 편의점 수령 주문도 집 주소로 변경 필요\n\n다른 궁금한 거 있으면 말씀해주세요~",
+        "en": "You can request combined shipping here~\nhttps://www.veasly.com/tw/my-page/orders/combined-shipping/request\n\nAvailable as long as at least one order hasn't arrived at our Korea warehouse yet! Free-shipping allowance is recalculated based on the combined total (e.g. 5,000+5,000 → 10kg).\n\nNotes:\n- Once all orders have arrived at the warehouse, combining is no longer possible (regardless of free shipping)\n- Rejected combinations cannot be re-requested\n- Combined shipping is home delivery only; convenience-store pickup orders must switch to a home address\n\nAnything else I can help with?",
         "ja": "合併配送はマイページから申請できます！\n\n" +
           "リンク: https://www.veasly.com/tw/my-page/orders/combined-shipping/request\n\n" +
-          "注意：商品が韓国倉庫に届く前のみ申請可能です。送料は再計算されます。"
+          "注意：全ての注文が倉庫に到着する前のみ申請可能です（送料無料かどうかは関係ありません）。合併配送は宅配のみで、コンビニ受取は住所変更が必要です。"
       };
       await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: mergeGuide[detectedLang] || mergeGuide["zh-TW"] }] });
       aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "faq_answer", userMessage: userText.substring(0, 200), aiResponse: "합배송 → 마이페이지 안내 (에스컬레이션 없음)", escalated: false, confidence: 1.0, category: "merge_shipping" });
@@ -1124,18 +1176,8 @@ router.post('/channeltalk', async function(req, res) {
           };
         }
         await channeltalk.sendMessage(chatId, { blocks: [{ type: 'text', value: escMsgs[detectedLang] || escMsgs['zh-TW'] }] });
-        try {
-          var mgrs2 = await getCachedManagers();
-          var managers2 = (mgrs2 && mgrs2.managers) || [];
-          for (var j = 0; j < managers2.length; j++) {
-            if (managers2[j].operator) {
-              await channeltalk.inviteManager(chatId, managers2[j].id);
-              managerActive[chatId] = Date.now();
-              pendingEscalations[chatId] = { time: Date.now(), managerId: managers2[j].id, lang: detectedLang };
-              break;
-            }
-          }
-        } catch(e) {}
+        // [SOP v2] 팔로워 정책: MIA·우선 초대 + 강준 팔로워
+        await connectManager(chatId, detectedLang);
         aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || '', userName: veaslyUser ? veaslyUser.name : '', lang: detectedLang, type: 'escalation', userMessage: userText, aiResponse: '에스컬레이션 - 매니저 연결', escalated: true, escalationReason: 'keyword_request', confidence: 0, category: 'agent_request' });
         try { var scheduler2 = require('../lib/scheduler'); scheduler2.savePendingEscalation(chatId, memberId || personId || '', userText); } catch(pe) {}
         return res.status(200).send('OK');
@@ -1614,13 +1656,8 @@ router.post('/channeltalk', async function(req, res) {
                   "ja": "担当者におつなぎいたします。少々お待ちください 🙏"
                 };
                 await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: lowConfMsgs[detectedLang] || lowConfMsgs["zh-TW"] }] });
-                var mgrList0 = await getCachedManagers();
-                var mgrs0 = (mgrList0 && mgrList0.managers) || [];
-                for (var m0 = 0; m0 < mgrs0.length; m0++) {
-                  if (mgrs0[m0].operator) { await channeltalk.inviteManager(chatId, mgrs0[m0].id); break; }
-                }
-                pendingEscalations[chatId] = { time: Date.now(), timestamp: Date.now(), lang: detectedLang };
-                managerActive[chatId] = Date.now();
+                // [SOP v2] 팔로워 정책: MIA·우선 초대 + 강준 팔로워
+                await connectManager(chatId, detectedLang);
                 console.log("[AI] Very low confidence auto-escalation for:", chatId);
                 aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", lang: detectedLang, type: "escalation", userMessage: userText.substring(0, 200), aiResponse: "confidence " + confidence.toFixed(3) + " < 0.3 → 자동 에스컬레이션", escalated: true, escalationReason: "low_confidence", confidence: confidence, category: (aiResult && aiResult.category) || "other" });
               } catch(lcErr) { console.error("[AI] Low confidence escalation error:", lcErr.message); }
@@ -1715,13 +1752,8 @@ router.post('/channeltalk', async function(req, res) {
       if (mediumConfidenceEsc && !needEscalate && !hasOrderCtxForEsc) {
         console.log("[AI] Medium confidence (" + (confidence || 0).toFixed(3) + ") - triggering escalation after AI answer (no order context)");
         try {
-          var mgrListMed = await getCachedManagers();
-          var mgrsMed = (mgrListMed && mgrListMed.managers) || [];
-          for (var mm = 0; mm < mgrsMed.length; mm++) {
-            if (mgrsMed[mm].operator) { await channeltalk.inviteManager(chatId, mgrsMed[mm].id); break; }
-          }
-          pendingEscalations[chatId] = { time: Date.now(), timestamp: Date.now(), lang: detectedLang };
-          managerActive[chatId] = Date.now();
+          // [SOP v2] 팔로워 정책: MIA·우선 초대 + 강준 팔로워
+          await connectManager(chatId, detectedLang);
         } catch(medErr) { console.error("[AI] Med confidence escalation error:", medErr.message); }
       }
       aiLog.saveConversation({
@@ -1742,19 +1774,9 @@ router.post('/channeltalk', async function(req, res) {
 
       if (needEscalate && !_botConfidentAnswer) {
         try {
-          var mgrList = await getCachedManagers();
-          var mgrArr = (mgrList && mgrList.managers) || [];
-          for (var mi = 0; mi < mgrArr.length; mi++) {
-            if (mgrArr[mi].operator) {
-              await channeltalk.inviteManager(chatId, mgrArr[mi].id);
-              managerActive[chatId] = Date.now();
-              console.log("[Escalate] AI auto-escalated chat:", chatId);
-              break;
-            }
-          }
-          var allMgrIds = mgrArr.map(function(m){ return m.id; });
-          await channeltalk.addFollowers(chatId, allMgrIds).catch(function(fe){ console.error("[Follower] Error:", fe.message); });
-          console.log("[Follower] All managers added as followers:", allMgrIds.length);
+          // [SOP v2] 팔로워 정책: MIA·우선 초대 + 강준 팔로워 (전체 매니저 X)
+          await connectManager(chatId, detectedLang);
+          console.log("[Escalate] AI auto-escalated chat:", chatId);
         } catch(escErr) { console.error("[Escalate] Error:", escErr.message); }
       }
       // Cache this exchange
@@ -1777,15 +1799,8 @@ router.post('/channeltalk', async function(req, res) {
       await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: answerText }] });
       if (matched.escalate) {
         try {
-          var mgrs3 = await getCachedManagers();
-          var managers3 = (mgrs3 && mgrs3.managers) || [];
-          for (var k = 0; k < managers3.length; k++) {
-            if (managers3[k].operator) {
-              await channeltalk.inviteManager(chatId, managers3[k].id);
-              managerActive[chatId] = Date.now();
-              break;
-            }
-          }
+          // [SOP v2] 팔로워 정책: MIA·우선 초대 + 강준 팔로워
+          await connectManager(chatId, detectedLang);
         } catch(e) {}
       }
       
@@ -1907,8 +1922,8 @@ setInterval(async function() {
         var reassignMsg = { "zh-TW": "感謝您的耐心等待！客服人員目前較忙碌，我們已通知其他客服人員，請再稍候一下", "ko": "기다려주셔서 감사합니다! 다른 상담사에게 알림을 보냈습니다. 조금만 더 기다려주세요", "en": "Thanks for your patience! We have notified additional agents. Please hold on", "ja": "お待たせして申し訳ございません！他のスタッフに通知しました" };
         var lang = esc.lang || "zh-TW";
         await channeltalk.sendMessage(cid, { blocks: [{ type: "text", value: reassignMsg[lang] || reassignMsg["zh-TW"] }] });
-        var mgrs = await getCachedManagers();
-        var allMgrIds = ((mgrs && mgrs.managers) || []).filter(function(m) { return !m.bot; }).map(function(m) { return m.id; });
+        // [SOP v2] 재배정 알림도 팀(MIA·우선·강준)에게만
+        var allMgrIds = await managersLib.getTeamManagerIds();
         if (allMgrIds.length > 0) {
           await channeltalk.addFollowers(cid, allMgrIds).catch(function() {});
         }
