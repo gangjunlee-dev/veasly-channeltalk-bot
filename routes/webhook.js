@@ -1981,11 +1981,15 @@ setInterval(async function() {
         var reassignMsg = { "zh-TW": "感謝您的耐心等待！客服人員目前較忙碌，我們已通知其他客服人員，請再稍候一下", "ko": "기다려주셔서 감사합니다! 다른 상담사에게 알림을 보냈습니다. 조금만 더 기다려주세요", "en": "Thanks for your patience! We have notified additional agents. Please hold on", "ja": "お待たせして申し訳ございません！他のスタッフに通知しました" };
         var lang = esc.lang || "zh-TW";
         await channeltalk.sendMessage(cid, { blocks: [{ type: "text", value: reassignMsg[lang] || reassignMsg["zh-TW"] }] });
-        // [SOP v2] 재배정 알림도 팀(MIA·우선·강준)에게만
-        var allMgrIds = await managersLib.getTeamManagerIds();
+        // [SOP v2, 2026-07-03 개정] 팔로워는 항상 MIA·우선 2명만 유지. 강준(담당자)은 재초대로 다시 알림.
+        var allMgrIds = await managersLib.getFollowerIds();
         if (allMgrIds.length > 0) {
           await channeltalk.addFollowers(cid, allMgrIds).catch(function() {});
         }
+        try {
+          var _adminIds = await managersLib.getAdminIds();
+          if (_adminIds.length > 0) await channeltalk.inviteManager(cid, _adminIds[0]);
+        } catch(_raErr) {}
         console.log("[AutoReassign] Chat " + cid + " reassigned after 15min. Notified " + allMgrIds.length + " managers.");
         delete pendingEscalations[cid];
       } catch(e) {
