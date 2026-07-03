@@ -74,42 +74,7 @@ router.post('/send-report', async function(req, res) {
 
 
 
-// CSAT 결과 조회
-router.get('/csat', async function(req, res) {
-  try {
-    var csatFile = require('path').join(__dirname, '..', 'data', 'csat-results.json');
-    var results = [];
-    if (fs.existsSync(csatFile)) {
-      results = JSON.parse(fs.readFileSync(csatFile, 'utf8'));
-    }
-    var days = parseInt(req.query.days) || 30;
-    var cutoff = Date.now() - (days * 24 * 60 * 60 * 1000);
-    var filtered = results.filter(function(r) { var ts = typeof r.timestamp === 'string' ? new Date(r.timestamp).getTime() : r.timestamp; return ts >= cutoff; });
-
-    var total = filtered.length;
-    var avgScore = 0;
-    var distribution = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
-    if (total > 0) {
-      var sum = 0;
-      filtered.forEach(function(r) {
-        sum += r.score;
-        distribution[r.score] = (distribution[r.score] || 0) + 1;
-      });
-      avgScore = Math.round((sum / total) * 10) / 10;
-    }
-
-    res.json({
-      success: true,
-      period: days + " days",
-      totalResponses: total,
-      averageScore: avgScore,
-      distribution: distribution,
-      recentResults: filtered.slice(-20).reverse()
-    });
-  } catch(e) {
-    res.status(500).json({ success: false, error: e.message });
-  }
-});
+// [2026-06-30] 폐기된 /csat 라우트 삭제 — 죽은 인-챗 1~5점(csat-results.json) 서빙. 전략 대시보드가 cs-score-metrics의 m.csat로 재배선되며 호출처 없어짐. CSAT는 csat-v2-stats / cs-score-metrics 사용.
 
 // 배송 트래커 상태 조회
 router.get('/shipping', async function(req, res) {
@@ -174,106 +139,8 @@ router.get('/faq-log', async function(req, res) {
   }
 });
 
-// 자동 종료 현황
-router.get('/auto-close', async function(req, res) {
-  try {
-    var csatSentFile = require('path').join(__dirname, '..', 'data', 'csat-sent.json'); // TODO: csatHelper로 통일
-    var csatResultsFile = require('path').join(__dirname, '..', 'data', 'csat-results.json');
-    var csatSent = {};
-    var csatResults = [];
-    if (fs.existsSync(csatSentFile)) csatSent = JSON.parse(fs.readFileSync(csatSentFile, 'utf8'));
-    try { csatResults = JSON.parse(fs.readFileSync(csatResultsFile, 'utf8')); } catch(e2) {}
-
-    var respondedIds = {};
-    csatResults.forEach(function(r) { respondedIds[r.chatId] = true; });
-
-    var now = Date.now();
-    var pendingChats = [];
-    var expiredCount = 0;
-    var respondedCount = 0;
-
-    Object.keys(csatSent).forEach(function(k) {
-      if (respondedIds[k]) { respondedCount++; return; }
-      var ts = csatSent[k]; if (typeof ts === "object" && ts.sentAt) ts = ts.sentAt; if (typeof ts === "string") ts = new Date(ts).getTime(); if (typeof ts !== "number" || isNaN(ts)) return;
-      var age = now - ts;
-      if (age > 172800000) { expiredCount++; return; } // 48시간 초과 = 만료
-      var d = new Date(ts);
-      var waitH = Math.round(age / 3600000 * 10) / 10;
-      pendingChats.push({
-        chatId: k,
-        sentAt: d.toISOString(),
-        waitingHours: waitH,
-        autoCloseAt: new Date(ts + 172800000).toISOString()
-      });
-    });
-
-    pendingChats.sort(function(a, b) { return b.waitingHours - a.waitingHours; });
-
-    res.json({
-      success: true,
-      csatPending: pendingChats.length,
-      responded: respondedCount,
-      expired: expiredCount,
-      pendingChats: pendingChats
-    });
-  } catch(e) {
-    res.status(500).json({ success: false, error: e.message });
-  }
-});
-
-// 통합 대시보드 요약
-router.get('/dashboard-summary', async function(req, res) {
-  try {
-    var days = parseInt(req.query.days) || 7;
-    var results = await analytics.analyzeRecentChats(days);
-
-    // CSAT
-    var csatFile = require('path').join(__dirname, '..', 'data', 'csat-results.json');
-    var csatResults = [];
-    if (fs.existsSync(csatFile)) csatResults = JSON.parse(fs.readFileSync(csatFile, 'utf8'));
-    var csatAvg = 0;
-    if (csatResults.length > 0) {
-      var csatSum = 0;
-      csatResults.forEach(function(r) { csatSum += r.score; });
-      csatAvg = Math.round((csatSum / csatResults.length) * 10) / 10;
-    }
-
-    // Shipping
-    var stateFile = require('path').join(__dirname, '..', 'data', 'shipping-state.json');
-    var state = {};
-    if (fs.existsSync(stateFile)) state = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
-
-    // FAQ
-    var faqLogFile = require('path').join(__dirname, '..', 'data', 'faq-update-log.json');
-    var faqLogs = [];
-    if (fs.existsSync(faqLogFile)) faqLogs = JSON.parse(fs.readFileSync(faqLogFile, 'utf8'));
-
-    res.json({
-      success: true,
-      period: days + " days",
-      cs: {
-        totalChats: results.totalChats,
-        aiResponseRate: results.aiResponseRate,
-        unresolvedChats: results.unresolvedChats,
-        channelStats: results.channelStats,
-        topCategories: results.categories
-      },
-      csat: {
-        totalResponses: csatResults.length,
-        averageScore: csatAvg
-      },
-      shipping: {
-        trackedItems: Object.keys(state).length
-      },
-      faq: {
-        lastUpdate: faqLogs.length > 0 ? faqLogs[faqLogs.length - 1] : null
-      }
-    });
-  } catch(e) {
-    res.status(500).json({ success: false, error: e.message });
-  }
-});
-
+// [2026-06-30] /auto-close + /dashboard-summary 라우트 삭제 - 둘 다 동결된 csat-results.json(인-챗 1~5점, 6/9 멈춤)을 읽던 죽은/오집계 코드.
+// '설문 대기' 카드는 개요 탭에서 웹설문 /api/csat/funnel로 재배선됨. /dashboard-summary는 호출처 없는 dead route였음.
 
 // 매니저 성과 분석
 router.get('/manager-performance', async function(req, res) {
@@ -405,12 +272,17 @@ router.get('/ai-reviews', async function(req, res) {
     var reviews = [];
     try { reviews = JSON.parse(fs.readFileSync(reviewFile, 'utf8')); } catch(e) {}
     var manual = reviews.filter(function(r) { return r.rating; });
-    var auto = reviews.filter(function(r) { return r.scores; });
-    var total = manual.length;
-    var good = manual.filter(function(r) { return r.rating === 'good'; }).length;
-    var bad = manual.filter(function(r) { return r.rating === 'bad'; }).length;
-    var fix = manual.filter(function(r) { return r.rating === 'fix'; }).length;
-    res.json({ success: true, total: total, good: good, bad: bad, fix: fix, autoReviewCount: auto.length, recent: reviews.slice(-30).reverse() });
+    var auto = reviews.filter(function(r) { return r.scores && typeof r.scores.totalScore === 'number'; });
+    // [2026-06-30] 수동 평가는 거의 없고 자동 셀프리뷰(scores.totalScore/25)가 실데이터 → 자동 점수를 밴딩해 합산.
+    // good: 18+/25, fix(개선후보): 12~17, bad: <12.
+    var autoGood = auto.filter(function(r){ return r.scores.totalScore >= 18; }).length;
+    var autoFix  = auto.filter(function(r){ return r.scores.totalScore >= 12 && r.scores.totalScore < 18; }).length;
+    var autoBad  = auto.filter(function(r){ return r.scores.totalScore < 12; }).length;
+    var total = manual.length + auto.length;
+    var good = manual.filter(function(r) { return r.rating === 'good'; }).length + autoGood;
+    var bad = manual.filter(function(r) { return r.rating === 'bad'; }).length + autoBad;
+    var fix = manual.filter(function(r) { return r.rating === 'fix'; }).length + autoFix;
+    res.json({ success: true, total: total, good: good, bad: bad, fix: fix, manualCount: manual.length, autoReviewCount: auto.length, recent: reviews.slice(-30).reverse() });
   } catch(e) {
     res.status(500).json({ success: false, error: e.message });
   }
@@ -436,7 +308,7 @@ router.get('/ai-quality-reviews', async function(req, res) {
     var metrics = filtered.map(function(r) {
       return {
         managerId: r.managerId || 'unknown',
-        score: r.scores ? (r.scores.total || 0) : 0,
+        score: r.scores ? (r.scores.totalScore || 0) : 0, // [2026-06-30] 필드 오타 수정: total → totalScore (ai-review.js 저장 필드). 전부 0이던 버그.
         date: r.timestamp || r.date,
         summary: r.scores ? (r.scores.summary || '') : ''
       };
@@ -457,7 +329,7 @@ router.get('/cs-score-metrics', async function(req, res) {
     // 1. Response time distribution from manager-stats
     var statsFile = require('path').join(__dirname, '..', 'data', 'manager-stats.json');
     var stats = {};
-    try { stats = JSON.parse(fs.readFileSync(statsFile, 'utf8')); } catch(e) {}
+    try { stats = JSON.parse(fs.readFileSync(statsFile, 'utf8')); } catch(e) { console.error('[CS Score] manager-stats.json read failed — noReply/응답률이 0으로 과소집계될 수 있음:', e.message); }
     var responseTimes = [];
     var cutoffMs = Date.now() - days * 86400000;
     var chatKeys = Object.keys(stats.chats || {});
@@ -552,7 +424,7 @@ router.get('/cs-score-metrics', async function(req, res) {
       totalUsers = Object.keys(userChatCount).length;
       repeatUsers = Object.keys(userChatCount).filter(function(u) { return userChatCount[u] >= 2; }).length;
       repeatRate = totalUsers > 0 ? Math.round((repeatUsers / totalUsers) * 100) : 0;
-    } catch(e) {}
+    } catch(e) { console.error('[CS Score] repeatInquiry(listUserChats) 실패 — 재문의율이 0으로 과소집계될 수 있음:', e.message); }
 
     // 4. Business hours coverage
     var aiConvFile = require('path').join(__dirname, '..', 'data', 'ai-conversations.json');
@@ -600,16 +472,8 @@ router.get('/cs-score-metrics', async function(req, res) {
       });
     });
 
-  // === CES Data ===
-  var cesData = [];
-  try { cesData = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'data', 'ces-results.json'), 'utf8')); } catch(e) {}
-  var cesCutoff = new Date(Date.now() - days * 86400000);
-  var recentCES = cesData.filter(function(c) { return new Date(c.timestamp) >= cesCutoff; });
-  var cesAvg = 0;
-  if (recentCES.length > 0) {
-    cesAvg = recentCES.reduce(function(sum, c) { return sum + c.score; }, 0) / recentCES.length;
-    cesAvg = Math.round(cesAvg * 100) / 100;
-  }
+  // [2026-06-30] CES Data 블록 제거 — 인-챗 CES 종료. 폐기된 ces-results.json을 매 요청 읽고 cesAvg 계산하던 죽은 코드
+  // (CES pillar는 이미 _components에서 제외됨, cesScoreVal도 미사용이라 함께 삭제).
 
   // === FCR Data ===
   var fcrData = { resolved: [], reopened: [] };
@@ -643,26 +507,26 @@ router.get('/cs-score-metrics', async function(req, res) {
   else if (fcrRate >= 55) fcrScore = 3;
   else fcrScore = 2;
 
-  // CSAT: csat-results.json (채팅 내 1~5 평점). [수정 2026-05-22] days 기간 내 데이터만 사용.
-  // (기존 버그: 기간필터된 평균을 만들어놓고도 전체기간 평균 csatAvg2 를 우선 사용해 days 와 불일치)
-  var csatAvg = 0;
+  // CSAT: [2026-06-30] 죽은 인-챗 csat-results.json(1~5) 대신 살아있는 웹설문 csat-feedback-v2.json(이진 만족/불만족) 사용.
+  // 만족률(satisfied/total)을 1~5로 매핑(100%→5, 0%→1). days 윈도 필터. 데이터 없으면 2.5 기본값(저신뢰로 종합점수에서 제외).
+  var csatScore = 2.5;
   var csatWindowCount = 0;
+  var csatSatRate = null;
   try {
-    var csatData = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'data', 'csat-results.json'), 'utf8'));
-    var recentCSAT = csatData.filter(function(c) {
-      return c.timestamp >= cutoffMs && !(typeof c.chatId === 'string' && c.chatId.indexOf('test') === 0);
+    var csatFb = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'data', 'csat-feedback-v2.json'), 'utf8'));
+    var _csatCut = Date.now() - days * 86400000;
+    var recentCSAT = (Array.isArray(csatFb) ? csatFb : []).filter(function(c) {
+      var t = c.submittedAt ? new Date(c.submittedAt).getTime() : (typeof c.timestamp === 'string' ? new Date(c.timestamp).getTime() : c.timestamp);
+      return t >= _csatCut;
     });
     csatWindowCount = recentCSAT.length;
     if (csatWindowCount > 0) {
-      csatAvg = recentCSAT.reduce(function(sum, c) { return sum + (typeof c.score === 'number' ? c.score : 0); }, 0) / csatWindowCount;
+      var _csatSat = recentCSAT.filter(function(c) { return c.satisfied === true; }).length;
+      csatSatRate = _csatSat / csatWindowCount;       // 0~1
+      csatScore = 1 + csatSatRate * 4;                 // 1~5
     }
   } catch(e) {}
-
-  // 1=매우만족 ~ 5=매우불만족 → 높을수록 좋게 역변환 (6 - score). 데이터 없으면 2.5 기본값.
-  var csatScore = csatAvg > 0 ? (6 - csatAvg) : 2.5;
-  if (csatAvg === 0) console.log('[CS Score] CSAT no windowed data - using default 2.5');
-
-  var cesScoreVal = cesAvg > 0 ? cesAvg : 2.5; // default if no data
+  if (csatWindowCount === 0) console.log('[CS Score] CSAT(web survey) no windowed data - using default 2.5');
 
   var noReplyScore = 0;
   if (noReplyRate <= 10) noReplyScore = 5;
@@ -674,13 +538,11 @@ router.get('/cs-score-metrics', async function(req, res) {
   // [검증] 표본 10건 미만이면 신뢰도 낮음 (기본값 대체 + 통계적으로 무의미한 소표본 모두 포함)
   var reliability = {
     fcrLowConfidence: fcrSampleCount < 10,
-    cesLowConfidence: recentCES.length < 10,
     csatLowConfidence: csatWindowCount < 10,
     fcrSamples: fcrSampleCount,
-    cesSamples: recentCES.length,
     csatSamples: csatWindowCount
   };
-  reliability.needsVerification = reliability.fcrLowConfidence || reliability.cesLowConfidence || reliability.csatLowConfidence;
+  reliability.needsVerification = reliability.fcrLowConfidence || reliability.csatLowConfidence;
 
   // [①③ 가중치 재정규화] 저표본 컴포넌트(FCR/CES/CSAT)는 종합점수에서 제외하고 남은 가중치로 재정규화.
   // [④] FRT는 영업시간 기준 점수(bizFrtScore)를 사용 (벽시계 frtScore는 breakdown에 참고용으로 남김).
@@ -688,8 +550,8 @@ router.get('/cs-score-metrics', async function(req, res) {
     { key: 'frt',     score: bizFrtScore,  weight: 0.20, lowConf: false },
     { key: 'fcr',     score: fcrScore,     weight: 0.25, lowConf: reliability.fcrLowConfidence },
     { key: 'csat',    score: csatScore,    weight: 0.20, lowConf: reliability.csatLowConfidence },
-    { key: 'ces',     score: cesScoreVal,  weight: 0.15, lowConf: reliability.cesLowConfidence },
     { key: 'noReply', score: noReplyScore, weight: 0.20, lowConf: false }
+    // [2026-06-30] CES pillar 제거 (인-챗 CES 종료) — 남은 가중치는 _trustedWeight로 자동 재정규화
   ];
   var _trusted = _components.filter(function(c) { return !c.lowConf; });
   var _trustedWeight = _trusted.reduce(function(s, c) { return s + c.weight; }, 0);
@@ -735,9 +597,10 @@ router.get('/cs-score-metrics', async function(req, res) {
       },
       managerResponseTime: mgrRTSummary
     ,
-      ces: { avgScore: cesAvg, totalResponses: recentCES.length },
+      ces: { retired: true, totalResponses: 0 },
       fcr: { rate: fcrRate, resolved: recentResolved.length, reopened: recentReopened.length },
-      integratedScore: { score: integratedScore, breakdown: { frt: { score: frtScore, weight: 0.20, bizScore: bizFrtScore }, fcr: { score: fcrScore, weight: 0.25 }, csat: { score: csatScore, weight: 0.20 }, ces: { score: cesScoreVal, weight: 0.15 }, noReply: { score: noReplyScore, weight: 0.20 } }, target: 3.0 },
+      csat: { satisfactionRate: csatSatRate !== null ? Math.round(csatSatRate * 100) : null, total: csatWindowCount },
+      integratedScore: { score: integratedScore, breakdown: { frt: { score: frtScore, weight: 0.20, bizScore: bizFrtScore }, fcr: { score: fcrScore, weight: 0.25 }, csat: { score: csatScore, weight: 0.20 }, noReply: { score: noReplyScore, weight: 0.20 } }, target: 3.0 },
       reliability: reliability
   });
   } catch(e) {
@@ -746,38 +609,7 @@ router.get('/cs-score-metrics', async function(req, res) {
 });
 
 
-// === CES API ===
-router.get('/ces', function(req, res) {
-  try {
-    var cesPath2 = path.join(__dirname, '..', 'data', 'ces-results.json');
-    var data = [];
-    try { data = JSON.parse(fs.readFileSync(cesPath2, 'utf8')); } catch(e) {}
-    var days = parseInt(req.query.days) || 30;
-    var cutoff = Date.now() - (days * 24 * 60 * 60 * 1000);
-    var recent = data.filter(function(d) { return new Date(d.timestamp).getTime() > cutoff; });
-    var total = recent.length;
-    var avg = 0;
-    if (total > 0) { var sum = 0; recent.forEach(function(d) { sum += d.score; }); avg = parseFloat((sum / total).toFixed(2)); }
-    var dist = { 1:0, 2:0, 3:0, 4:0, 5:0 };
-    recent.forEach(function(d) { if (d.score >= 1 && d.score <= 5) dist[d.score]++; });
-    res.json({ success: true, average: avg, total: total, distribution: dist, recent: recent.slice(-20).reverse() });
-  } catch(e) { res.json({ success: false, error: e.message }); }
-});
-
-
-// === CSAT Feedback (Dissatisfaction Reasons) API ===
-router.get('/csat-feedback', function(req, res) {
-  try {
-    var fbPath = require('path').join(__dirname, '..', 'data', 'csat-feedback.json');
-    var data = [];
-    try { data = JSON.parse(require('fs').readFileSync(fbPath, 'utf8')); } catch(e) {}
-    var days = parseInt(req.query.days) || 30;
-    var cutoff = Date.now() - (days * 24 * 60 * 60 * 1000);
-    var recent = data.filter(function(d) { return new Date(d.timestamp).getTime() > cutoff; });
-    res.json({ success: true, total: recent.length, feedback: recent.reverse() });
-  } catch(e) { res.json({ success: false, error: e.message }); }
-});
-
+// [2026-06-30] 폐기된 /ces, /csat-feedback 라우트 삭제 — 각각 죽은 ces-results.json / 인-챗 csat-feedback.json 서빙, 대시보드 호출처 없음. 현 CSAT는 csat-v2-stats 사용.
 
 // === Escalation Analysis API ===
 router.get('/escalation-analysis', function(req, res) {
@@ -944,7 +776,9 @@ router.get('/faq-recommendations', (req, res) => {
       logs = JSON.parse(fs.readFileSync(logFile, 'utf8'));
     }
     
-    const cutoff = Date.now() - (days * 24 * 60 * 60 * 1000);
+    // [2026-06-30] ai-conversations의 timestamp는 ISO 문자열인데 숫자 cutoff와 비교해 항상 false → 패널 영구 빈값.
+    // escalation-analysis(정상 동작)와 동일하게 ISO 문자열 cutoff로 비교.
+    const cutoff = new Date(Date.now() - (days * 24 * 60 * 60 * 1000)).toISOString();
     const recent = logs.filter(l => l.timestamp > cutoff && l.escalated);
     
     // 에스컬레이션 질문을 카테고리별로 분류
@@ -963,14 +797,14 @@ router.get('/faq-recommendations', (req, res) => {
     };
     
     recent.forEach(log => {
-      const q = (log.question || '').toLowerCase();
+      const q = (log.userMessage || '').toLowerCase();
       let matched = false;
       for (const [cat, kws] of Object.entries(keywords)) {
         if (kws.some(kw => q.includes(kw.toLowerCase()))) {
           if (!categories[cat]) categories[cat] = { count: 0, examples: [] };
           categories[cat].count++;
           if (categories[cat].examples.length < 3) {
-            categories[cat].examples.push(log.question);
+            categories[cat].examples.push(log.userMessage);
           }
           matched = true;
           break;
@@ -980,7 +814,7 @@ router.get('/faq-recommendations', (req, res) => {
         if (!categories['other']) categories['other'] = { count: 0, examples: [] };
         categories['other'].count++;
         if (categories['other'].examples.length < 3) {
-          categories['other'].examples.push(log.question);
+          categories['other'].examples.push(log.userMessage);
         }
       }
     });
@@ -1016,11 +850,16 @@ router.get('/data-health', (req, res) => {
   try {
     var checks = {};
     
-    // CSAT 데이터 상태
-    var csatFile = path.join(__dirname, '../data/csat-results.json');
+    // CSAT 데이터 상태 [2026-06-30] 살아있는 웹설문 csat-feedback-v2.json 기준 (죽은 인-챗 csat-results.json 아님 → 영구 오경보 제거)
+    var csatFile = path.join(__dirname, '../data/csat-feedback-v2.json');
     var csatData = [];
     if (fs.existsSync(csatFile)) { try { csatData = JSON.parse(fs.readFileSync(csatFile, 'utf8')); } catch(e) {} }
-    var csatRecent = csatData.filter(function(c) { return c.timestamp > Date.now() - 7 * 24 * 60 * 60 * 1000; });
+    if (!Array.isArray(csatData)) csatData = [];
+    var _csat7d = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    var csatRecent = csatData.filter(function(c) {
+      var t = c.submittedAt ? new Date(c.submittedAt).getTime() : (typeof c.timestamp === 'string' ? new Date(c.timestamp).getTime() : c.timestamp);
+      return t > _csat7d;
+    });
     checks.csat = {
       total: csatData.length,
       last7days: csatRecent.length,
@@ -1029,19 +868,8 @@ router.get('/data-health', (req, res) => {
       status: csatRecent.length >= 10 ? 'OK' : csatRecent.length >= 5 ? 'PARTIAL' : 'INSUFFICIENT'
     };
     
-    // CES 데이터 상태
-    var cesFile = path.join(__dirname, '../data/ces-results.json');
-    var cesData = [];
-    if (fs.existsSync(cesFile)) { try { cesData = JSON.parse(fs.readFileSync(cesFile, 'utf8')); } catch(e) {} }
-    var cesRecent = cesData.filter(function(c) { return c.timestamp > Date.now() - 14 * 24 * 60 * 60 * 1000; });
-    checks.ces = {
-      total: cesData.length,
-      last14days: cesRecent.length,
-      sufficient: cesRecent.length >= 20,
-      target: 20,
-      status: cesRecent.length >= 20 ? 'OK' : cesRecent.length >= 5 ? 'PARTIAL' : 'INSUFFICIENT'
-    };
-    
+    // [2026-06-30] CES 데이터 헬스체크 제거 — 인-챗 CES 종료 (영구 INSUFFICIENT 오경보 원인)
+
     // FCR 데이터 상태
     var fcrFile = path.join(__dirname, '../data/fcr-tracker.json');
     var fcrData = { resolved: [], reopened: [] };
@@ -1083,24 +911,16 @@ router.get('/data-health', (req, res) => {
       escalationRate: aiRecent.length > 0 ? Math.round(escalatedRecent.length / aiRecent.length * 100) : 0
     };
     
-    // CSAT Feedback
-    var fbFile = path.join(__dirname, '../data/csat-feedback.json');
-    var fbData = [];
-    if (fs.existsSync(fbFile)) { try { fbData = JSON.parse(fs.readFileSync(fbFile, 'utf8')); } catch(e) {} }
-    checks.csatFeedback = {
-      total: fbData.length,
-      status: fbData.length > 0 ? 'COLLECTING' : 'WAITING'
-    };
-    
+    // [2026-06-30] checks.csatFeedback 제거 — 폐기된 인-챗 csat-feedback.json을 읽던 죽은 체크(미렌더, overallStatus에도 미포함)
+
     // 전체 상태 판단
-    var allStatuses = [checks.csat.status, checks.ces.status, checks.fcr.status, checks.scoreHistory.status];
+    var allStatuses = [checks.csat.status, checks.fcr.status, checks.scoreHistory.status];
     var overallStatus = allStatuses.every(function(s) { return s === 'OK'; }) ? 'HEALTHY' :
                         allStatuses.some(function(s) { return s === 'OK'; }) ? 'PARTIAL' : 'NEEDS_DATA';
     
     // 추천 액션
     var recommendations = [];
-    if (checks.csat.status !== 'OK') recommendations.push('CSAT 응답 ' + checks.csat.target + '건 목표 대비 ' + checks.csat.last7days + '건 - CSAT 설문 응답률 개선 필요');
-    if (checks.ces.status !== 'OK') recommendations.push('CES 응답 ' + checks.ces.target + '건 목표 대비 ' + checks.ces.last14days + '건 - CES 수집 파이프라인 확인 필요');
+    if (checks.csat.status !== 'OK') recommendations.push('CSAT(웹 설문) 응답 ' + checks.csat.target + '건 목표 대비 7일 ' + checks.csat.last7days + '건 - 설문 응답률 개선 필요');
     if (checks.fcr.status !== 'OK') recommendations.push('FCR resolved ' + checks.fcr.target + '건 목표 대비 ' + checks.fcr.resolved + '건 - 채팅 종료 시 FCR 기록 확인');
     if (checks.aiConversations.escalationRate > 40) recommendations.push('에스컬레이션율 ' + checks.aiConversations.escalationRate + '% - FAQ 보강 또는 AI confidence 개선 필요');
     
@@ -1655,7 +1475,13 @@ router.get('/csat-v2-stats', function(req, res) {
           lang: f.lang,
           type: f.type,
           submittedAt: f.submittedAt || f.timestamp,
-          rewardStatus: f.rewardStatus
+          rewardStatus: f.rewardStatus,
+          // [2026-06-30] 프론트 '최근 피드백' 표가 읽지만 미반환이라 항상 '-'/'비회원'이던 고객 식별 필드 추가
+          customerName: f.customerName,
+          email: f.email,
+          veaslyId: f.veaslyId,
+          userId: f.userId,
+          isMember: f.isMember
         };
       }),
       allFeedback: feedback.length,
@@ -1747,7 +1573,9 @@ router.get('/ai-review-summary', function(req, res) {
         good: filtered.filter(function(r) { var s = r.scores && r.scores.totalScore || 0; return s >= 15 && s < 20; }).length,
         average: filtered.filter(function(r) { var s = r.scores && r.scores.totalScore || 0; return s >= 10 && s < 15; }).length,
         poor: filtered.filter(function(r) { return (r.scores && r.scores.totalScore || 0) < 10; }).length
-      }
+      },
+      // [2026-06-30] 매니저 탭 'CS 직원 자동 품질 리뷰' 표가 recent를 읽는데 미반환이라 항상 빈 표였음 → 최근 30건 추가
+      recent: filtered.slice(-30).reverse()
     });
   } catch(err) {
     res.status(500).json({ success: false, error: err.message });

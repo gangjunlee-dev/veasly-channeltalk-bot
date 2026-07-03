@@ -15,26 +15,49 @@ process.on('unhandledRejection', function(reason) {
 });
 
 var app = express();
+// [2026-06-30 보안] dashboard.html(및 .bak 변형) 무인증 직접 접근 차단 → 인증 경로 /dashboard 로 리다이렉트.
+// (survey.html 등 고객용 public 파일은 그대로 공개. /dashboard 자체는 .html이 없어 매칭 안 됨)
+app.get(/^\/dashboard\.html/i, function(req, res) { return res.redirect(302, '/dashboard'); });
 app.use(express.static("public"));
 app.use(express.json());
-// Dashboard password protection
-app.get("/dashboard", function(req, res) {
-  var auth = req.headers.authorization;
-  if (!auth || auth.indexOf("Basic ") !== 0) {
+// Dashboard password protection — reusable Basic-auth middleware
+function requireDashboardAuth(req, res, next) {
+  var a = req.headers.authorization;
+  if (!a || a.indexOf("Basic ") !== 0) {
     res.setHeader("WWW-Authenticate", 'Basic realm="VEASLY Dashboard"');
     return res.status(401).send("Authentication required");
   }
-  var credentials = Buffer.from(auth.split(" ")[1], "base64").toString();
-  var parts = credentials.split(":");
+  var cred = Buffer.from(a.split(" ")[1], "base64").toString();
+  var parts = cred.split(":");
   var user = parts[0];
   var pass = parts.slice(1).join(":");
-  if (user === (process.env.DASHBOARD_USER || "admin") && pass === (process.env.DASHBOARD_PASS || "veasly2026!")) {
-    res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
-    res.set('Pragma', 'no-cache');
-    return res.sendFile(require('path').join(__dirname, 'public', 'dashboard.html'));
-  }
+  if (process.env.DASHBOARD_PASS && user === (process.env.DASHBOARD_USER || "admin") && pass === process.env.DASHBOARD_PASS) return next(); // [2026-06-30 보안] 하드코딩 비번 폴백 제거, env 필수
   res.setHeader("WWW-Authenticate", 'Basic realm="VEASLY Dashboard"');
   return res.status(401).send("Invalid credentials");
+}
+app.get("/dashboard", requireDashboardAuth, function(req, res) {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.set('Pragma', 'no-cache');
+  return res.sendFile(require('path').join(__dirname, 'public', 'dashboard.html'));
+});
+
+// [2026-06-30] FAQ 검토 UI (전부 인증 필수) — 격리된 AI FAQ(faq_review)를 사람이 승인→라이브 KB 반영/거절
+var faqReview = require('./lib/faq-review');
+app.get("/admin/faq-review", requireDashboardAuth, function(req, res) {
+  res.set('Cache-Control', 'no-store');
+  return res.sendFile(require('path').join(__dirname, 'faq-review.html'));
+});
+app.get("/api/faq-review/list", requireDashboardAuth, function(req, res) {
+  faqReview.listPending(60).then(function(r) { res.json({ ok: true, items: r.items, total: r.total }); })
+    .catch(function(e) { res.status(500).json({ ok: false, error: e.message }); });
+});
+app.post("/api/faq-review/approve", requireDashboardAuth, function(req, res) {
+  faqReview.approve(req.body.id, req.body.question, req.body.answer, req.body.category).then(function() { res.json({ ok: true }); })
+    .catch(function(e) { res.status(500).json({ ok: false, error: e.message }); });
+});
+app.post("/api/faq-review/reject", requireDashboardAuth, function(req, res) {
+  faqReview.reject(req.body.id).then(function() { res.json({ ok: true }); })
+    .catch(function(e) { res.status(500).json({ ok: false, error: e.message }); });
 });
 
 var webhookRouter = require('./routes/webhook');
@@ -44,10 +67,7 @@ var marketingRouter = require('./routes/marketing');
 var scheduler = require('./lib/scheduler');
 var aiEngine = require('./lib/ai-engine');
 
-// dashboard.html 직접 접근 지원
-// /dashboard는 위에서 직접 처리
-
-app.get('/dashboard.html', function(req, res) { res.sendFile(require('path').join(__dirname, 'public', 'dashboard.html')); });
+// [2026-06-30 보안] /dashboard.html 무인증 직접서빙 라우트 제거 — 위 가드가 인증 경로 /dashboard 로 리다이렉트함
 
 app.use('/webhook', webhookRouter);
 app.use('/api/bot', botRouter);

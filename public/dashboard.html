@@ -224,10 +224,11 @@ td { padding: 10px 8px; border-bottom: 1px solid var(--border-secondary); font-s
   <div class="tab active" onclick="switchTab('overview')">📊 종합현황</div>
   <div class="tab" onclick="switchTab('managers')">👥 매니저 성과</div>
   <div class="tab" onclick="switchTab('ai')">🤖 AI 모니터링</div>
-  <div class="tab" onclick="switchTab('csat')">⭐ 고객 피드백</div>
+  <div class="tab" onclick="switchTab('csat')">⭐ 고객 만족도</div>
   <div class="tab" onclick="switchTab('shipping')">📦 배송현황</div>
   <div class="tab" onclick="switchTab('csscore')">🎯 CS Score</div>
   <div class="tab" onclick="switchTab('faq')">🧠 AI 학습</div>
+  <a class="tab" href="/admin/faq-review" target="_blank" rel="noopener" style="text-decoration:none;color:inherit;" title="새 탭에서 FAQ 검토 페이지가 열립니다">📝 FAQ 검토 ↗</a>
   <div class="tab" onclick="switchTab('unreplied')" id="unreplied-tab">🚨 미응답</div>
 </div>
 
@@ -282,9 +283,7 @@ td { padding: 10px 8px; border-bottom: 1px solid var(--border-secondary); font-s
         <h3 style="color:var(--text-primary);margin:0 0 12px;">📊 비즈니스 메트릭</h3>
         <div id="biz-metrics-content" style="font-size:13px;color:var(--text-secondary);">로딩 중...</div>
       </div>
-      <!-- 데이터 헬스 패널 -->
-      <div id="health-content" class="chart-card" style="margin-top:16px;display:none;">
-      </div>
+      <!-- [2026-06-30] 데이터 헬스 패널 삭제 (display:none으로 숨겨져 아무도 못 보던 표본충분도 패널) -->
 </div>
 </div>
 
@@ -528,12 +527,12 @@ function loadOverview() {
   // === PHASE 1: v2 운영 카드 + 차트 (기본) ===
   Promise.all([
     fetch(API_BASE + '/api/analytics/report?days=' + days).then(function(r) { return r.json(); }),
-    fetch('/api/analytics/auto-close').then(function(r) { return r.json(); }).catch(function() { return null; }),
+    fetch('/api/csat/funnel').then(function(r) { return r.json(); }).catch(function() { return null; }),
     fetch('/api/analytics/csat-v2-stats?days=' + days).then(function(r) { return r.json(); }).catch(function() { return null; }),
     fetch('/api/analytics/cs-score-metrics?days=' + days).then(function(r) { return r.json(); }).catch(function() { return null; })
   ]).then(function(results) {
     var data = results[0];
-    var autoClose = results[1];
+    var funnel = results[1]; // [2026-06-30] 폐기된 /auto-close(동결 csat-results 대조) 대신 웹설문 funnel
     var csatV2 = results[2];
     var csMetrics = results[3];
     if (!data.success) throw new Error(data.error);
@@ -580,9 +579,12 @@ function loadOverview() {
       var _offColor = _offRate > 60 ? 'red' : _offRate > 40 ? 'yellow' : 'green';
       html += card('오프시간 문의', _offRate + '%', '', _offColor, '영업 ' + _bh.bizHour + '건 / 오프 ' + _bh.offHour + '건', '🌙 영업시간(평일 10-19시) 외 접수된 문의 비율입니다.');
     }
-    // CSAT 대기 (기존 유지)
-    if (autoClose && autoClose.success && autoClose.csatPending > 0) {
-      html += card('설문 대기', autoClose.csatPending, '건', autoClose.csatPending > 5 ? 'yellow' : 'green', 'CSAT 발송 후 미응답', '📋 CSAT 설문 발송 후 미응답 건수입니다.');
+    // 설문 미제출 (웹설문 funnel 기준 — 열람했으나 제출 안 한 고객)
+    if (funnel) {
+      var _notSubmitted = (funnel.openedUnique || 0) - (funnel.submittedUnique || 0);
+      if (_notSubmitted > 0) {
+        html += card('설문 미제출', _notSubmitted, '명', _notSubmitted > 5 ? 'yellow' : 'green', '열람 ' + (funnel.openedUnique || 0) + ' / 제출 ' + (funnel.submittedUnique || 0), '📋 웹 설문을 열었으나 제출하지 않은 고객 수입니다. (2026-05-22 이후 열람 추적 기준)');
+      }
     }
     html += '</div>';
 
@@ -613,15 +615,16 @@ function loadStrategySection(days) {
   Promise.all([
     fetch('/api/analytics/cs-score-metrics?days=' + days).then(function(r){return r.json();}).catch(function(){return null;}),
     fetch('/api/analytics/manager-performance?days=' + days).then(function(r){return r.json();}).catch(function(){return null;}),
-    fetch('/api/analytics/escalation-analysis?days=' + days).then(function(r){return r.json();}).catch(function(){return null;}),
-    fetch('/api/analytics/csat?days=' + days).then(function(r){return r.json();}).catch(function(){return null;})
+    fetch('/api/analytics/escalation-analysis?days=' + days).then(function(r){return r.json();}).catch(function(){return null;})
   ]).then(function(res) {
     var el = document.getElementById('strategySection');
     if (!el) return;
-    var m = res[0], mgr = res[1], esc = res[2], csat = res[3];
+    var m = res[0], mgr = res[1], esc = res[2];
     var mgrData = (mgr && mgr.success && mgr.managers) ? mgr.managers : [];
-    var csatData = csat && csat.success ? csat : null;
     if (!m || !m.success) { el.innerHTML = '<div style="padding:20px;color:#eab308;text-align:center;">전략 데이터 로딩 실패</div>'; return; }
+    // [2026-06-30] CSAT는 cs-score-metrics(m.csat: 만족률%·응답수)로 재배선. 폐기된 /csat(인-챗 1~5점 csat-results.json) 호출 제거.
+    var csatRate = (m.csat && m.csat.satisfactionRate != null) ? m.csat.satisfactionRate : null; // 만족률 %(0~100) or null
+    var csatTotalD = (m.csat && m.csat.total) ? m.csat.total : 0;
 
     var sc = m.integratedScore || {};
     var bd = sc.breakdown || {};
@@ -646,8 +649,8 @@ function loadStrategySection(days) {
       {name:'NoReply', score:(bd.noReply||{}).score||0, icon:'⏰', detail:'미응답 '+((m.noReplyClose||{}).rate||0)+'% ('+((m.noReplyClose||{}).count||0)+'/'+((m.noReplyClose||{}).total||0)+')'},
       {name:'FRT (24h)', score:(bd.frt||{}).score||0, icon:'⚡', detail:'30분내 '+((m.responseTime||{}).within30MinRate||0)+'% | 평균 '+((m.responseTime||{}).avgMinutes||0)+'분'},{name:'FRT (영업)', score:(bd.frt||{}).bizScore||0, icon:'🏢', detail:'30분내 '+((m.responseTime||{}).bizWithin30MinRate||0)+'% | 평균 '+((m.responseTime||{}).bizAvgMinutes||0)+'분'},
       {name:'FCR', score:(bd.fcr||{}).score||0, icon:'✅', detail:'해결 '+((m.fcr||{}).resolved||0)+'건 | 재문의 '+((m.fcr||{}).reopened||0)+'건'},
-      {name:'CSAT', score:(bd.csat||{}).score||0, icon:'⭐', detail:'평균 '+(csatData&&(csatData.averageScore||csatData.average)?((csatData.averageScore||csatData.average)).toFixed(1):'N/A')+' | 응답 '+(csatData&&(csatData.totalResponses||csatData.total)?(csatData.totalResponses||csatData.total):0)+'건'},
-      {name:'CES', score:(bd.ces||{}).score||0, icon:'🎯', detail:'평균 '+((m.ces||{}).avgScore||0)+' | 응답 '+((m.ces||{}).totalResponses||(m.ces||{}).count||0)+'건'}
+      {name:'CSAT', score:(bd.csat||{}).score||0, icon:'⭐', detail:'만족률 '+(csatRate!=null?csatRate+'%':'N/A')+' | 응답 '+csatTotalD+'건'}
+      // [2026-06-30] CES 서브카드 제거 (인-챗 CES 종료, 데이터 없음)
     ];
     h += '<div class="strat-subs">';
     for (var i=0; i<metrics.length; i++) {
@@ -669,9 +672,7 @@ function loadStrategySection(days) {
     // 실시간 데이터 기반 핵심 문제 생성
     var escRate = esc && esc.escalatedRate ? esc.escalatedRate : 0;
     var noReplyR = (m.noReplyClose||{}).rate || 0;
-    var csatAvgD = csatData && (csatData.averageScore || csatData.average) ? (csatData.averageScore || csatData.average) : 0;
-    var csatTotalD = csatData && (csatData.totalResponses || csatData.total) ? (csatData.totalResponses || csatData.total) : 0;
-    var cesCountD = (m.ces||{}).totalResponses || (m.ces||{}).count || 0;
+    // [2026-06-30] csatRate(만족률%)/csatTotalD는 상단에서 m.csat로 정의됨 (구 csatAvgD 평균값 제거)
     var fcrResolvedD = (m.fcr||{}).resolved || 0;
     var frtRateD = (m.responseTime||{}).within30MinRate || 0;
 
@@ -685,12 +686,11 @@ function loadStrategySection(days) {
     // FRT
     if (frtRateD < 50) problems.push({sev:'crit', title:'FRT 30분내 '+frtRateD+'% (영업: '+((m.responseTime||{}).bizWithin30MinRate||0)+'%)', sub:'목표 80%. 24h평균 '+ ((m.responseTime||{}).avgMinutes||0) +'분 / 영업평균 '+((m.responseTime||{}).bizAvgMinutes||0)+'분'});
     else if (frtRateD < 80) problems.push({sev:'warn', title:'FRT 30분내 '+frtRateD+'%', sub:'목표 80%. 개선 진행 중'});
-    // CSAT
-    if (csatAvgD > 0 && csatAvgD < 3.0) problems.push({sev:'crit', title:'CSAT 평균 '+csatAvgD.toFixed(1)+'/5.0', sub:'응답 '+csatTotalD+'건. 목표 4.0 이상'});
-    else if (csatAvgD > 0 && csatAvgD < 4.0) problems.push({sev:'warn', title:'CSAT 평균 '+csatAvgD.toFixed(1)+'/5.0', sub:'응답 '+csatTotalD+'건. 목표 4.0까지 '+(4.0-csatAvgD).toFixed(1)+' 부족'});
+    // CSAT (만족률 %, 목표 80% / 60% 미만 심각)
+    if (csatRate !== null && csatRate < 60) problems.push({sev:'crit', title:'CSAT 만족률 '+csatRate+'%', sub:'응답 '+csatTotalD+'건. 목표 80% 이상'});
+    else if (csatRate !== null && csatRate < 80) problems.push({sev:'warn', title:'CSAT 만족률 '+csatRate+'%', sub:'응답 '+csatTotalD+'건. 목표 80%까지 '+(80-csatRate)+'%p 부족'});
     else if (csatTotalD < 10) problems.push({sev:'warn', title:'CSAT 응답 '+csatTotalD+'건', sub:'샘플 부족. 최소 20건 이상 필요'});
-    // CES/FCR 데이터
-    if (cesCountD < 10) problems.push({sev:'warn', title:'CES 데이터 부족 ('+cesCountD+'건)', sub:'최소 10건 필요. CES 설문 발송 확대 필요'});
+    // FCR 데이터 ([2026-06-30] CES 데이터부족 경고 제거 — 인-챗 CES 종료)
     if (fcrResolvedD >= 10) { var fcrRateD = (m.fcr||{}).rate||0; if (fcrRateD < 70) problems.push({sev:'warn', title:'FCR '+fcrRateD+'%', sub:'해결 '+fcrResolvedD+'건 중 재문의 '+((m.fcr||{}).reopened||0)+'건. 목표 80%'}); }
     // 매니저 편중
     if (mgrData.length > 1) {
@@ -764,17 +764,17 @@ function loadStrategySection(days) {
       actions.push({st:'done', priority:9, title:'미응답 '+noReplyR+'% ✅', desc:'목표 달성', target:'유지 관리'});
     }
 
-    // --- CSAT ---
-    if (csatAvgD > 0 && csatAvgD < 3.0) {
-      actions.push({st:'wait', priority:0, title:'CSAT '+csatAvgD.toFixed(1)+'/5.0→4.0',
+    // --- CSAT (만족률 %, 목표 80% / 60% 미만 심각) ---
+    if (csatRate !== null && csatRate < 60) {
+      actions.push({st:'wait', priority:0, title:'CSAT 만족률 '+csatRate+'%→80%',
         desc:'심각 수준. 응답 품질 전면 점검 필요. 현재 '+csatTotalD+'건 응답',
         target:'불만족 원인 TOP3 파악 → 개별 개선'});
-    } else if (csatAvgD > 0 && csatAvgD < 4.0) {
-      actions.push({st:'prog', priority:1, title:'CSAT '+csatAvgD.toFixed(1)+'/5.0→4.0',
-        desc:'개선 중. '+(4.0-csatAvgD).toFixed(1)+'점 부족. 응답 '+csatTotalD+'건',
+    } else if (csatRate !== null && csatRate < 80) {
+      actions.push({st:'prog', priority:1, title:'CSAT 만족률 '+csatRate+'%→80%',
+        desc:'개선 중. '+(80-csatRate)+'%p 부족. 응답 '+csatTotalD+'건',
         target:'응답 톤/정확도 개선, 설문 20건+ 확보'});
-    } else if (csatAvgD >= 4.0) {
-      actions.push({st:'done', priority:9, title:'CSAT '+csatAvgD.toFixed(1)+' ✅', desc:'목표 달성', target:'유지 관리'});
+    } else if (csatRate !== null && csatRate >= 80) {
+      actions.push({st:'done', priority:9, title:'CSAT 만족률 '+csatRate+'% ✅', desc:'목표 달성', target:'유지 관리'});
     }
     if (csatTotalD < 20 && csatTotalD > 0) {
       actions.push({st:'prog', priority:3, title:'CSAT 설문 확대 ('+csatTotalD+'/20건)',
@@ -800,18 +800,7 @@ function loadStrategySection(days) {
       }
     }
 
-    // --- CES ---
-    if (cesCountD < 10) {
-      actions.push({st:'prog', priority:3, title:'CES 설문 수집 ('+cesCountD+'/10건)',
-        desc:'고객 노력도 측정 데이터 부족. CES 설문 자동 발송 설정 필요',
-        target:'주간 10건+ → 고객 노력도 분석 가능'});
-    } else {
-      var cesAvg = (m.ces||{}).avgScore || 0;
-      if (cesAvg > 3) {
-        actions.push({st:'wait', priority:1, title:'CES '+cesAvg.toFixed(1)+'→3.0 이하',
-          desc:'고객이 문제 해결에 많은 노력을 들이고 있음', target:'셀프서비스 강화'});
-      }
-    }
+    // [2026-06-30] CES 액션 블록 제거 — 인-챗 CES 종료, 데이터 없음
 
     // 우선순위 정렬 (wait→prog→done)
     actions.sort(function(a,b) { return a.priority - b.priority; });
@@ -859,7 +848,7 @@ function loadStrategySection(days) {
     var forecasts = [
       {label:'현재', val:totalScore.toFixed(2), color:'#ef4444', bg:'rgba(239,68,68,0.1)', note:''},
       {label:'2주후', val:(totalScore + 0.15).toFixed(2), color:(totalScore+0.15)>=3.0?'#22c55e':'#eab308', bg:(totalScore+0.15)>=3.0?'rgba(34,197,94,0.1)':'rgba(234,179,8,0.1)', note:'AI+FAQ강화'},
-      {label:'4주후', val:(totalScore + 0.35).toFixed(2), color:(totalScore+0.35)>=3.0?'#22c55e':'#eab308', bg:(totalScore+0.35)>=3.0?'rgba(34,197,94,0.1)':'rgba(234,179,8,0.1)', note:'CSAT+CES확보'},
+      {label:'4주후', val:(totalScore + 0.35).toFixed(2), color:(totalScore+0.35)>=3.0?'#22c55e':'#eab308', bg:(totalScore+0.35)>=3.0?'rgba(34,197,94,0.1)':'rgba(234,179,8,0.1)', note:'CSAT확보'},
       {label:'목표', val:(sc.target||3).toFixed(1), color:'#38bdf8', bg:'rgba(56,189,248,0.1)', note:''}
     ];
     for (var fi=0; fi<forecasts.length; fi++) {
@@ -1202,12 +1191,21 @@ function loadAIData() {
     // === Row 1: 핵심 지표 카드 ===
     var totalConv = convs.length;
     var escCount = convs.filter(function(c){ return c.escalated; }).length;
+    // [2026-06-30] 헤더 '자동해결률' 카드용 그룹핑을 먼저 구성.
+    // (이전엔 아래 var chatGroups가 호이스팅으로 이 시점 undefined → Object.keys({})=[] → 자동해결률 항상 0% 버그)
+    var _headerGroups = {};
+    convs.forEach(function(c) {
+      var _hgid = c.chatId || ('_hg_' + Math.random());
+      if (!_headerGroups[_hgid]) _headerGroups[_hgid] = { msgs: [], escalated: false };
+      _headerGroups[_hgid].msgs.push(c);
+      if (c.escalated) _headerGroups[_hgid].escalated = true;
+    });
     // chatGroups 기반 해결률 (v2)
-    var _cgKeys = Object.keys(chatGroups || {});
+    var _cgKeys = Object.keys(_headerGroups);
     var _cgTotal = 0, _cgResolved = 0, _cgEsc = 0, _cgUncertain = 0;
-    var _skipT = ['greeting','thank_you','csat_feedback','ces_response','sticker'];
+    var _skipT = ['greeting','thank_you','csat_feedback','sticker'];
     _cgKeys.forEach(function(ck) {
-      var cg = chatGroups[ck];
+      var cg = _headerGroups[ck];
       var hasReal = cg.msgs.some(function(m){ return _skipT.indexOf(m.type) === -1; });
       if (!hasReal) return;
       _cgTotal++;
@@ -1240,7 +1238,7 @@ function loadAIData() {
       var badPct = Math.round((aiReviews.bad / aiReviews.total) * 100);
       var fixPct = Math.round((aiReviews.fix / aiReviews.total) * 100);
       h += '<div class="grid">';
-      h += card('수동 평가', aiReviews.total, '건', 'blue', '매니저 검토', '매니저가 AI 답변을 수동 검토한 건수');
+      h += card('AI 품질 평가', aiReviews.total, '건', 'blue', '자동 ' + (aiReviews.autoReviewCount||0) + ' + 수동 ' + (aiReviews.manualCount||0), 'AI 셀프리뷰 자동 채점 + 매니저 수동 검토 합계 (대부분 자동 채점입니다)');
       h += card('정확', aiReviews.good, '건 (' + goodPct + '%)', 'green', '', '정확한 답변');
       h += card('부정확', aiReviews.bad, '건 (' + badPct + '%)', 'red', '', '잘못된 답변');
       h += card('수정필요', aiReviews.fix, '건 (' + fixPct + '%)', 'yellow', '', '개선 가능');
@@ -1340,7 +1338,7 @@ function loadAIData() {
       var g = chatGroups[cid];
       var mainCat = Object.keys(g.categories).sort(function(a,b){ return g.categories[b]-g.categories[a]; })[0] || 'unknown';
       // greeting, thank_you, csat_feedback, ces_response 제외
-      var skipTypes = ['greeting','thank_you','csat_feedback','ces_response','sticker'];
+      var skipTypes = ['greeting','thank_you','csat_feedback','sticker'];
       var hasRealMsg = g.msgs.some(function(m){ return skipTypes.indexOf(m.type) === -1; });
       if (!hasRealMsg) return;
 
@@ -1587,8 +1585,8 @@ function loadAIData() {
       chatGroups[c.chatId].push(c);
     });
 
-    var typeColors = {ai_answer:'#22c55e',order_lookup:'#3b82f6',greeting:'#94a3b8',escalation:'#eab308',thank_you:'#a855f7',order_list:'#06b6d4',file_message:'#64748b',ces_response:'#8b5cf6',ai_error:'#ef4444'};
-    var typeNames = {ai_answer:'AI답변',order_lookup:'주문조회',greeting:'인사',escalation:'에스컬레이션',thank_you:'감사',order_list:'주문목록',file_message:'파일',ces_response:'CES',ai_error:'AI오류'};
+    var typeColors = {ai_answer:'#22c55e',order_lookup:'#3b82f6',greeting:'#94a3b8',escalation:'#eab308',thank_you:'#a855f7',order_list:'#06b6d4',file_message:'#64748b',ai_error:'#ef4444'};
+    var typeNames = {ai_answer:'AI답변',order_lookup:'주문조회',greeting:'인사',escalation:'에스컬레이션',thank_you:'감사',order_list:'주문목록',file_message:'파일',ai_error:'AI오류'};
 
     // 각 채팅 메타데이터 미리 계산
     var chatMeta = [];
@@ -1715,7 +1713,7 @@ function loadAIData() {
           if (m.escalated) html += '<span class="pill" style="background:rgba(239,68,68,0.15);color:#ef4444;margin-left:8px;font-size:10px;">에스컬</span>';
           if (m.confidence > 0) html += '<span style="font-size:10px;color:var(--text-secondary);margin-left:8px;">conf:' + m.confidence.toFixed(2) + '</span>';
           html += '</div>';
-          html += '<div style="background:#1a2332;border-radius:8px;padding:10px;color:var(--text-secondary);font-size:13px;line-height:1.6;margin-left:20px;border-left:3px solid ' + tc + ';white-space:pre-wrap;">' + m.aiResponse + '</div>';
+          html += '<div style="background:var(--bg-primary);border-radius:8px;padding:10px;color:var(--text-secondary);font-size:13px;line-height:1.6;margin-left:20px;border-left:3px solid ' + tc + ';white-space:pre-wrap;">' + m.aiResponse + '</div>';
           if (m.type === "ai_answer" || m.type === "order_lookup") {
             html += '<div style="margin:4px 0 8px 20px;text-align:right;">';
             html += '<button style="padding:3px 10px;border-radius:6px;border:1px solid var(--border-primary);background:var(--bg-secondary);color:var(--text-secondary);cursor:pointer;font-size:10px;" class="review-btn" data-rv="' + encodeURIComponent(JSON.stringify(m)) + '">✏️ 평가</button>';
@@ -2082,7 +2080,7 @@ function loadShippingData() {
 
 function loadCSATData() {
   var days = document.getElementById('days').value;
-  document.getElementById('csatContent').innerHTML = '<div class="loading">고객 피드백 데이터 로딩 중...</div>';
+  document.getElementById('csatContent').innerHTML = '<div class="loading">고객 만족도 데이터 로딩 중...</div>';
 
   Promise.all([
     fetch('/api/analytics/csat-v2-stats?days=' + days).then(function(r) { return r.json(); }),
@@ -2250,10 +2248,7 @@ function loadCSATData() {
   });
 }
 
-function tdScore(val) {
-  var color = val >= 4 ? '#22c55e' : val >= 3 ? '#eab308' : '#ef4444';
-  return '<td style="color:' + color + ';font-weight:600;">' + val + '</td>';
-}
+// [2026-06-30] tdScore() 제거 — 죽은 1~5 점수 색칠 헬퍼 (호출처 없음, 서버측 _tdS 사용)
 
 
 function card(label, value, unit, color, sub, detail) {
@@ -2520,7 +2515,7 @@ function loadCSScoreData() {
         var est = [];
         if (rel.fcrLowConfidence) est.push('FCR(표본 ' + (rel.fcrSamples || 0) + ')');
         if (rel.csatLowConfidence) est.push('CSAT(표본 ' + (rel.csatSamples || 0) + ')');
-        if (rel.cesLowConfidence) est.push('CES(표본 ' + (rel.cesSamples || 0) + ')');
+        // [2026-06-30] CES 분기 제거 — 백엔드 reliability는 fcr/csat만 반환(인-챗 CES 종료), 영구 미발동 죽은 코드였음
         html += '<div style="background:rgba(248,113,113,0.12);border:1px solid #f87171;border-radius:10px;padding:12px 16px;margin-bottom:20px;color:#f87171;font-size:13px;line-height:1.6">';
         html += '&#9888; <b>일부 지표 제외됨</b> &mdash; 다음 지표는 표본이 부족(10건 미만)해 <b>종합 점수 계산에서 제외</b>되었습니다: ' + est.join(', ');
         html += '<br/><span style="opacity:0.8;font-size:12px">위 종합 점수는 신뢰 가능한 지표만으로 산출되었습니다. 제외된 지표는 표본 확보 후 자동 반영됩니다.</span></div>';
@@ -2532,8 +2527,7 @@ function loadCSScoreData() {
         { label: '첫 응답 속도 (24h)', icon: '&#9889;', value: (d.responseTime ? d.responseTime.within30MinRate + '%' : 'N/A'), detail: '30분 내 응답 (평균 ' + (d.responseTime ? d.responseTime.avgMinutes + '분' : '?') + ')', target: '>=80%', score: bd.frt ? bd.frt.score : 0 },
         { label: '첫 응답 속도 (영업시간)', icon: '&#127970;', value: (d.responseTime ? (d.responseTime.bizWithin30MinRate || 0) + '%' : 'N/A'), detail: '영업시간 기준 30분 내 (평균 ' + (d.responseTime ? (d.responseTime.bizAvgMinutes || 0) + '분' : '?') + ')', target: '>=80%', score: bd.frt ? (bd.frt.bizScore || 0) : 0 },
         { label: '첫 접촉 해결률', icon: '&#127919;', value: (d.fcr ? d.fcr.rate + '%' : 'N/A'), detail: d.fcr ? d.fcr.resolved + '건 해결 / ' + d.fcr.reopened + '건 재문의' : '', target: '>=70%', score: bd.fcr ? bd.fcr.score : 0 },
-        { label: '고객 만족도', icon: '&#11088;', value: (bd.csat ? bd.csat.score.toFixed(1) : 'N/A'), detail: '/5.0', target: '>=3.5', score: bd.csat ? bd.csat.score : 0 },
-        { label: '고객 노력 점수', icon: '&#128170;', value: (d.ces && d.ces.totalResponses > 0 ? d.ces.avgScore.toFixed(1) : '수집 중...'), detail: d.ces ? d.ces.totalResponses + '건 응답' : '데이터 수집 중', target: '>=3.5', score: bd.ces ? bd.ces.score : 0 },
+        { label: '고객 만족도', icon: '&#11088;', value: (d.csat && d.csat.satisfactionRate != null ? d.csat.satisfactionRate + '%' : 'N/A'), detail: (d.csat ? '만족 응답 ' + (d.csat.total||0) + '건 (웹 설문)' : ''), target: '>=80%', score: bd.csat ? bd.csat.score : 0 },
         { label: '미응답 종료율', icon: '&#128277;', value: (d.noReplyClose ? d.noReplyClose.rate + '%' : 'N/A'), detail: d.noReplyClose ? d.noReplyClose.count + '/' + d.noReplyClose.total + '건' : '', target: '<=10%', score: bd.noReply ? bd.noReply.score : 0 }
       ];
       metrics.forEach(function(m) {
@@ -2543,7 +2537,7 @@ function loadCSScoreData() {
         html += '<div style="font-size:11px;color:var(--text-secondary);margin-bottom:8px">' + m.label + '</div>';
         html += '<div style="font-size:28px;font-weight:700;color:var(--text-primary)">' + m.value + '</div>';
         html += '<div style="font-size:10px;color:var(--text-secondary)">' + m.detail + '</div>';
-        var csMetricTips = {'첫 응답 속도 (24h)':'⚡ FRT(24h): 실시간 기준 첫 응답 시간. 고객 체감 대기시간. 30분 이내 80% 목표. 가중치 20%','첫 응답 속도 (영업시간)':'🏢 FRT(영업): 영업시간만 계산한 첫 응답 시간. 매니저 성과 평가용. 오프시간 문의는 다음 영업일부터 계산.','첫 접촉 해결률':'🎯 FCR: 1회 상담으로 해결된 비율. 72시간 내 재문의 시 미해결 집계. 70% 목표. 가중치 25%','고객 만족도':'⭐ CSAT: 1~5점 만족도. 1=최고. 3.5 이상 목표. 가중치 20%','고객 노력 점수':'💪 CES: 문제 해결 용이성. 높을수록 좋음. 3.5 이상 목표. 가중치 15%','미응답 종료율':'📭 매니저 미응답으로 자동 종료된 비율. 10% 이하 목표. 가중치 20%'};
+        var csMetricTips = {'첫 응답 속도 (24h)':'⚡ FRT(24h): 실시간 기준 첫 응답 시간. 고객 체감 대기시간. 30분 이내 80% 목표. 가중치 20%','첫 응답 속도 (영업시간)':'🏢 FRT(영업): 영업시간만 계산한 첫 응답 시간. 매니저 성과 평가용. 오프시간 문의는 다음 영업일부터 계산.','첫 접촉 해결률':'🎯 FCR: 1회 상담으로 해결된 비율. 72시간 내 재문의 시 미해결 집계. 70% 목표. 가중치 25%','고객 만족도':'⭐ CSAT: 웹 설문 기반 만족/불만족 만족률. 가중치 20% (※인-챗 1~5점 설문은 종료됨)','미응답 종료율':'📭 매니저 미응답으로 자동 종료된 비율. 10% 이하 목표. 가중치 20%'};
         var tipText = csMetricTips[m.label] || '';
         html += '<div style="margin-top:8px;font-size:11px;color:' + mColor + ';font-weight:600">점수: ' + m.score.toFixed(1) + '/5 (목표 ' + m.target + ')</div>';
         if (tipText) { html += '<div style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid var(--border-primary);font-size:10px;color:var(--text-secondary);line-height:1.5" class="metric-tip">' + tipText + '</div>'; }
@@ -2640,25 +2634,7 @@ function loadCSScoreData() {
       }
       html += '</div>';
 
-      // --- CES 축소 표시 ---
-      html += '<div style="background:var(--bg-secondary);border-radius:12px;padding:20px;margin-bottom:16px;border:1px solid var(--border-primary)">';
-      html += '<div style="font-size:14px;font-weight:600;color:var(--text-primary);margin-bottom:12px">고객 노력 점수 (CES)</div>';
-      if (d.ces && d.ces.totalResponses > 0) {
-        var cesColor = d.ces.avgScore >= 3.5 ? '#10b981' : d.ces.avgScore >= 2.5 ? '#f59e0b' : '#ef4444';
-        html += '<div style="display:flex;gap:20px">';
-        html += '<div style="flex:1;text-align:center"><div style="font-size:36px;font-weight:700;color:' + cesColor + '">' + d.ces.avgScore.toFixed(1) + '</div><div style="font-size:11px;color:var(--text-secondary)">Average Score (1-5)</div></div>';
-        html += '<div style="flex:1;text-align:center"><div style="font-size:36px;font-weight:700;color:#22d3ee">' + d.ces.totalResponses + '</div><div style="font-size:11px;color:var(--text-secondary)">Total Responses</div></div>';
-        html += '</div>';
-        html += '<div style="margin-top:12px;font-size:12px;color:var(--text-secondary)">1=매우 어려움 ~ 5=매우 쉬움 | 목표: 3.5 이상</div>';
-      } else {
-        html += '<div style="text-align:center;padding:20px;color:var(--text-secondary)">';
-        html += '<div style="font-size:36px;margin-bottom:8px">&#128202;</div>';
-        html += '<div style="font-size:14px">고객 노력 점수 수집이 시작되었습니다</div>';
-        html += '<div style="font-size:12px;margin-top:4px">After CSAT survey, customers will be asked: "How easy was it to resolve your issue?"</div>';
-        html += '<div style="font-size:11px;margin-top:8px;color:#f59e0b">응답이 들어오면 여기에 데이터가 표시됩니다</div>';
-        html += '</div>';
-      }
-      html += '</div>';
+      // [2026-06-30] CES 상세 패널 제거 — 인-챗 CES 종료, 데이터 없음 (거짓 '수집 시작' 안내 제거)
 
       // Improvement Suggestions
       html += '<div style="background:var(--bg-secondary);border-radius:12px;padding:20px;border:1px solid var(--border-primary)">';
@@ -2667,8 +2643,7 @@ function loadCSScoreData() {
       if (bd.noReply && bd.noReply.score < 3) suggestions.push({ p: 'HIGH', t: '미응답 종료율 ' + (d.noReplyClose ? d.noReplyClose.rate : '?') + '% (목표 10% 이하). 15분 자동 재배정 + 30분 대기 메시지 가동 중.' });
       if (bd.frt && bd.frt.score < 3) suggestions.push({ p: 'HIGH', t: '첫 응답 속도: ' + (d.responseTime ? d.responseTime.within30MinRate : '?') + '% 30분 내 응답 (목표 80% 이상). 매니저 근무시간 조정 필요.' });
       if (bd.fcr && bd.fcr.score < 3) suggestions.push({ p: 'MED', t: '첫 접촉 해결률: ' + (d.fcr ? d.fcr.rate : '?') + '% (목표 70% 이상). AI 직접 답변 범위 확대 필요.' });
-      if (bd.csat && bd.csat.score < 3) suggestions.push({ p: 'MED', t: '고객 만족도 데이터 부족. 설문 수집 중, 응답 대기.' });
-      if (bd.ces && bd.ces.score < 3) suggestions.push({ p: 'LOW', t: '고객 노력 점수 수집 시작됨. 약 2주 후 유의미한 데이터 확보 예상.' });
+      if (bd.csat && bd.csat.score < 3) suggestions.push({ p: 'MED', t: '고객 만족도(웹 설문 만족률)가 낮습니다. 불만족 사유 점검 필요.' });
       if (suggestions.length === 0) suggestions.push({ p: 'OK', t: '모든 지표가 목표를 달성하고 있습니다!' });
       suggestions.forEach(function(s) {
         var pc = s.p === 'HIGH' ? '#ef4444' : s.p === 'MED' ? '#f59e0b' : '#10b981';
@@ -2804,73 +2779,7 @@ async function loadBusinessMetrics() {
 
 
 <script>
-// ===== 데이터 헬스 + 이벤트 위임 =====
-async function loadDataHealth() {
-  if (!document.getElementById('health-content')) { return; }
-  try {
-    var res = await fetch('/api/analytics/data-health');
-    var data = await res.json();
-    var el = document.getElementById('health-content');
-    if (!data.success) { el.innerHTML = '데이터 로딩 실패'; return; }
-    
-    var statusColors = { 'OK': '#22c55e', 'PARTIAL': '#eab308', 'INSUFFICIENT': '#ef4444', 'WAITING': '#64748b', 'COLLECTING': '#38bdf8' };
-    var statusLabels = { 'OK': '충분', 'PARTIAL': '부분 수집', 'INSUFFICIENT': '부족', 'HEALTHY': '정상', 'NEEDS_DATA': '데이터 필요', 'WAITING': '대기중', 'COLLECTING': '수집중' };
-    
-    var overallColor = data.overallStatus === 'HEALTHY' ? '#22c55e' : data.overallStatus === 'PARTIAL' ? '#eab308' : '#ef4444';
-    
-    var html = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:15px;">';
-    html += '<div style="width:12px;height:12px;border-radius:50%;background:' + overallColor + ';"></div>';
-    html += '<span style="color:' + overallColor + ';font-weight:bold;">' + (statusLabels[data.overallStatus] || data.overallStatus) + '</span>';
-    html += '</div>';
-    
-    var checks = data.checks;
-    var items = [
-      { name: 'CSAT (7일)', status: checks.csat.status, current: checks.csat.last7days, target: checks.csat.target },
-      { name: 'CES (14일)', status: checks.ces.status, current: checks.ces.last14days, target: checks.ces.target },
-      { name: 'FCR resolved', status: checks.fcr.status, current: checks.fcr.resolved, target: checks.fcr.target },
-      { name: 'CS Score 이력', status: checks.scoreHistory.status, current: checks.scoreHistory.dataPoints, target: checks.scoreHistory.target }
-    ];
-    
-    html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;">';
-    items.forEach(function(item) {
-      var color = statusColors[item.status] || '#64748b';
-      var pct = Math.min(100, Math.round(item.current / item.target * 100));
-      html += '<div style="padding:10px;background:var(--bg-primary);border-radius:8px;border-left:3px solid ' + color + ';">';
-      html += '<div style="font-size:11px;color:var(--text-secondary);">' + item.name + '</div>';
-      html += '<div style="font-size:16px;color:' + color + ';font-weight:bold;margin:4px 0;">' + item.current + '/' + item.target + '</div>';
-      html += '<div style="width:100%;height:4px;background:var(--bg-primary);border-radius:2px;"><div style="width:' + pct + '%;height:100%;background:' + color + ';border-radius:2px;"></div></div>';
-      html += '</div>';
-    });
-    html += '</div>';
-    
-    // 에스컬레이션율
-    if (checks.aiConversations) {
-      html += '<div style="margin-top:12px;padding:10px;background:var(--bg-primary);border-radius:8px;">';
-      html += '<span style="font-size:11px;color:var(--text-secondary);">AI 에스컬레이션율 (7일):</span> ';
-      var escColor = checks.aiConversations.escalationRate > 40 ? '#ef4444' : checks.aiConversations.escalationRate > 25 ? '#eab308' : '#22c55e';
-      html += '<span style="color:' + escColor + ';font-weight:bold;">' + checks.aiConversations.escalationRate + '%</span>';
-      html += ' (' + checks.aiConversations.escalated7days + '/' + checks.aiConversations.last7days + '건)';
-      html += '</div>';
-    }
-    
-    // 추천 액션
-    if (data.recommendations && data.recommendations.length > 0) {
-      html += '<div style="margin-top:12px;padding:10px;background:var(--bg-primary);border-radius:8px;border-left:3px solid #f59e0b;">';
-      html += '<div style="font-size:11px;color:#f59e0b;font-weight:bold;margin-bottom:6px;">📋 필요 조치</div>';
-      data.recommendations.forEach(function(r) {
-        html += '<div style="font-size:11px;color:var(--text-secondary);margin-bottom:4px;">• ' + r + '</div>';
-      });
-      html += '</div>';
-    }
-    
-    el.innerHTML = html;
-  } catch(e) { console.error('Data health load error:', e); }
-}
-
-// 페이지 로드 시 실행
-document.addEventListener('DOMContentLoaded', function() {
-  setTimeout(loadDataHealth, 1500);
-});
+// [2026-06-30] loadDataHealth() + DOMContentLoaded 호출 삭제 — 데이터 헬스 패널 제거에 따라 죽은 코드. (패널이 display:none이라 아무도 못 보던 기능)
 
 // AI 로그: 전역 이벤트 위임 (1회만 등록)
 (function() {
@@ -2908,23 +2817,7 @@ function downloadCSV(filename, headers, rows) {
   link.click();
 }
 
-function exportCSATData() {
-  var days = document.getElementById('days').value;
-  fetch('/api/analytics/csat?days=' + days).then(function(r){return r.json();}).then(function(d) {
-    if (!d.success || !d.recent) { alert('내보낼 데이터가 없습니다'); return; }
-    var headers = ['시간', '점수', '평가', 'chatId'];
-    var rows = d.recent.map(function(r) {
-      var labels = {1:'매우만족',2:'만족',3:'보통',4:'불만족',5:'매우불만족'};
-      return [
-        r.timestamp ? new Date(r.timestamp).toLocaleString('ko-KR',{timeZone:'Asia/Seoul'}) : '',
-        r.score,
-        labels[r.score] || '',
-        r.chatId || ''
-      ];
-    });
-    downloadCSV('CSAT_' + new Date().toISOString().slice(0,10) + '.csv', headers, rows);
-  });
-}
+// [2026-06-30] exportCSATData() 제거 — 죽은 인-챗 1~5 CSAT CSV 내보내기 (호출처 없음, /api/analytics/csat 종료)
 
 // ===== CSAT 수신자 상세 (감사용 표) =====
 var _recipData = null;
