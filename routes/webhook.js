@@ -1078,7 +1078,6 @@ router.post('/channeltalk', async function(req, res) {
         'ja': 'ご購入をご希望でしたら、veasly.comで商品を見つけて「見積もり申請」ボタンをクリックしてください！\n\n📌 手順：\n1️⃣ veasly.com/tw にアクセス\n2️⃣ 商品URLまたはスクリーンショットを貼付\n3️⃣ オプション選択後「見積もり申請」をクリック'
       };
       var qMsg = quoteMsg[detectedLang] || quoteMsg['zh-TW'];
-      qMsg += '\n\n🔗 ' + (detectedLang === 'ko' ? '상품 링크를 여기에 바로 붙여넣으시면, 규격/가격 정보를 확인해드릴 수 있어요!' : detectedLang === 'en' ? 'You can also paste the product link here and I will help check availability!' : detectedLang === 'ja' ? '商品リンクをここに貼り付けていただければ、在庫確認をお手伝いします！' : '也可以直接把商品連結貼在這裡，我可以先幫您確認商品資訊喔！');
       qMsg += '\n\n💡 ' + (detectedLang === 'ko' ? '다른 질문이 있으시면 입력해주세요!' : detectedLang === 'en' ? 'Any other questions? Just type!' : detectedLang === 'ja' ? '他にご質問があればどうぞ！' : '還有其他問題嗎？直接輸入問題，AI會為您解答喔！');
       await channeltalk.sendMessage(chatId, { blocks: [{ type: 'text', value: qMsg }] });
       aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || '', userName: veaslyUser ? veaslyUser.name : '', lang: detectedLang, type: 'faq_answer', userMessage: userText.substring(0, 200), aiResponse: '報價요청 → veasly.com 申請報價 안내', escalated: false, confidence: 1.0, category: 'quote_request' });
