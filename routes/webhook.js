@@ -297,35 +297,29 @@ function isEscalationRequest(text) {
 
 async function connectManager(chatId, lang) {
   try {
-    // [SOP v2 팔로워 정책] 핸드오프 = 기본 팔로워(MIA·우선) 초대 + 관리자(강준) 팔로워 + 「직원 처리 불가」 태그.
-    // 기존 "첫 operator 초대 / 전체 매니저 팔로워"에서 축소.
-    var followerIds = await managersLib.getFollowerIds();
-    if (followerIds.length === 0) {
-      // 이름 매칭 실패 안전장치: 기존 동작 (첫 operator)
+    // [SOP v2 핸드오프 정책, 2026-07-03 개정] 담당자 = 강준(관리자) 초대, 팔로워 = MIA·우선, 「직원 처리 불가」 태그.
+    var adminIds = await managersLib.getAdminIds();
+    var assigneeId = adminIds.length > 0 ? adminIds[0] : null;
+    if (!assigneeId) {
+      // 이메일/이름 매칭 실패 안전장치: 첫 operator
       var mgrs = await getCachedManagers();
       var managers = (mgrs && mgrs.managers) || [];
       for (var i = 0; i < managers.length; i++) {
-        if (managers[i].operator) { followerIds = [managers[i].id]; break; }
+        if (managers[i].operator) { assigneeId = managers[i].id; break; }
       }
     }
-    var firstId = null;
-    for (var f = 0; f < followerIds.length; f++) {
-      try {
-        await channeltalk.inviteManager(chatId, followerIds[f]);
-        if (!firstId) firstId = followerIds[f];
-      } catch(ie) { /* 이미 초대된 매니저 등 - 무시 */ }
-    }
-    if (firstId) {
+    if (assigneeId) {
+      try { await channeltalk.inviteManager(chatId, assigneeId); } catch(ie) { /* 이미 초대된 매니저 등 - 무시 */ }
       managerActive[chatId] = Date.now();
-      pendingEscalations[chatId] = { time: Date.now(), managerId: firstId, lang: lang || "zh-TW" };
-      console.log('[ESCALATION] Followers invited:', followerIds.join(','), 'for chat:', chatId);
+      pendingEscalations[chatId] = { time: Date.now(), managerId: assigneeId, lang: lang || "zh-TW" };
+      console.log('[ESCALATION] Assignee invited:', assigneeId, 'for chat:', chatId);
     }
     try {
-      var teamIds = await managersLib.getTeamManagerIds();
-      if (teamIds.length > 0) { await channeltalk.addFollowers(chatId, teamIds); teamFollowedChats[chatId] = Date.now(); }
+      var followerIds = await managersLib.getFollowerIds();
+      if (followerIds.length > 0) { await channeltalk.addFollowers(chatId, followerIds); teamFollowedChats[chatId] = Date.now(); }
     } catch(fe) { console.error("[ConnectManager] Follower error:", fe.message); }
     try { await channeltalk.addChatTags(chatId, [HANDOFF_TAG]); } catch(te) { /* 태그 API 미지원 시 무시 */ }
-    return firstId;
+    return assigneeId;
   } catch(e) { console.error("[ConnectManager] Error:", e.message); return null; }
 }
 
@@ -737,14 +731,14 @@ router.post('/channeltalk', async function(req, res) {
     // Track FCR for returning users (placed after member lookup so memberId is populated)
     trackFCR(memberId || personId || "", chatId, "");
 
-    // [SOP v2 팔로워 정책] 모든 채팅에 기본 팔로워(MIA·우선) + 관리자(강준) 추가.
-    // 봇이 엉뚱하게 답할 수 있으므로 관리자가 모든 대화를 팔로우. (봇 응답은 계속 — managerActive 미설정)
+    // [SOP v2 팔로워 정책, 2026-07-03 개정] 모든 채팅에 기본 팔로워(MIA·우선)만 추가.
+    // 강준은 봇 핸드오프 시 담당자로 초대 (connectManager). (봇 응답은 계속 — managerActive 미설정)
     if (!teamFollowedChats[chatId]) {
       teamFollowedChats[chatId] = Date.now();
       try {
-        var _teamIds = await managersLib.getTeamManagerIds();
-        if (_teamIds.length > 0) await channeltalk.addFollowers(chatId, _teamIds);
-        console.log('[Follower] Team followers set (' + _teamIds.length + ') for chat:', chatId);
+        var _followIds = await managersLib.getFollowerIds();
+        if (_followIds.length > 0) await channeltalk.addFollowers(chatId, _followIds);
+        console.log('[Follower] Default followers set (' + _followIds.length + ') for chat:', chatId);
       } catch(_tfErr) { console.error('[Follower] Team add error:', _tfErr.message); }
     }
 
