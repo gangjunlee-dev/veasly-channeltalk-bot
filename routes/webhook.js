@@ -599,13 +599,23 @@ router.post('/channeltalk', async function(req, res) {
         var _hoChatId = message.chatId || message.userChatId || chatId || '';
         var _ord = (_memo.match(/\d{8}TW\d+/i) || [])[0] || '';
         var _reasonFull = notion.resolveReason(_code);
-        notion.createHandoffEntry({
-          reason: _code,
-          title: '[직원 넘김] ' + _reasonFull + (_memo ? ' - ' + _memo.slice(0, 80) : ''),
-          orderNo: _ord,
-          chatLink: notion.deskLink(message.channelId || '', _hoChatId),
-          memo: _memo || ('직원 팀챗 넘김 (' + _reasonFull + ')')
-        }).catch(function(){});
+        // 명령어 작성자(채널톡 매니저) 이메일 → 노션 '넘긴 사람'
+        (async function(){
+          var _escEmail = '';
+          try {
+            var _mgrs = await managersLib.getManagers();
+            var _me = (_mgrs || []).filter(function(m){ return String(m.id) === String(message.personId); })[0];
+            _escEmail = (_me && _me.email) || '';
+          } catch(_ee){}
+          await notion.createHandoffEntry({
+            reason: _code,
+            title: '[직원 넘김] ' + _reasonFull + (_memo ? ' - ' + _memo.slice(0, 80) : ''),
+            orderNo: _ord,
+            chatLink: notion.deskLink(message.channelId || '', _hoChatId),
+            memo: _memo || ('직원 팀챗 넘김 (' + _reasonFull + ')'),
+            escalatorEmail: _escEmail
+          });
+        })().catch(function(){});
         return res.status(200).send("OK");
       }
       if (chatId) {
