@@ -97,6 +97,7 @@ function getHolidayNotice(lang) {
 
 var analytics = require('../lib/analytics');
 var routing = require('../lib/routing');
+var notion = require('../lib/notion');
 var managersLib = require('../lib/managers');
 
 // SOP §4 넘김 체계 태그 — 봇 핸드오프 시 자동 부여 (best-effort)
@@ -584,6 +585,27 @@ router.post('/channeltalk', async function(req, res) {
     var chatId = message.chatId || message.userChatId || '';
 
     if (personType === "manager") {
+      // [① 팀챗 넘김 명령어] 직원이 '/넘김 <사유> [메모]' 입력 → 노션 "CS 넘김" DB 자동적재.
+      // 사유 코드: 분쟁 / 정책 / 재무 / 통관 / 시스템 / 기타 (팀챗=고객 안 보임)
+      var _mgrRawText = extractText(message);
+      if (_mgrRawText && /^\/넘김(\s|$)/.test(_mgrRawText)) {
+        try { console.log('[Handoff-cmd] entity keys:', Object.keys(message).join(','), '| sample:', JSON.stringify(message).slice(0, 700)); } catch(_le){}
+        var _rest = _mgrRawText.replace(/^\/넘김\s*/, '').trim();
+        var _parts = _rest ? _rest.split(/\s+/) : [];
+        var _code = _parts.shift() || '기타';
+        var _memo = _parts.join(' ');
+        var _hoChatId = message.chatId || message.userChatId || chatId || '';
+        var _ord = (_memo.match(/\d{8}TW\d+/i) || [])[0] || '';
+        var _reasonFull = notion.resolveReason(_code);
+        notion.createHandoffEntry({
+          reason: _code,
+          title: '[직원 넘김] ' + _reasonFull + (_memo ? ' - ' + _memo.slice(0, 80) : ''),
+          orderNo: _ord,
+          chatLink: notion.deskLink(message.channelId || '', _hoChatId),
+          memo: _memo || ('직원 팀챗 넘김 (' + _reasonFull + ')')
+        }).catch(function(){});
+        return res.status(200).send("OK");
+      }
       if (chatId) {
         managerActive[chatId] = Date.now();
         var mgrPersonId = message.personId || "unknown";
@@ -738,6 +760,8 @@ router.post('/channeltalk', async function(req, res) {
       await channeltalk.sendMessage(chatId, { blocks: [{ type: 'text', value: routing.DISPUTE_REPLY }] });
       await connectManager(chatId, detectedLang);
       aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || '', lang: detectedLang, type: 'escalation', userMessage: userText.substring(0, 200), aiResponse: 'SOP v2 분쟁 키워드 → 즉시 핸드오프 (고정 문구)', escalated: true, escalationReason: 'dispute_keyword', confidence: 1.0, category: 'complaint' });
+      // [③ 고신호 자동적재] 분쟁 키워드 → 노션 CS 넘김 DB
+      notion.createHandoffEntry({ reason: '기타', title: '[봇] 분쟁 키워드 감지 → 핸드오프', orderNo: (userText.match(/\d{8}TW\d+/i) || [])[0] || '', chatLink: notion.deskLink(message.channelId || '', chatId), memo: '봇 자동 감지(분쟁 키워드). 고객 메시지: ' + userText.substring(0, 150) }).catch(function(){});
       return res.status(200).send('OK');
     }
     // 규칙 1: 신고금액(申報金額/報關金額/海關申報) 문의 → 어떤 설명·확인·추측도 금지.
@@ -746,6 +770,8 @@ router.post('/channeltalk', async function(req, res) {
       await channeltalk.sendMessage(chatId, { blocks: [{ type: 'text', value: routing.DECLARED_AMOUNT_REPLY }] });
       await connectManager(chatId, detectedLang);
       aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || '', lang: detectedLang, type: 'escalation', userMessage: userText.substring(0, 200), aiResponse: 'SOP v2 신고금액 → 고정 응답 + 핸드오프', escalated: true, escalationReason: 'declared_amount', confidence: 1.0, category: 'account_payment' });
+      // [③ 고신호 자동적재] 신고금액 문의 → 노션 CS 넘김 DB (통관·물류 사유)
+      notion.createHandoffEntry({ reason: '통관', title: '[봇] 신고금액 문의 → 핸드오프', orderNo: (userText.match(/\d{8}TW\d+/i) || [])[0] || '', chatLink: notion.deskLink(message.channelId || '', chatId), memo: '봇 자동 감지(신고금액 문의). 고객 메시지: ' + userText.substring(0, 150) }).catch(function(){});
       return res.status(200).send('OK');
     }
     // ============================================================
