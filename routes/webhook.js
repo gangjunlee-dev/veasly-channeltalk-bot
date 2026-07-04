@@ -625,7 +625,7 @@ router.post('/channeltalk', async function(req, res) {
       // 트리거: /넘김 · /轉單 · /轉 · /交接 · /handoff (中韓英). 뒤에 사유코드(숫자/中文/한글) + 메모
       var _cmdMatch = _mgrRawText ? _mgrRawText.match(/^\/(넘김|轉單|轉|交接|handoff)(?:\s+([\s\S]*))?$/i) : null;
       if (_cmdMatch) {
-        try { console.log('[Handoff-cmd] entity keys:', Object.keys(message).join(','), '| sample:', JSON.stringify(message).slice(0, 700)); } catch(_le){}
+        console.log('[Handoff-cmd] by manager', message.personId, '| chat', (message.chatId || ''), '|', (_mgrRawText || '').slice(0, 40));
         var _rest = (_cmdMatch[2] || '').trim();
         var _parts = _rest ? _rest.split(/\s+/) : [];
         // 첫 토큰이 사유 코드(숫자/中文/한글)면 직원 지정으로 사용, 아니면 전체를 메모로 두고 AI가 사유 판독
