@@ -588,9 +588,11 @@ router.post('/channeltalk', async function(req, res) {
       // [① 팀챗 넘김 명령어] 직원이 '/넘김 <사유> [메모]' 입력 → 노션 "CS 넘김" DB 자동적재.
       // 사유 코드: 분쟁 / 정책 / 재무 / 통관 / 시스템 / 기타 (팀챗=고객 안 보임)
       var _mgrRawText = extractText(message);
-      if (_mgrRawText && /^\/넘김(\s|$)/.test(_mgrRawText)) {
+      // 트리거: /넘김 · /轉單 · /轉 · /交接 · /handoff (中韓英). 뒤에 사유코드(숫자/中文/한글) + 메모
+      var _cmdMatch = _mgrRawText ? _mgrRawText.match(/^\/(넘김|轉單|轉|交接|handoff)(?:\s+([\s\S]*))?$/i) : null;
+      if (_cmdMatch) {
         try { console.log('[Handoff-cmd] entity keys:', Object.keys(message).join(','), '| sample:', JSON.stringify(message).slice(0, 700)); } catch(_le){}
-        var _rest = _mgrRawText.replace(/^\/넘김\s*/, '').trim();
+        var _rest = (_cmdMatch[2] || '').trim();
         var _parts = _rest ? _rest.split(/\s+/) : [];
         var _code = _parts.shift() || '기타';
         var _memo = _parts.join(' ');
