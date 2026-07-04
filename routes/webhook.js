@@ -312,6 +312,40 @@ async function connectManager(chatId, lang) {
   } catch(e) { console.error("[ConnectManager] Error:", e.message); return null; }
 }
 
+// [노션 CS 넘김 적재] 대화 수집 → AI 사유분류+요약 → 노션 행 생성. best-effort(실패해도 CS 흐름 무영향).
+// o: { chatId, channelId, explicitCode, fallbackCode, memo, orderNo, escalatorEmail, titlePrefix }
+async function logHandoffToNotion(o) {
+  try {
+    if (!notion.isEnabled()) return;
+    o = o || {};
+    // 1) 상담 대화 수집 (繁中 요약/분류용)
+    var convo = '';
+    try {
+      var mr = await channeltalk.getChatMessages(o.chatId, 15);
+      convo = ((mr && mr.messages) || []).map(function(m) {
+        var who = (m.personType || '').toLowerCase() === 'user' ? '客戶' : '客服';
+        var t = m.plainText || (m.blocks && m.blocks[0] && m.blocks[0].value) || '';
+        return t ? (who + ': ' + String(t).slice(0, 300)) : '';
+      }).filter(Boolean).join('\n').slice(0, 4000);
+    } catch(ce) {}
+    // 2) AI 분류+요약 (한 번의 호출)
+    var ai = { reasonCode: null, summary: '' };
+    try { ai = await aiEngine.classifyHandoff(convo); } catch(ae) {}
+    // 3) 사유 우선순위: 직원 지정 > AI > 폴백 > 기타
+    var reasonCode = o.explicitCode || ai.reasonCode || o.fallbackCode || '기타';
+    var reasonFull = notion.resolveReason(reasonCode);
+    await notion.createHandoffEntry({
+      reason: reasonCode,
+      title: (o.titlePrefix || '[넘김]') + ' ' + reasonFull + (o.memo ? ' - ' + String(o.memo).slice(0, 80) : ''),
+      orderNo: o.orderNo || '',
+      chatLink: notion.deskLink(o.channelId || '', o.chatId),
+      memo: o.memo || '',
+      escalatorEmail: o.escalatorEmail || '',
+      bodyText: ai.summary || ''
+    });
+  } catch(e) { console.error('[Handoff→Notion] error:', e.message); }
+}
+
 // === 주문 소유권 검증 ===
 var orderSecurityMsgs = {
   noAuth: {
@@ -594,11 +628,12 @@ router.post('/channeltalk', async function(req, res) {
         try { console.log('[Handoff-cmd] entity keys:', Object.keys(message).join(','), '| sample:', JSON.stringify(message).slice(0, 700)); } catch(_le){}
         var _rest = (_cmdMatch[2] || '').trim();
         var _parts = _rest ? _rest.split(/\s+/) : [];
-        var _code = _parts.shift() || '기타';
-        var _memo = _parts.join(' ');
+        // 첫 토큰이 사유 코드(숫자/中文/한글)면 직원 지정으로 사용, 아니면 전체를 메모로 두고 AI가 사유 판독
+        var _firstTok = _parts[0] || '';
+        var _explicit = notion.REASON_CODE[_firstTok] ? _firstTok : null;
+        var _memo = _explicit ? _parts.slice(1).join(' ') : _rest;
         var _hoChatId = message.chatId || message.userChatId || chatId || '';
-        var _ord = (_memo.match(/\d{8}TW\d+/i) || [])[0] || '';
-        var _reasonFull = notion.resolveReason(_code);
+        var _ord = (_rest.match(/\d{8}TW\d+/i) || [])[0] || '';
         // 명령어 작성자(채널톡 매니저) 이메일 → 노션 '넘긴 사람'
         (async function(){
           var _escEmail = '';
@@ -607,13 +642,14 @@ router.post('/channeltalk', async function(req, res) {
             var _me = (_mgrs || []).filter(function(m){ return String(m.id) === String(message.personId); })[0];
             _escEmail = (_me && _me.email) || '';
           } catch(_ee){}
-          await notion.createHandoffEntry({
-            reason: _code,
-            title: '[직원 넘김] ' + _reasonFull + (_memo ? ' - ' + _memo.slice(0, 80) : ''),
+          await logHandoffToNotion({
+            chatId: _hoChatId,
+            channelId: message.channelId || '',
+            explicitCode: _explicit,
+            memo: _memo,
             orderNo: _ord,
-            chatLink: notion.deskLink(message.channelId || '', _hoChatId),
-            memo: _memo || ('직원 팀챗 넘김 (' + _reasonFull + ')'),
-            escalatorEmail: _escEmail
+            escalatorEmail: _escEmail,
+            titlePrefix: '[직원 넘김]'
           });
         })().catch(function(){});
         return res.status(200).send("OK");
@@ -772,8 +808,8 @@ router.post('/channeltalk', async function(req, res) {
       await channeltalk.sendMessage(chatId, { blocks: [{ type: 'text', value: routing.DISPUTE_REPLY }] });
       await connectManager(chatId, detectedLang);
       aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || '', lang: detectedLang, type: 'escalation', userMessage: userText.substring(0, 200), aiResponse: 'SOP v2 분쟁 키워드 → 즉시 핸드오프 (고정 문구)', escalated: true, escalationReason: 'dispute_keyword', confidence: 1.0, category: 'complaint' });
-      // [③ 고신호 자동적재] 분쟁 키워드 → 노션 CS 넘김 DB
-      notion.createHandoffEntry({ reason: '기타', title: '[봇] 분쟁 키워드 감지 → 핸드오프', orderNo: (userText.match(/\d{8}TW\d+/i) || [])[0] || '', chatLink: notion.deskLink(message.channelId || '', chatId), memo: '봇 자동 감지(분쟁 키워드). 고객 메시지: ' + userText.substring(0, 150) }).catch(function(){});
+      // [③ 고신호 자동적재] 분쟁 키워드 → 노션 CS 넘김 DB (AI가 사유·요약 생성, 폴백 기타)
+      logHandoffToNotion({ chatId: chatId, channelId: message.channelId || '', explicitCode: null, fallbackCode: '기타', memo: '봇 자동 감지(분쟁 키워드)', orderNo: (userText.match(/\d{8}TW\d+/i) || [])[0] || '', titlePrefix: '[봇] 분쟁 키워드' }).catch(function(){});
       return res.status(200).send('OK');
     }
     // 규칙 1: 신고금액(申報金額/報關金額/海關申報) 문의 → 어떤 설명·확인·추측도 금지.
@@ -782,8 +818,8 @@ router.post('/channeltalk', async function(req, res) {
       await channeltalk.sendMessage(chatId, { blocks: [{ type: 'text', value: routing.DECLARED_AMOUNT_REPLY }] });
       await connectManager(chatId, detectedLang);
       aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || '', lang: detectedLang, type: 'escalation', userMessage: userText.substring(0, 200), aiResponse: 'SOP v2 신고금액 → 고정 응답 + 핸드오프', escalated: true, escalationReason: 'declared_amount', confidence: 1.0, category: 'account_payment' });
-      // [③ 고신호 자동적재] 신고금액 문의 → 노션 CS 넘김 DB (통관·물류 사유)
-      notion.createHandoffEntry({ reason: '통관', title: '[봇] 신고금액 문의 → 핸드오프', orderNo: (userText.match(/\d{8}TW\d+/i) || [])[0] || '', chatLink: notion.deskLink(message.channelId || '', chatId), memo: '봇 자동 감지(신고금액 문의). 고객 메시지: ' + userText.substring(0, 150) }).catch(function(){});
+      // [③ 고신호 자동적재] 신고금액 문의 → 노션 CS 넘김 DB (AI가 사유·요약, 폴백 통관·물류)
+      logHandoffToNotion({ chatId: chatId, channelId: message.channelId || '', explicitCode: null, fallbackCode: '통관', memo: '봇 자동 감지(신고금액 문의)', orderNo: (userText.match(/\d{8}TW\d+/i) || [])[0] || '', titlePrefix: '[봇] 신고금액' }).catch(function(){});
       return res.status(200).send('OK');
     }
     // ============================================================
