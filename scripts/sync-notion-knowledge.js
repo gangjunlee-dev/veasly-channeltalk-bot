@@ -23,8 +23,9 @@ var SOURCES = [
   { type: 'page', id: '38dae9b1e41a81cb93ede3a45d89d5a0', title: 'CS SOP (台灣華語) — 답변 규칙·話術·운임표' },
   { type: 'page', id: '38dae9b1e41a81cdb525c07f8a36b3f9', title: 'FAQ (台灣華語) — 고객 공개 Q&A' },
   { type: 'db',   id: '35eae9b1e41a8090a436c2d848f17e8e', title: '도메인 용어집', ds: 'collection://35eae9b1-e41a-8084-80c9-000baee15fa9' },
-  { type: 'page', id: '317ae9b1e41a804b911ee1bdc89dd141', title: '약관/정책' }
-  // { type: 'page', id: '<VOC 요약 페이지>', title: 'VOC 최근 동향 (참고용, 정책 아님)' }  // 링크 받으면 추가
+  { type: 'page', id: '317ae9b1e41a804b911ee1bdc89dd141', title: '약관/정책' },
+  // VOC 요약(n8n 자동생성, 참고용). 정책 아님 — 사실·숫자는 위 SOP/FAQ/약관 우선. 화법·최근 불만 동향 참고용.
+  { type: 'page', id: '395ae9b1e41a80d0bd3bd27c1e76090a', title: 'VOC 摘要（僅供參考·非官方政策 — 話術與趨勢參考，事實/數字以上方 SOP·FAQ·約款 為準）' }
 ];
 
 var api = axios.create({
