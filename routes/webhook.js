@@ -362,14 +362,7 @@ var orderSecurityMsgs = {
   }
 };
 
-function isMergeShippingRequest(text) {
-  var mergeKeywords = ["合併寄送", "合併運送", "合併出貨", "合併配送", "一起寄", "一起送", "一起出貨", "併單", "합배송", "합배", "merge ship", "combine order", "合併寄", "合併訂單", "合併運費"];
-  var lower = (text || "").toLowerCase();
-  for (var i = 0; i < mergeKeywords.length; i++) {
-    if (lower.indexOf(mergeKeywords[i].toLowerCase()) > -1) return true;
-  }
-  return false;
-}
+// [2026-07-06] isMergeShippingRequest 제거 — 합배송 하드코딩 안내 폐지, Claude가 처리.
 
 
 function isActionRequest(text) {
@@ -1097,23 +1090,7 @@ router.post('/channeltalk', async function(req, res) {
       return res.status(200).send('OK');
     }
 
-    // Merge shipping request → immediate escalation
-    // Merge shipping → AI policy guide (no escalation)
-    // Merge shipping -> AI policy guide (no escalation, direct mypage link)
-    if (isMergeShippingRequest(userText)) {
-      // [SOP v2 §2-1·§2-2] 합배송 정책 문구
-      var mergeGuide = {
-        "zh-TW": "合併寄送可以在這裡直接申請喔～\nhttps://www.veasly.com/tw/my-page/orders/combined-shipping/request\n\n只要要合併的訂單中有任一筆尚未抵達集運倉，即可申請合併寄送，並依訂單合計金額重新計算免運額度（例：5,000＋5,000 → 10kg 免運）。\n\n注意事項：\n・免運訂單只能與免運訂單合併，一般（非免運）訂單只能與一般訂單合併，免運與一般訂單無法一起合併喔\n・訂單全部抵達集運倉後即無法申請\n・已被拒絕過的組合無法再次申請\n・未合併的訂單會分別從韓國寄出\n・合併寄送一律宅配到府；原本選擇超商取貨的訂單，申請合併時需改為宅配地址\n・想追加訂單時，請先取消原合併申請，再將要合併的訂單一起重新申請\n\n還有其他問題嗎？隨時問我～",
-        "ko": "합배송은 여기서 바로 신청할 수 있어요～\nhttps://www.veasly.com/tw/my-page/orders/combined-shipping/request\n\n묶으려는 주문 중 하나라도 집운창에 도착 전이면 신청 가능! 합배송 후 합계 금액 기준으로 무료배송 한도가 재계산됩니다 (예: 5,000＋5,000 → 10kg).\n\n주의사항:\n・무료배송(免運) 주문은 무료배송 주문끼리만, 일반 주문은 일반 주문끼리만 합배송 가능 — 무료배송 주문과 일반 주문은 함께 합배송할 수 없어요\n・전부 입고되면 신청 불가\n・거절된 조합은 재신청 불가\n・미합병 주문은 한국에서 각각 발송\n・합배송은 무조건 택배(집 배송) — 편의점 수령 주문도 집 주소로 변경 필요\n\n다른 궁금한 거 있으면 말씀해주세요~",
-        "en": "You can request combined shipping here~\nhttps://www.veasly.com/tw/my-page/orders/combined-shipping/request\n\nAvailable as long as at least one order hasn't arrived at our Korea warehouse yet! Free-shipping allowance is recalculated based on the combined total (e.g. 5,000+5,000 → 10kg).\n\nNotes:\n- Free-shipping orders can only be combined with other free-shipping orders, and regular orders only with regular orders — free-shipping and regular orders cannot be combined together\n- Once all orders have arrived at the warehouse, combining is no longer possible\n- Rejected combinations cannot be re-requested\n- Combined shipping is home delivery only; convenience-store pickup orders must switch to a home address\n\nAnything else I can help with?",
-        "ja": "合併配送はマイページから申請できます！\n\n" +
-          "リンク: https://www.veasly.com/tw/my-page/orders/combined-shipping/request\n\n" +
-          "注意：送料無料の注文は送料無料の注文同士、通常注文は通常注文同士のみ合併でき、送料無料と通常注文を一緒に合併することはできません。全ての注文が倉庫に到着する前のみ申請可能です。合併配送は宅配のみで、コンビニ受取は住所変更が必要です。"
-      };
-      await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: mergeGuide[detectedLang] || mergeGuide["zh-TW"] }] });
-      aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "faq_answer", userMessage: userText.substring(0, 200), aiResponse: "합배송 → 마이페이지 안내 (에스컬레이션 없음)", escalated: false, confidence: 1.0, category: "merge_shipping" });
-      return res.status(200).send("OK");
-    }
+    // [2026-07-06] 합배송 하드코딩 안내 제거 — Claude가 knowledge.md + 시스템 프롬프트(免運/一般 규칙·申請 URL 포함)로 질문 맞춤 답변. 정책 중복(과거 오답 원인) 해소.
 
 
     // === 통합 인텐트 감지 (키워드 조합 + 문맥 판단, isActionRequest보다 먼저) ===
