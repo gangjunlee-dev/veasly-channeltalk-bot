@@ -10,6 +10,7 @@
  * 서비스개요는 내부 재무(매출·마진·CAC) 유출 방지를 위해 여기서 제외.
  * VOC 요약은 강준이 링크 제공 시 SOURCES 에 추가.
  */
+require('dotenv').config(); // 최상단 필수: 아래 NOTION_TOKEN/api 가 로드 시점에 env를 읽으므로. (scheduler에서 require 시엔 이미 로드돼 no-op)
 var fs = require('fs');
 var path = require('path');
 var axios = require('axios');
@@ -134,7 +135,6 @@ async function main() {
 }
 
 if (require.main === module) {
-  require('dotenv').config();
   main().catch(function (e) { console.error('[sync] error:', e.message); process.exit(1); });
 }
 
