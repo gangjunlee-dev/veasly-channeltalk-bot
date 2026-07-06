@@ -1808,7 +1808,8 @@ router.post('/channeltalk', async function(req, res) {
 
       // Log AI conversation
       var aiEscalated = false;
-      var escalateKeywords = ["轉接客服", "轉接", "客服確認", "客服人員", "為您確認", "幫您確認", "需要客服", "建議聯繫", "請聯繫客服", "無法為您", "담당자를 연결", "담당자에게", "상담사", "확인이 필요", "상담원", "connect you with", "support team", "contact support", "unable to help", "担当者におつなぎ", "担当者に", "お問い合わせ"];
+      // [2026-07-06] "為您確認"·"幫您確認"·"확인이 필요" 제거 — 봇이 "주문번호 주시면 제가 확인해드릴게요" 같은 self-service 제안을 사람연결 약속으로 오인해 과도 에스컬레이션하던 버그. 진짜 핸드오프는 아래 상담사/담당자/轉接/客服人員/connect 로 여전히 감지됨.
+      var escalateKeywords = ["轉接客服", "轉接", "客服確認", "客服人員", "需要客服", "建議聯繫", "請聯繫客服", "無法為您", "담당자를 연결", "담당자에게", "상담사", "상담원", "connect you with", "support team", "contact support", "unable to help", "担当者におつなぎ", "担当者に", "お問い合わせ"];
       var needEscalate = false;
       // 봇이 확실히 아는 정보는 에스컬레이션 키워드 무시
       var _botConfidentTopics = ["假日", "공휴일", "holiday", "祝日", "營業時間", "上班時間", "영업시간",
