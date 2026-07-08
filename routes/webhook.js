@@ -1499,13 +1499,22 @@ router.post('/channeltalk', async function(req, res) {
           var orderReply = header + "\n" + orderInfo;
           // Add status-specific tips
           var mainStatus = (orderItems[0] && orderItems[0].status) || "";
+          // [2026-07-08] 신 체계(9단계) 팁. 여러 enum이 같은 단계면 공유 객체 참조. 시간 수치는 상태사전 공식값(通關 3~4일/退換 7일)만 사용. PAYMENT_*·CANCEL_COMPLETED는 기존 문구·수치 유지.
+          var _tipCenter = { "zh-TW": "商品已抵達物流中心，正在檢查與打包，準備國際配送喔！", "ko": "상품이 물류센터에 도착했어요. 검사·포장 후 국제 배송을 준비합니다!", "en": "Arrived at our logistics center! Inspecting and packing for international shipping.", "ja": "物流センターに到着しました！検査・梱包して国際配送を準備します。" };
+          var _tipProcessing = { "zh-TW": "商品在物流中心處理中（檢查／EZWAY／打包／航班安排）。收到 EZ WAY 通知請記得按「申報相符」喔！", "ko": "물류센터에서 처리 중입니다(검사/EZWAY/포장/항공편 준비). EZ WAY 알림이 오면 「申報相符」를 눌러주세요!", "en": "Being processed at our logistics center (inspection/EZWAY/packing/flight). Tap 'declaration matched' when you get the EZ WAY notice!", "ja": "物流センターで処理中です（検査/EZWAY/梱包/フライト手配）。EZ WAY通知が届いたら「申報相符」を押してください！" };
+          var _tipCustoms = { "zh-TW": "商品已抵台，通關進行中，通常約 3~4 個工作天，請留意 EZ WAY 通知喔！", "ko": "대만 도착, 통관 진행 중입니다. 보통 3~4 영업일 소요되며 EZ WAY 알림을 확인해주세요!", "en": "Arrived in Taiwan, clearing customs (usually ~3-4 business days). Please watch for the EZ WAY notice!", "ja": "台湾に到着し通関手続き中です（通常3~4営業日）。EZ WAY通知にご注意ください！" };
           var tipMap = {
             "PAYMENT_WAITING": { "zh-TW": "請盡快完成付款，以免訂單被取消喔！", "ko": "빠른 결제 부탁드립니다!", "en": "Please complete payment soon!", "ja": "お早めにお支払いをお願いします！" },
-            "PAYMENT_COMPLETED": { "zh-TW": "已收到付款，我們會盡快處理您的訂單！", "ko": "결제 확인! 빠르게 처리하겠습니다!", "en": "Payment received! We will process your order soon!", "ja": "お支払い確認済み！早速処理いたします！" },
-            "ORDER_PROCESSING": { "zh-TW": "商品正在韓國國內配送中，寄往VEASLY倉庫，通常需要1-3個工作天喔！", "ko": "한국 내 배송 중입니다. VEASLY 창고로 이동 중이며 보통 1-3 영업일 소요됩니다!", "en": "Shipping within Korea to VEASLY warehouse, usually takes 1-3 business days!", "ja": "韓国国内配送中です。VEASLY倉庫へ通常1-3営業日かかります！" },
-            "SHIPPING_TO_BDJ": { "zh-TW": "商品已到達VEASLY倉庫！正在準備國際包裹，即將為您寄出！", "ko": "VEASLY 창고에 도착했습니다! 국제 배송 준비 중입니다!", "en": "Arrived at VEASLY warehouse! Preparing international shipment!", "ja": "VEASLY倉庫に到着しました！国際発送の準備中です！" },
-            "SHIPPING_TO_HOME": { "zh-TW": "包裹已從韓國寄出！國際配送通常需要5-10個工作天，收到 EZ WAY 通知時，請記得按「申報相符」才能順利通關喔！", "ko": "한국에서 출발! 국제 배송은 보통 5-10 영업일 소요됩니다!", "en": "Shipped from Korea! International delivery takes 5-10 business days!", "ja": "韓国から発送済み！国際配送は通常5-10営業日かかります！" },
-            "COMPLETED": { "zh-TW": "訂單已完成！感謝您的購買～", "ko": "주문 완료! 감사합니다~", "en": "Order completed! Thank you!", "ja": "注文完了！ありがとうございます！" },
+            "PAYMENT_COMPLETED": { "zh-TW": "已收到付款，我們會盡快向賣家下單！", "ko": "결제 확인! 곧 판매자에게 발주합니다!", "en": "Payment received! We will order from the seller soon!", "ja": "お支払い確認済み！まもなくセラーへ発注します！" },
+            "ORDER_PROCESSING": { "zh-TW": "賣家正在準備出貨，商品會寄往物流中心，請稍候喔！", "ko": "판매자가 출고를 준비 중입니다. 상품이 물류센터로 이동할 예정이에요!", "en": "The seller is preparing to ship; your item will head to our logistics center soon!", "ja": "セラーが発送準備中です。商品は物流センターへ向かいます！" },
+            "ARRIVAL_DELAYED": { "zh-TW": "賣家出貨較慢，商品仍在準備中，我們會持續追蹤喔！", "ko": "판매자 출고가 지연되어 상품이 준비 중입니다. 계속 확인하고 있어요!", "en": "Seller shipping is a bit delayed; the item is still being prepared. We're monitoring it!", "ja": "セラーの発送が遅れており、商品は準備中です。追跡を続けています！" },
+            "ARRIVED_AT_SD_BDJ": _tipCenter, "ARRIVED_AT_BDJ": _tipCenter,
+            "EZWAY_CHECKING": _tipProcessing, "EZWAY_MISMATCH": _tipProcessing, "EZWAY_RESOLVED": _tipProcessing, "PACKING_COMPLETED": _tipProcessing, "DEPARTED_TO_BDJ": _tipProcessing, "FLIGHT_SCHEDULED": _tipProcessing,
+            "FLIGHT_DEPARTED": { "zh-TW": "航班已出發，正飛往台灣途中！收到 EZ WAY 通知請按「申報相符」才能順利通關喔！", "ko": "항공편이 출발해 대만으로 가는 중입니다! EZ WAY 알림이 오면 「申報相符」를 눌러야 통관돼요!", "en": "Flight departed, on the way to Taiwan! Tap 'declaration matched' on the EZ WAY notice to clear customs!", "ja": "フライトが出発し台湾へ向かっています！EZ WAY通知で「申報相符」を押すと通関できます！" },
+            "ARRIVED_AT_LOCAL": _tipCustoms, "CUSTOMS_HOLD": _tipCustoms,
+            "DELIVERING": { "zh-TW": "商品正在台灣境內配送，即將送達，請留意收件喔！", "ko": "상품이 대만 현지 배송 중입니다. 곧 도착하니 수령 부탁드려요!", "en": "Your item is out for local delivery in Taiwan and will arrive soon!", "ja": "商品は台湾国内で配送中です。まもなく到着します！" },
+            "DELIVERED": { "zh-TW": "已送達！如商品有問題，可於收到後 7 天內申請退換貨喔～", "ko": "배송 완료! 상품 문제가 있으면 수령 후 7일 이내 교환/반품 신청 가능해요~", "en": "Delivered! If there's any issue, you can request a return/exchange within 7 days of receipt.", "ja": "配送完了！商品に問題があれば受取後7日以内に返品・交換を申請できます～" },
+            "COMPLETED": { "zh-TW": "訂單已完成（購買確定），感謝您的購買～", "ko": "주문이 완료(구매 확정)되었습니다. 감사합니다~", "en": "Order complete (purchase confirmed). Thank you!", "ja": "注文完了（購入確定）です。ありがとうございます～" },
             "CANCEL_COMPLETED": { "zh-TW": "此訂單已取消，退款會在3-5個工作天內處理喔！", "ko": "주문이 취소되었습니다. 환불은 3-5 영업일 내 처리됩니다!", "en": "Order cancelled. Refund will be processed in 3-5 business days!", "ja": "注文キャンセル済み。返金は3-5営業日以内に処理されます！" }
           };
           var tip = (tipMap[mainStatus] && tipMap[mainStatus][detectedLang]) || (tipMap[mainStatus] && tipMap[mainStatus]["zh-TW"]) || "";
