@@ -1871,7 +1871,7 @@ router.post('/channeltalk', async function(req, res) {
     }
     var matched = matcher.findBestMatch(userText);
     if (matched) {
-      var answerText = matched.answer;
+      var answerText = aiEngine.toTaiwanMandarin(matched.answer, detectedLang); // [2026-07-10] 폴백 캔드응답도 대만 화어 정규화(zh-TW 한정)
       var footers2 = {
         "zh-TW": "\n\n💡 還有其他問題嗎？直接輸入問題，AI會為您解答喔！",
         "ko": "\n\n💡 다른 질문이 있으신가요? 직접 질문을 입력하시면 AI가 답변해드려요!",
