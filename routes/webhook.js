@@ -95,6 +95,31 @@ function getHolidayNotice(lang) {
   return m[lang] || m["zh-TW"];
 }
 
+// [2026-07-17] 영업시간 외 통합 안내문. 모든 오프타임 문의에 사용(주문번호 즉시조회는 별도 유지).
+// 공휴일이면 사유 프리픽스 추가. 이모지는 sendMessage의 stripEmoji가 제거하므로 넣지 않음.
+function offHoursReply(lang) {
+  var pre = '';
+  try {
+    var info = bizHoursUtil.getHolidayInfo();
+    if (info && info.isHoliday) {
+      var hp = {
+        'zh-TW': '今天是韓國國定假日（' + (info.twName || info.krName || '公休') + '），客服人員休假中。\n\n',
+        'ko': '오늘은 ' + (info.krName || '공휴일') + '(한국 공휴일)로 상담원이 휴무입니다.\n\n',
+        'en': 'Today is a Korean national holiday (' + (info.twName || info.krName || 'holiday') + '); our agents are off.\n\n',
+        'ja': '本日は韓国の祝日（' + (info.twName || info.krName || '祝日') + '）のため、オペレーターはお休みです。\n\n'
+      };
+      pre = hp[lang] || hp['zh-TW'];
+    }
+  } catch (e) {}
+  var msg = {
+    'zh-TW': '您好，真人客服的服務時間為週一至週五 9:00～18:00，將依訊息順序依序回覆。目前為非營業時間，您的訊息已收到，客服人員會在上班後盡快回覆您，請稍候',
+    'ko': '안녕하세요! 상담사 운영시간은 평일 10:00~19:00(한국시간)이며 메시지 순서대로 답변드립니다. 현재는 영업시간이 아니지만 메시지는 접수되었으며, 업무 시작 후 순차적으로 답변드리겠습니다. 잠시만 기다려 주세요.',
+    'en': 'Hello! Our live agents are available Mon-Fri 10:00-19:00 (KST) and reply in the order messages are received. We are currently outside business hours; your message has been received and our team will reply as soon as we are back. Thank you for your patience.',
+    'ja': 'こんにちは。有人対応の受付時間は平日10:00〜19:00（韓国時間）で、メッセージは順番にご返信いたします。ただ今営業時間外です。メッセージは受け付けましたので、営業開始後に順次ご返信いたします。少々お待ちください。'
+  };
+  return pre + (msg[lang] || msg['zh-TW']);
+}
+
 var analytics = require('../lib/analytics');
 var routing = require('../lib/routing');
 var notion = require('../lib/notion');
@@ -1063,6 +1088,15 @@ router.post('/channeltalk', async function(req, res) {
     var trimmed = userText.trim();
     if (NUMBER_TO_QUERY[trimmed]) {
       userText = NUMBER_TO_QUERY[trimmed];
+    }
+
+    // [2026-07-17] 영업시간 외 통합 안내: 오프타임 문의는 AI/에스컬레이션 대신 안내문만 발송하고 종료.
+    //   예외: 주문번호가 있으면 통과 → 아래 주문조회 로직이 즉시 배송상태를 답변(셀프조회 유지).
+    //   인사·메뉴·CSAT·시스템이벤트·매니저활성 상담은 이 지점 이전에 이미 처리/억제됨.
+    if (!isBusinessHours() && !/\d{8}(TW|KR|JP|US)\d+/i.test(userText)) {
+      await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: offHoursReply(detectedLang) }] });
+      aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "off_hours_notice", userMessage: userText.substring(0, 200), aiResponse: "영업시간 외 통합 안내문 발송(AI 미실행)", escalated: false, escalationReason: "off_hours", confidence: 1.0, category: "off_hours" });
+      return res.status(200).send("OK");
     }
 
     // Escalation request - multi-step process
