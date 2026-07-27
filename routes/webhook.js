@@ -277,6 +277,27 @@ function appendFooter(chatId, text, footerMap, lang) {
   return text + (footerMap[lang] || footerMap['zh-TW']);
 }
 
+// [2026-07-27] 사람 연결 안내에 덧붙이는 '상담원에게 예의를 갖춰 달라'는 한 줄.
+//   요구·훈계조로 읽히지 않도록 "이렇게 하면 더 빨리 해결된다"는 이유를 함께 넣었다.
+//   ★ 붙이지 않는 곳(의도적):
+//     - 부정감정 자동 에스컬레이션(negAck): 이미 화난 고객에게 예의를 요구하면 역효과
+//     - SOP v2 고정문구(DISPUTE_REPLY / DECLARED_AMOUNT_REPLY): 분쟁·신고금액 경로이고 수정 금지 문구
+//   반복 노출 방지: 같은 대화에서 6시간에 1회만(appendFooter 의 억제 패턴과 동일).
+var _courtesyShown = {};
+function courtesyNote(chatId, lang) {
+  var now = Date.now();
+  if (Object.keys(_courtesyShown).length > 3000) _courtesyShown = {}; // 메모리 가드
+  if (_courtesyShown[chatId] && (now - _courtesyShown[chatId]) < 6 * 60 * 60 * 1000) return '';
+  _courtesyShown[chatId] = now;
+  var m = {
+    'zh-TW': '\n\n🙏 也請您與客服人員保持禮貌、友善溝通，這能幫助我們更快為您解決問題，謝謝您！',
+    'ko': '\n\n🙏 상담사와 소통하실 때 예의를 지켜 주시면 더 빠르게 도와드릴 수 있습니다. 감사합니다!',
+    'en': '\n\n🙏 Please stay courteous when speaking with our agents — it helps us resolve your issue faster. Thank you!',
+    'ja': '\n\n🙏 担当者とのやり取りでは、礼儀あるご対応にご協力ください。より早く解決できます。ありがとうございます！'
+  };
+  return m[lang] || m['zh-TW'];
+}
+
 // [2026-06-30 UX] 영업외 안내에 붙일 '다음 오픈 시각(약 N시간 후)' 한 줄. (주말/공휴일은 getNextBusinessStart가 처리)
 function nextOpenText(lang) {
   try {
@@ -304,7 +325,27 @@ function isEscalationRequest(text) {
     if (lower === keywords[i].toLowerCase()) return true;
   }
   if (lower === '0') return true;
-  return false;
+  // [2026-07-27 FIX5] 위 완전일치를 통과 못한 사람요청 구제(추가 패스 — 기존 판정을 뒤집지 않음).
+  //   실측: 「聯繫客服」「聯繫客服人員」「轉真人」「請轉客服人員」처럼 명백한 사람요청이
+  //   완전일치에 안 걸려 AI를 한 번 태운 뒤 low_confidence 로 넘어가고 있었다(LLM 비용·지연 낭비,
+  //   2단계 확인 절차도 스킵). 부분일치(indexOf)로 바꾸면 「客服時間幾點」(영업시간·봇이 앎),
+  //   「請幫我查訂單」(셀프조회), 「怎麼聯繫賣家」(번개장터)까지 넘어가므로 쓰지 않는다.
+  return isEscalationPhrase(lower);
+}
+
+// 정중어·꼬리말을 걷어낸 뒤 남은 것이 [연결동사?]+[사람명사] 조합뿐일 때만 사람요청으로 본다.
+// (메시지 "전체"가 사람요청이어야 하며, 문장 안에 섞여 있으면 매칭되지 않는다)
+function isEscalationPhrase(lower) {
+  var t = String(lower || '').replace(/[\s\\!?。，,.！？~～、·・「」”“"'()（）:：]+/g, '');
+  if (!t) return false;
+  var HEAD = /^(可以|能不能|能否|麻煩|拜託|請問|請|我想|我要|想要|需要|幫我|幫忙|給我|你好|您好|좀|please|canyou|couldyou|iwant|ineed)+/;
+  var TAIL = /(人員|服務|回答|說話|講話|一下|嗎|吧|喔|呢|謝謝|연결|연결해주세요|해주세요|해줘|주세요|부탁드립니다|부탁|please|thanks|thx)+$/;
+  var prev;
+  do { prev = t; t = t.replace(HEAD, '').replace(TAIL, ''); } while (t !== prev && t);
+  if (!t) return false;
+  var VERB = '(轉接|轉|找|叫|聯繫|聯絡|接|連|talkto|connectto|connect|speakto|바꿔|불러)?';
+  var NOUN = '(真人客服|人工客服|真人|人工|專人|客服|상담사|상담원|담당자|직원|사람|agent|human|operator|realperson|liveagent|カスタマーサービス|オペレーター|人に繋いで)';
+  return new RegExp('^' + VERB + NOUN + '$').test(t);
 }
 
 
@@ -480,13 +521,13 @@ function isSystemEvent(text) {
 function looksLikeOrderNumber(text) {
   var lines = text.trim().split(/[\n\r,\s]+/);
   for (var i = 0; i < lines.length; i++) {
-    if (/^\d{8}TW\d+$/i.test(lines[i].trim())) return true;
+    if (/^\d{8}[A-Z]{2}\d+$/i.test(lines[i].trim())) return true;
   }
   return false;
 }
 
 function extractOrderNumbers(text) {
-  var matches = text.match(/\d{8}TW\d+/gi);
+  var matches = text.match(/\d{8}[A-Z]{2}\d+/gi);
   return matches || [];
 }
 
@@ -651,7 +692,7 @@ router.post('/channeltalk', async function(req, res) {
         var _explicit = notion.REASON_CODE[_firstTok] ? _firstTok : null;
         var _memo = _explicit ? _parts.slice(1).join(' ') : _rest;
         var _hoChatId = message.chatId || message.userChatId || chatId || '';
-        var _ord = (_rest.match(/\d{8}TW\d+/i) || [])[0] || '';
+        var _ord = (_rest.match(/\d{8}[A-Z]{2}\d+/i) || [])[0] || '';
         // 명령어 작성자(채널톡 매니저) 이메일 → 노션 '넘긴 사람'
         (async function(){
           var _escEmail = '';
@@ -827,7 +868,7 @@ router.post('/channeltalk', async function(req, res) {
       await connectManager(chatId, detectedLang);
       aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || '', lang: detectedLang, type: 'escalation', userMessage: userText.substring(0, 200), aiResponse: 'SOP v2 분쟁 키워드 → 즉시 핸드오프 (고정 문구)', escalated: true, escalationReason: 'dispute_keyword', confidence: 1.0, category: 'complaint' });
       // [③ 고신호 자동적재] 분쟁 키워드 → 노션 CS 넘김 DB (AI가 사유·요약 생성, 폴백 기타)
-      logHandoffToNotion({ chatId: chatId, channelId: message.channelId || '', explicitCode: null, fallbackCode: '기타', memo: '봇 자동 감지(분쟁 키워드)', orderNo: (userText.match(/\d{8}TW\d+/i) || [])[0] || '', titlePrefix: '[봇] 분쟁 키워드' }).catch(function(){});
+      logHandoffToNotion({ chatId: chatId, channelId: message.channelId || '', explicitCode: null, fallbackCode: '기타', memo: '봇 자동 감지(분쟁 키워드)', orderNo: (userText.match(/\d{8}[A-Z]{2}\d+/i) || [])[0] || '', titlePrefix: '[봇] 분쟁 키워드' }).catch(function(){});
       return res.status(200).send('OK');
     }
     // 규칙 1: 신고금액(申報金額/報關金額/海關申報) 문의 → 어떤 설명·확인·추측도 금지.
@@ -837,7 +878,7 @@ router.post('/channeltalk', async function(req, res) {
       await connectManager(chatId, detectedLang);
       aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || '', lang: detectedLang, type: 'escalation', userMessage: userText.substring(0, 200), aiResponse: 'SOP v2 신고금액 → 고정 응답 + 핸드오프', escalated: true, escalationReason: 'declared_amount', confidence: 1.0, category: 'account_payment' });
       // [③ 고신호 자동적재] 신고금액 문의 → 노션 CS 넘김 DB (AI가 사유·요약, 폴백 통관·물류)
-      logHandoffToNotion({ chatId: chatId, channelId: message.channelId || '', explicitCode: null, fallbackCode: '통관', memo: '봇 자동 감지(신고금액 문의)', orderNo: (userText.match(/\d{8}TW\d+/i) || [])[0] || '', titlePrefix: '[봇] 신고금액' }).catch(function(){});
+      logHandoffToNotion({ chatId: chatId, channelId: message.channelId || '', explicitCode: null, fallbackCode: '통관', memo: '봇 자동 감지(신고금액 문의)', orderNo: (userText.match(/\d{8}[A-Z]{2}\d+/i) || [])[0] || '', titlePrefix: '[봇] 신고금액' }).catch(function(){});
       return res.status(200).send('OK');
     }
     // ============================================================
@@ -1090,22 +1131,28 @@ router.post('/channeltalk', async function(req, res) {
       userText = NUMBER_TO_QUERY[trimmed];
     }
 
-    // [2026-07-17] 영업시간 외 통합 안내: 오프타임 문의는 AI/에스컬레이션 대신 안내문만 발송하고 종료.
-    //   예외: 주문번호가 있으면 통과 → 아래 주문조회 로직이 즉시 배송상태를 답변(셀프조회 유지).
-    //   인사·메뉴·CSAT·시스템이벤트·매니저활성 상담은 이 지점 이전에 이미 처리/억제됨.
-    if (!isBusinessHours() && !/\d{8}(TW|KR|JP|US)\d+/i.test(userText)) {
-      await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: offHoursReply(detectedLang) }] });
-      aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "off_hours_notice", userMessage: userText.substring(0, 200), aiResponse: "영업시간 외 통합 안내문 발송(AI 미실행)", escalated: false, escalationReason: "off_hours", confidence: 1.0, category: "off_hours" });
-      return res.status(200).send("OK");
-    }
+    // [2026-07-17] 영업시간 외 통합 안내 게이트 — [2026-07-27 FIX2 로 제거]
+    //   제거 이유(실측): 이 게이트가 오프타임 문의 전체를 AI 이전에 잘라내면서 최근 500건 중 24.6%가
+    //   off_hours_notice 로만 끝났고, 평일 AI 처리율이 33.9% → 22.4% 로 떨어졌다(07-17 도입 시점과 일치).
+    //   봇이 답할 수 있는 질문(운임 계산, 정책, 합배송 조건 등)까지 안내문만 나가고 있었다.
+    //   대체: 오프타임에도 AI를 정상 실행하되, 하류에서 "지금은 비영업시간" 안내를 답변에 덧붙인다
+    //         (아래 offHourAnswerNote / offHourFooters). 사람 연결이 필요한 건은 기존과 동일하게
+    //         매니저를 초대해 두어 출근 후 인계된다(오프타임 action_request 와 같은 방식).
 
     // Escalation request - multi-step process
     // Negative sentiment auto-escalation
     // 환불/refund 같은 중립어는 제외(별도 refund_delay 핸들러가 처리) — 실제 분노 표현만 남김
     var negativeKeywords = ['不滿', '不好', '生氣', '太差', '太慢', '騙', '詐騙', '投訴', '消保', '客訴', '報警', '律師', '法律', '消費者保護', '不合理', '離譜', '誇張', '差勁', '爛', '沒用', '廢物', '垃圾', '화나', '열받', '짜증', '사기', '소보원', '신고', 'scam', 'fraud', 'lawsuit', 'complaint', 'unacceptable', 'ridiculous', 'terrible', 'worst'];
+    // [2026-07-27 FIX6a] 관용구를 스캔 대상에서 제외한 뒤 부정감정을 판정한다.
+    //   「不好意思」는 대만 고객이 문의를 여는 가장 흔한 정중어(=실례합니다)인데 '不好' 에 걸려
+    //   AI 실행 전에 분노로 오판되고 있었다("不好意思，請問運費怎麼算？" → 즉시 사람 연결).
+    //   「沒用過」(써본 적 없다)도 '沒用' 에 걸렸다. 같은 저장소 analytics.js 불용어 목록엔
+    //   이미 '不好意思' 가 무의미 인사말로 등록돼 있어 레이어 간 판정이 어긋나 있었다.
+    //   키워드 목록 자체는 건드리지 않는다(다른 부정표현 판정은 그대로 유지).
+    var _negScanText = userText.replace(/不好意思|唔好意思|沒用過|没用过/g, '');
     var isNegative = false;
     for (var ni = 0; ni < negativeKeywords.length; ni++) {
-      if (userText.indexOf(negativeKeywords[ni]) !== -1) { isNegative = true; break; }
+      if (_negScanText.indexOf(negativeKeywords[ni]) !== -1) { isNegative = true; break; }
     }
     if (isNegative && !managerActive[chatId]) {
       setEscalationStep(chatId, 1); // skip step 0 so next escalation request goes directly to step 2
@@ -1171,6 +1218,22 @@ router.post('/channeltalk', async function(req, res) {
     }
     // Action request → AI guide message + escalation
     var actionType = isActionRequest(userText);
+    // [2026-07-27 FIX6b] 이 게이트는 주문조회(아래 orderMatches 블록)보다 앞에 있어서,
+    //   「訂單20260601TW123456789 還沒收到」처럼 주문번호를 준 문의도 '還沒收到'(shipping_delay)에
+    //   먼저 걸려 실시간 조회 없이 사람에게 넘어갔다(실측: TW 주문번호 78건 중 6건).
+    //   블록을 통째로 옮기면 변경 범위가 커지므로, 주문번호가 있고 "조회로 답할 수 있는" 유형일 때만
+    //   게이트를 건너뛴다. 취소사유·주소변경·메일변경은 조회로 답이 안 나오므로 그대로 넘긴다.
+    if (actionType && /\d{8}[A-Z]{2}\d+/i.test(userText)
+        && ['shipping_delay', 'refund_delay'].indexOf(actionType) !== -1) {
+      console.log('[Action] Skip gate (' + actionType + ') — 주문번호 있음, 주문조회로 처리');
+      actionType = null;
+    }
+    // [2026-07-27 FIX6b] 운임 질문은 봇이 최신 운임표로 답할 수 있는데 '多少錢'이 price_inquiry 로
+    //   잡혀 넘어가고 있었다(「運費多少錢？」). 상품 시세 문의(→報價 안내)와 구분해 운임만 통과시킨다.
+    if (actionType === 'price_inquiry' && /運費|运费|運送費|配送費|郵資|邮资|送料|배송비|운임|shipping fee|delivery fee/i.test(userText)) {
+      console.log('[Action] Skip gate (price_inquiry) — 운임 질문, AI 운임표로 처리');
+      actionType = null;
+    }
     if (actionType) {
       var actionMsgs = {
         "cancel_reason": {
@@ -1225,10 +1288,11 @@ router.post('/channeltalk', async function(req, res) {
                 "en": "\ud83d\udca1 Currently outside business hours (Mon-Fri 10:00-19:00 KST). This request needs agent assistance.\n\n\ud83d\udcdd Please leave the details (e.g. order number) and our team will prioritize it first thing!",
                 "ja": "\ud83d\udca1 現在営業時間外です（月〜金 10:00〜19:00 KST）。このお問い合わせはスタッフの対応が必要です。\n\n\ud83d\udcdd 関連情報（注文番号など）を残してください。営業開始後すぐに対応いたします！"
               };
-              await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: offHourActionMsgs[detectedLang] || offHourActionMsgs["zh-TW"] }] });
+              await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: (offHourActionMsgs[detectedLang] || offHourActionMsgs["zh-TW"]) + courtesyNote(chatId, detectedLang) }] });
               await connectManager(chatId, detectedLang);
             } else {
               var actionMsg = (actionMsgs[actionType] && actionMsgs[actionType][detectedLang]) || (actionMsgs[actionType] && actionMsgs[actionType]["zh-TW"]) || "正在為您轉接客服人員 \ud83d\ude4b\u200d\u2640\ufe0f";
+              actionMsg += courtesyNote(chatId, detectedLang);
               await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: actionMsg }] });
               await connectManager(chatId, detectedLang);
             }
@@ -1272,7 +1336,7 @@ router.post('/channeltalk', async function(req, res) {
             'ja': '👨‍💼 現在営業時間外です（平日 10:00~19:00 韓国時間）\n\n📝 メッセージを残してください。営業開始後すぐにご返信します！'
           };
         }
-        var _escVal = escMsgs[detectedLang] || escMsgs['zh-TW'];
+        var _escVal = (escMsgs[detectedLang] || escMsgs['zh-TW']) + courtesyNote(chatId, detectedLang);
         if (!bizOpen) _escVal += nextOpenText(detectedLang); // [2026-06-30] 영업외엔 다음 오픈 시각 안내
         await channeltalk.sendMessage(chatId, { blocks: [{ type: 'text', value: _escVal }] });
         // [SOP v2] 팔로워 정책: MIA·우선 초대 + 강준 팔로워
@@ -1346,7 +1410,11 @@ router.post('/channeltalk', async function(req, res) {
     }
 
         // Order number detection - real-time API lookup
-    var orderMatches = userText.match(/\d{8}TW\d{9}/g) || [];
+    // [2026-07-27 FIX3] 국가코드 TW 하드코딩 → [A-Z]{2} 일반화.
+    //   실측: 최근 500건 중 주문번호 TW 78건은 81%가 조회 성공했는데 HK 9건은 조회 성공 0건이었다.
+    //   (analytics.js 는 이미 TW|HK 를 인식 중이라 레이어 간 불일치이기도 했음)
+    //   자릿수도 \d{9} 고정 → \d+ 로 완화, /i 추가로 소문자 입력(tw…) 수용 후 대문자 정규화.
+    var orderMatches = (userText.match(/\d{8}[A-Z]{2}\d+/gi) || []).map(function(s) { return s.toUpperCase(); });
     if (orderMatches.length > 1) {
       // Multi-order lookup
       console.log("[Order] Detected", orderMatches.length, "order numbers");
@@ -1614,7 +1682,7 @@ router.post('/channeltalk', async function(req, res) {
     // 질문형 패턴 감지: 정책 FAQ 질문이면 주문목록 대신 AI로 라우팅
     var policyQuestionPatterns = ["嗎", "？", "怎麼", "為什麼", "為何", "一定", "可以嗎", "多少", "如何", "是否", "能不能", "會不會", "什麼時候", "할까", "인가요", "인가", "일까", "나요", "ですか", "でしょうか"];
     var hasQuestionPattern = policyQuestionPatterns.some(function(p) { return userText.indexOf(p) !== -1; });
-    var hasOrderNumber = /\d{8}(TW|KR|JP|US)\d+/i.test(userText);
+    var hasOrderNumber = /\d{8}[A-Z]{2}\d+/i.test(userText); // [2026-07-27 FIX3] TW|KR|JP|US 열거 → 일반화(HK 누락 해소)
     if (isOrderQuery && hasQuestionPattern && !hasOrderNumber) {
       console.log("[Route] Question pattern detected - skip order list, route to AI:", userText.substring(0, 50));
       isOrderQuery = false;
@@ -1741,7 +1809,10 @@ router.post('/channeltalk', async function(req, res) {
           var confidence = aiResult.confidence || 0;
           console.log("[AI] Confidence:", confidence.toFixed(3));
           // [⑤ 근거 검증 실패 시 fallback] 검증에서 NO 판정된 답변은 저신뢰로 강등 → 기존 에스컬레이션 경로로
-          if (aiResult.grounded === false) {
+          // [2026-07-27] groundingFailed를 별도 보관: "Claude 자체 핸드오프"와 "근거검증 실패"는
+          // 둘 다 confidence 0 이지만 처리가 달라야 한다(전자는 답변 전달, 후자는 폐기).
+          var groundingFailed = (aiResult.grounded === false);
+          if (groundingFailed) {
             console.log("[AI] Grounding validation FAILED - forcing escalation path");
             confidence = 0;
           }
@@ -1758,12 +1829,28 @@ router.post('/channeltalk', async function(req, res) {
                   "en": (_holAI ? _holAI + "\n\n" : "") + "Thanks for your question! 🙏\n\n💡 We're currently outside business hours, but I can help right away:\n・Enter your order number for instant tracking\n・Describe your issue and I'll assist\n\n⏰ Business hours: Mon-Fri 10:00-19:00 KST\nOur team will prioritize your inquiry!",
                   "ja": (_holAI ? _holAI + "\n\n" : "") + "ご質問ありがとうございます！🙏\n\n💡 現在営業時間外ですが、まずお手伝いします：\n・注文番号を入力 → すぐに確認\n・お問い合わせ内容をご記入ください\n\n⏰ 営業時間：月〜金 10:00〜19:00 KST\n営業開始後、優先的に対応いたします！"
                 };
-                await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: offHourLowMsgs[detectedLang] || offHourLowMsgs["zh-TW"] }] });
-                aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", lang: detectedLang, type: "ai_answer", userMessage: userText.substring(0, 200), aiResponse: "오프시간 low-confidence → AI 안내 (에스컬레이션 안 함)", escalated: false, escalationReason: "off_hour_low_confidence", confidence: confidence, category: (aiResult && aiResult.category) || "other" });
+                // [2026-07-27 FIX2] 오프타임에도 Claude 답변을 그대로 전달한다.
+                //   이전엔 위 정형 안내문만 보냈고, aiAnswer 를 비우지도 return 하지도 않아
+                //   아래 if(aiAnswer) 에서 답변이 한 번 더 나가는 이중 발송 경로였다.
+                //   근거검증 실패건만 정형 안내문으로 대체(fail-closed 유지).
+                var offHourAnswerNote = {
+                  "zh-TW": "\n\n⏰ 目前非客服時間（台灣 09:00~18:00）。以上為AI回覆，若需客服人員進一步確認，上班後會優先為您處理 🙏",
+                  "ko": "\n\n⏰ 현재는 상담 시간이 아닙니다(평일 10:00~19:00 KST). 위 답변은 AI 응답이며, 추가 확인이 필요하면 업무 시작 후 우선 처리해 드립니다 🙏",
+                  "en": "\n\n⏰ We're outside business hours (Mon-Fri 10:00-19:00 KST). The above is an AI reply; if you need an agent to confirm, we'll prioritize it first thing 🙏",
+                  "ja": "\n\n⏰ 現在営業時間外です（月〜金 10:00〜19:00 KST）。上記はAI回答です。担当者の確認が必要な場合は営業開始後に優先対応いたします 🙏"
+                };
+                var _ohSent = groundingFailed
+                  ? (offHourLowMsgs[detectedLang] || offHourLowMsgs["zh-TW"])
+                  : (aiAnswer + (offHourAnswerNote[detectedLang] || offHourAnswerNote["zh-TW"]));
+                await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: _ohSent }] });
+                aiAnswer = null; // 아래 if(aiAnswer) 블록의 중복 발송 방지
+                aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", lang: detectedLang, type: "ai_answer", userMessage: userText.substring(0, 200), aiResponse: _ohSent.substring(0, 500), escalated: false, escalationReason: groundingFailed ? "off_hour_grounding_failed" : "off_hour_low_confidence", confidence: confidence, category: (aiResult && aiResult.category) || "other" });
               } catch(olcErr) { console.error("[AI] Off-hour low conf error:", olcErr.message); }
+              return res.status(200).send("OK");
             } else {
-              // 영업시간: 기존 로직 유지 - 매니저 연결
-              aiAnswer = null;
+              // [2026-07-27 FIX1] 영업시간: AI 답변을 폐기하지 않고 그대로 전달한 뒤 사람 연결.
+              //   이전: aiAnswer = null 로 통째 폐기 → 부분적으로 맞는 답변까지 고객이 못 봤다(실측: AI 답변의 33.8%).
+              //   예외: 근거검증(grounding) 실패건은 미검증 날짜·금액이 섞여 있으므로 계속 폐기(fail-closed 유지).
               try {
                 var lowConfMsgs = {
                   "zh-TW": "您的問題需要客服人員協助，正在為您轉接，請稍候 🙏",
@@ -1771,12 +1858,26 @@ router.post('/channeltalk', async function(req, res) {
                   "en": "Your question needs agent assistance. Connecting you now, please wait 🙏",
                   "ja": "担当者におつなぎいたします。少々お待ちください 🙏"
                 };
-                await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: lowConfMsgs[detectedLang] || lowConfMsgs["zh-TW"] }] });
+                var connectNote = {
+                  "zh-TW": "\n\n👨‍💼 這部分已為您轉接客服人員，請稍候 🙏",
+                  "ko": "\n\n👨‍💼 상담사를 연결해 드렸습니다. 잠시만 기다려주세요 🙏",
+                  "en": "\n\n👨‍💼 I've connected you with an agent, please wait 🙏",
+                  "ja": "\n\n👨‍💼 担当者におつなぎしました。少々お待ちください 🙏"
+                };
+                var _lcSent = (groundingFailed
+                  ? (lowConfMsgs[detectedLang] || lowConfMsgs["zh-TW"])
+                  : (aiAnswer + (connectNote[detectedLang] || connectNote["zh-TW"]))
+                ) + courtesyNote(chatId, detectedLang);
+                await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: _lcSent }] });
+                aiAnswer = null; // 아래 if(aiAnswer) 블록의 중복 발송 방지
                 // [SOP v2] 팔로워 정책: MIA·우선 초대 + 강준 팔로워
                 await connectManager(chatId, detectedLang);
-                console.log("[AI] Very low confidence auto-escalation for:", chatId);
-                aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", lang: detectedLang, type: "escalation", userMessage: userText.substring(0, 200), aiResponse: "confidence " + confidence.toFixed(3) + " < 0.3 → 자동 에스컬레이션", escalated: true, escalationReason: "low_confidence", confidence: confidence, category: (aiResult && aiResult.category) || "other" });
+                console.log("[AI] Very low confidence auto-escalation for:", chatId, "| answerKept:", !groundingFailed);
+                aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", lang: detectedLang, type: "escalation", userMessage: userText.substring(0, 200), aiResponse: _lcSent.substring(0, 500), escalated: true, escalationReason: groundingFailed ? "grounding_failed" : "low_confidence", confidence: confidence, category: (aiResult && aiResult.category) || "other" });
               } catch(lcErr) { console.error("[AI] Low confidence escalation error:", lcErr.message); }
+              // [FIX1] 이전엔 return이 없어, 폐기된 뒤 아래 matcher FAQ가 2차 메시지를 또 보내고
+              //        ai_self_escalate 로 중복 로깅되었다(넘김 통계 부풀림의 한 축).
+              return res.status(200).send("OK");
             }
           } else if (confidence < 0.70) {
             // 실측 분포상 점수는 0.60~0.82에 몰려 있고 횡설수설도 ~0.69까지 나옴.
@@ -1828,7 +1929,14 @@ router.post('/channeltalk', async function(req, res) {
         "en": "\n\n💡 Need more help? Just type your question!",
         "ja": "\n\n💡 他にご質問がございましたら、そのままご入力ください！"
       };
-      aiAnswer = appendFooter(chatId, aiAnswer, footers, detectedLang); // [2026-06-30] 반복 푸터 억제
+      // [2026-07-27 FIX2] 오프타임엔 AI도 답하되 "지금은 비영업시간"임을 푸터로 명시(기대치 관리).
+      var offHourFooters = {
+        "zh-TW": "\n\n⏰ 目前非客服時間（台灣 09:00~18:00），以上為AI回覆。還有問題可繼續輸入，需要客服人員時上班後會優先為您處理！",
+        "ko": "\n\n⏰ 현재는 상담 시간이 아닙니다(평일 10:00~19:00 KST). 위 답변은 AI 응답이며, 추가 질문도 계속 입력하실 수 있어요. 상담사 확인이 필요하면 업무 시작 후 우선 처리해 드립니다!",
+        "en": "\n\n⏰ Outside business hours (Mon-Fri 10:00-19:00 KST); the above is an AI reply. Feel free to keep asking — if an agent is needed we'll prioritize it first thing!",
+        "ja": "\n\n⏰ 現在営業時間外です（月〜金 10:00〜19:00 KST）。上記はAI回答です。ご質問は続けてどうぞ。担当者が必要な場合は営業開始後に優先対応いたします！"
+      };
+      aiAnswer = appendFooter(chatId, aiAnswer, isBusinessHours() ? footers : offHourFooters, detectedLang); // [2026-06-30] 반복 푸터 억제
       // Prevent duplicate - only send if not already responded
       if (!res.headersSent) {
         await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: aiAnswer }] });
@@ -1873,6 +1981,14 @@ router.post('/channeltalk', async function(req, res) {
           await connectManager(chatId, detectedLang);
         } catch(medErr) { console.error("[AI] Med confidence escalation error:", medErr.message); }
       }
+      // [2026-07-27 FIX2] 오프타임엔 키워드 기반 매니저 초대를 하지 않는다.
+      //   답변엔 이미 offHourFooters 로 "비영업시간·상근 후 우선 처리" 안내가 붙어 있고,
+      //   여기서 초대하면 새벽에 담당자가 호출되는 데다 connectManager 가 managerActive 를 세워
+      //   봇이 2시간 침묵한다(= 오프타임에 AI를 켠 목적과 정반대).
+      //   명시적 사람요청·분쟁·행동요청 등 진짜 핸드오프 경로는 위쪽에서 그대로 초대한다.
+      // [2026-07-27 FIX4] 로그의 escalated 를 "실제로 초대했는지"와 일치시킨다.
+      //   이전엔 escalated: needEscalate 라서 _botConfidentAnswer 로 걸러진 건까지 넘김으로 집계됐다.
+      var _didEscalate = needEscalate && !_botConfidentAnswer && isBusinessHours();
       aiLog.saveConversation({
         timestamp: new Date().toISOString(),
         chatId: chatId,
@@ -1883,13 +1999,16 @@ router.post('/channeltalk', async function(req, res) {
 
         userMessage: userText.substring(0, 200),
         aiResponse: aiAnswer.substring(0, 500),
-        escalated: needEscalate,
+        escalated: _didEscalate,
+        escalationReason: _didEscalate ? "answer_promised_agent" : undefined,
         category: analytics.classifyMessage(userText),
         confidence: confidence,
       });
       recordFCRResolved(memberId || personId || "", chatId, "ai_answer");
 
-      if (needEscalate && !_botConfidentAnswer) {
+      if (needEscalate && !_botConfidentAnswer && !isBusinessHours()) {
+        console.log("[Escalate] Off-hours — skip manager invite, answer already carries off-hour notice:", chatId);
+      } else if (_didEscalate) {
         try {
           // [SOP v2] 팔로워 정책: MIA·우선 초대 + 강준 팔로워 (전체 매니저 X)
           await connectManager(chatId, detectedLang);
@@ -1913,16 +2032,27 @@ router.post('/channeltalk', async function(req, res) {
         "ja": "\n\n💡 他にご質問がございましたら、そのままご入力ください！"
       };
       answerText = appendFooter(chatId, answerText, footers2, detectedLang); // [2026-06-30] 반복 푸터 억제
+      if (matched.escalate) answerText += courtesyNote(chatId, detectedLang); // [2026-07-27] 사람 연결되는 FAQ에만
       await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: answerText }] });
+      // [2026-07-27 FIX4] 로깅을 실제 동작에 맞춘다.
+      //   이전: saveConversation 이 이 if 블록 "바깥"에 있어, FAQ로 정상 답변한 건까지 전부
+      //   escalated:true / ai_self_escalate / confidence:0 으로 기록됐다.
+      //   faq.js 51개 항목 중 escalate:true 는 4개뿐(EZWAY委任·退會·已送達未收到·退換貨)이라
+      //   나머지 47개 유형은 사람을 부르지도 않았는데 넘김으로 집계 → 실측 넘김 134건 중 28건(20.9%)이 유령.
+      //   이 수치가 daily-report·auto-upgrade 로 흘러가 개선 우선순위까지 왜곡하고 있었다.
+      //   (사유명도 ai_self_escalate → faq_escalate 로 교체: 실제로는 FAQ 항목에 달린 플래그이지
+      //    AI가 스스로 넘긴 게 아니다. 새 이름이라 과거 오염 데이터와 구분도 된다.)
       if (matched.escalate) {
         try {
           // [SOP v2] 팔로워 정책: MIA·우선 초대 + 강준 팔로워
           await connectManager(chatId, detectedLang);
         } catch(e) {}
+        aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "escalation", userMessage: userText.substring(0, 200), aiResponse: answerText.substring(0, 500), escalated: true, escalationReason: "faq_escalate", confidence: 0, category: matched.category || analytics.classifyMessage(userText) });
+      } else {
+        aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "faq_answer", userMessage: userText.substring(0, 200), aiResponse: answerText.substring(0, 500), escalated: false, confidence: 1.0, category: matched.category || analytics.classifyMessage(userText) });
+        recordFCRResolved(memberId || personId || "", chatId, "faq_answer");
       }
-      
-          aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "escalation", userMessage: userText, aiResponse: "매니저 에스컬레이션 (수동)", escalated: true, escalationReason: "ai_self_escalate", confidence: 0, category: (aiResult && aiResult.category) || "other" });
-          return res.status(200).send("OK");
+      return res.status(200).send("OK");
     }
     // Fallback — [FIX B 2026-06-29] AI가 답을 만들지 못하고 키워드 FAQ도 미스인 경우.
     // 예전엔 '아직 학습 중' 제식 안내만 반복해(escalated:false) 손님이 무한 루프에 갇혔다
@@ -1955,7 +2085,7 @@ router.post('/channeltalk', async function(req, res) {
         'ja': '申し訳ございません、この質問は担当者の確認が必要です 🙏\n現在営業時間外です（平日 10:00~19:00 KST）。メッセージを残していただければ、営業開始後すぐにご返信します！'
       };
     }
-    await channeltalk.sendMessage(chatId, { blocks: [{ type: 'text', value: fbEscMsgs[detectedLang] || fbEscMsgs['zh-TW'] }] });
+    await channeltalk.sendMessage(chatId, { blocks: [{ type: 'text', value: (fbEscMsgs[detectedLang] || fbEscMsgs['zh-TW']) + courtesyNote(chatId, detectedLang) }] });
     // 사람 연결: 첫 operator 매니저 초대 + pending 등록 (키워드 경로 1126-1140과 동일 패턴)
     var fbInvited = false;
     try {
