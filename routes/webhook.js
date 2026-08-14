@@ -1206,12 +1206,26 @@ router.post('/channeltalk', async function(req, res) {
     var _hasPayKw = ["金額","價格","結帳","付款","app金額","app價格","手機金額","결제금액","금액","payment","amount","price"].some(function(k) { return _lower.indexOf(k) > -1; });
     var _hasQuoteKw = ["報價","估價","幫我買","想買","可以買嗎","能買嗎","代購","幫我代購","想要這個","想訂","幫我訂","我要買","購買","想購入","幫忙代購","幫我看","可以幫我買","給我報價","想問價格","能不能買","可以訂嗎","견적","구매대행","사고싶어","사줘","quote","buy for me","want to buy","purchase"].some(function(k) { return _lower.indexOf(k.toLowerCase()) > -1; });
 
+    // [2026-08-14] 외부 상품링크만 보내는 문의(키워드 없음) → 견적 안내로 라우팅.
+    //   실측: URL 문의 19건 중 견적안내는 2건(11%)뿐이고 나머지는 AI가 즉흥 답변 → "판매자에게 확인해드립니다"
+    //   같은 정책 밖 약속·영어 답변이 나갔다. 링크가 오면 정책대로 견적 신청을 안내한다.
+    //   제외: veasly.com 자사 링크(이미 우리 상품 → 주문·상품 문의), 주문번호 동반(주문조회), 부정/불만(금액불일치 우선).
+    var _urls = userText.match(/https?:\/\/[^\s]+/gi) || [];
+    var _hasExternalProductUrl = _urls.some(function (u) {
+      var host = u.replace(/^https?:\/\//i, '').split(/[\/?#]/)[0].toLowerCase();
+      if (/(^|\.)veasly\.com$/.test(host)) return false;           // 자사 링크 제외
+      if (/(^|\.)(channel\.io|line\.me|ezway|customs)/.test(host)) return false; // 상담/통관 관련 링크 제외
+      return true;
+    });
+    var _hasOrderNo = /\d{8}(TW|KR|JP|US)\d+/i.test(userText);
+
     // 인텐트 판정: 부정/불만 키워드가 있으면 → 금액불일치 우선
     var _intent = null;
     if (_hasPayKw && _hasNegative) { _intent = "payment_mismatch"; }
     else if (_hasQuoteKw && _hasNegative) { _intent = "payment_mismatch"; }
     else if (_hasQuoteKw && !_hasNegative) { _intent = "quote_request"; }
     else if (_hasPayKw && !_hasQuoteKw && _hasNegative) { _intent = "payment_mismatch"; }
+    else if (_hasExternalProductUrl && !_hasOrderNo && !_hasNegative) { _intent = "quote_request"; }
 
     if (_intent === "payment_mismatch") {
       var payMismatchMsgs = {
@@ -1408,11 +1422,13 @@ router.post('/channeltalk', async function(req, res) {
     var filePatterns = ['사진을 전송했습니다', '파일을 전송했습니다', '이미지를 전송했습니다', '동영상을 전송했습니다'];
     var isFileMsg = filePatterns.some(function(p) { return userText.indexOf(p) > -1; });
     if (isFileMsg) {
+      // [2026-08-14] 상품 사진으로 가격/구매 문의하는 경우가 많은데 기존엔 "AI가 못 읽으니 다시 설명하라"만 안내했다.
+      //   → 견적 신청 방법을 먼저 안내하고, 그 외 문제(파손·오배송 등)는 텍스트 설명을 요청하는 구조로 변경.
       var fileMsgs = {
-        "zh-TW": "📷 收到您傳送的檔案了！\n\n不好意思，AI助手目前還無法讀取圖片或檔案。請用文字描述您的問題，我會盡力幫您處理喔！\n\n例如：\n・「我的包裹外觀有損壞」\n・「商品跟網站圖片不一樣」\n・「付款畫面出現錯誤」",
-        "ko": "📷 파일을 확인했습니다!\n\nAI 도우미가 아직 이미지/파일을 읽지 못합니다. 텍스트로 문제를 설명해 주시면 도와드릴게요!\n\n예시:\n・「택배 외관이 손상됐어요」\n・「상품이 사진과 달라요」\n・「결제 화면 오류가 났어요」",
-        "en": "📷 Got your file!\n\nSorry, the AI assistant can't read images/files yet. Please describe your issue in text and I'll do my best to help!",
-        "ja": "📷 ファイルを確認しました！\n\nAIアシスタントはまだ画像/ファイルを読み取れません。テキストで問題をご説明いただければ対応いたします！"
+        "zh-TW": "收到您傳送的檔案了！\n\n如果您是想購買這個商品，請到 veasly.com/tw 貼上商品連結或上傳截圖，點擊「申請報價」，我們會盡快為您報價喔！\n\n如果是其他問題（商品破損、寄錯、付款異常等），因為AI目前還無法讀取圖片，麻煩您用文字簡單描述，我會盡力協助您！",
+        "ko": "파일을 확인했습니다!\n\n상품 구매를 원하시면 veasly.com/tw 에서 상품 링크 또는 스크린샷을 올리고 「견적 요청」을 눌러주세요. 빠르게 견적 드리겠습니다!\n\n다른 문제(파손·오배송·결제 오류 등)라면 AI가 이미지를 읽지 못하니 텍스트로 간단히 설명해 주세요!",
+        "en": "Got your file!\n\nIf you'd like to buy this item, please go to veasly.com/tw, paste the product link or upload the screenshot, and click \"Request Quote\" — we'll get you a quote shortly!\n\nFor other issues (damage, wrong item, payment errors), our AI can't read images yet, so please describe it in text and I'll help!",
+        "ja": "ファイルを確認しました！\n\nご購入をご希望の場合は veasly.com/tw で商品リンクまたはスクリーンショットを添付し「見積もり申請」をクリックしてください。すぐにお見積りいたします！\n\nその他の問題（破損・誤配送・決済エラーなど）は、AIが画像を読み取れないためテキストでご説明ください！"
       };
       await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: fileMsgs[detectedLang] || fileMsgs["zh-TW"] }] });
       aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", lang: detectedLang, type: "file_message", userMessage: userText, aiResponse: "파일/이미지 수신 안내", escalated: false, confidence: 0.5, category: "other" });
