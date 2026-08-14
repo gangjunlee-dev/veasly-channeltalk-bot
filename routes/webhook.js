@@ -117,7 +117,33 @@ function offHoursReply(lang) {
     'en': 'Hello! Our live agents are available Mon-Fri 10:00-19:00 (KST) and reply in the order messages are received. We are currently outside business hours; your message has been received and our team will reply as soon as we are back. Thank you for your patience.',
     'ja': 'こんにちは。有人対応の受付時間は平日10:00〜19:00（韓国時間）で、メッセージは順番にご返信いたします。ただ今営業時間外です。メッセージは受け付けましたので、営業開始後に順次ご返信いたします。少々お待ちください。'
   };
-  return pre + (msg[lang] || msg['zh-TW']);
+  return pre + (msg[lang] || msg['zh-TW']) + nextOpenDayText(lang);
+}
+
+// [2026-08-14] 복귀일(다음 영업일) 안내. 연휴·주말처럼 '내일'이 아닐 때만 날짜를 명시한다.
+// (매일 밤 "내일 답변" 같은 당연한 문구가 반복되는 것을 피함)
+function nextOpenDayText(lang) {
+  try {
+    var ms = bizHoursUtil.getNextBusinessStart(Date.now());
+    if (!ms) return '';
+    // 대만시간(KST-1h) 기준 날짜·요일
+    var tw = new Date(ms + 8 * 3600 * 1000);
+    var nowTw = new Date(Date.now() + 8 * 3600 * 1000);
+    var dayDiff = Math.round((Date.UTC(tw.getUTCFullYear(), tw.getUTCMonth(), tw.getUTCDate()) -
+      Date.UTC(nowTw.getUTCFullYear(), nowTw.getUTCMonth(), nowTw.getUTCDate())) / 86400000);
+    if (dayDiff <= 1) return ''; // 오늘 늦게/내일 아침 복귀면 날짜 생략
+    var md = (tw.getUTCMonth() + 1) + '/' + tw.getUTCDate();
+    var zhDay = ['日', '一', '二', '三', '四', '五', '六'][tw.getUTCDay()];
+    var koDay = ['일', '월', '화', '수', '목', '금', '토'][tw.getUTCDay()];
+    var enDay = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][tw.getUTCDay()];
+    var t = {
+      'zh-TW': '\n\n下次真人客服上班時間為 ' + md + '（週' + zhDay + '）9:00，屆時會依訊息順序為您處理。',
+      'ko': '\n\n다음 상담 가능일은 ' + md + '(' + koDay + ') 10:00(한국시간)이며, 접수 순서대로 처리해 드리겠습니다.',
+      'en': '\n\nOur agents are back on ' + md + ' (' + enDay + ') at 09:00 TW time and will reply in order.',
+      'ja': '\n\n次回の有人対応は ' + md + '（' + ['日', '月', '火', '水', '木', '金', '土'][tw.getUTCDay()] + '）台湾時間 9:00 からです。順番に対応いたします。'
+    };
+    return t[lang] || t['zh-TW'];
+  } catch (e) { return ''; }
 }
 
 var analytics = require('../lib/analytics');
