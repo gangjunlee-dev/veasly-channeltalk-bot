@@ -61,6 +61,7 @@ function recordFCRResolved(userId, chatId, issueType) {
 var router = express.Router();
 var pendingCES = {};
 var pendingCSATReason = {};
+var _aiAnswerStreak = {}; // [2026-08-14 핑퐁 차단] chatId → {count,last}: 연속 AI 답변 수(2h 창). 4회+인데 또 물으면 사람 연결.
 var csatFeedbackPath = require('path').join(__dirname, '..', 'data', 'csat-feedback.json');
 function loadCSATFeedback() { try { return JSON.parse(fs.readFileSync(csatFeedbackPath, 'utf8')); } catch(e) { return []; } }
 function saveCSATFeedback(data) { if (data.length > 1000) data = data.slice(-1000); fs.writeFileSync(csatFeedbackPath, JSON.stringify(data, null, 2)); }
@@ -220,6 +221,7 @@ setInterval(function() {
   Object.keys(pendingEscalations).forEach(function(k) {
     if (pendingEscalations[k] && pendingEscalations[k].time && (now - pendingEscalations[k].time > 86400000)) delete pendingEscalations[k];
   });
+  slaSweep(); // [2026-08-14 ③ SLA] 넘김 후 매니저 무응답 리마인더 (아래 정의)
   Object.keys(_csatSendLock).forEach(function(k) {
     if (now - _csatSendLock[k] > 600000) delete _csatSendLock[k];
   });
@@ -230,6 +232,43 @@ setInterval(function() {
     if (now - teamFollowedChats[k] > 86400000) delete teamFollowedChats[k];
   });
 }, 60000);
+
+// [2026-08-14 ③ SLA] 넘김 후 30분+ 매니저 무응답 → 슬랙(SLACK_WEBHOOK_URL) 알림, 없으면 팀챗(REPORT_GROUP_ID) 폴백.
+//   pendingEscalations 는 매니저가 답하면 삭제되므로, 남아있는 항목 = 아직 무응답. 상담당 1회만(slaReminded),
+//   영업시간에만 발송(새벽 호출 방지). 위 1분 주기 클린업 인터벌에서 호출.
+var _slaNoChannelWarned = false;
+function slaSweep() {
+  try {
+    if (!isBusinessHours()) return;
+    var now = Date.now();
+    var stale = Object.keys(pendingEscalations).filter(function (k) {
+      var pe = pendingEscalations[k];
+      return pe && pe.time && !pe.slaReminded && (now - pe.time) >= 30 * 60 * 1000;
+    });
+    if (!stale.length) return;
+    var slackUrl = process.env.SLACK_WEBHOOK_URL;
+    var groupId = process.env.REPORT_GROUP_ID;
+    if (!slackUrl && !groupId) {
+      if (!_slaNoChannelWarned) { console.warn('[SLA] 무응답 상담 ' + stale.length + '건 — SLACK_WEBHOOK_URL/REPORT_GROUP_ID 미설정이라 알림 못 보냄'); _slaNoChannelWarned = true; }
+      return;
+    }
+    stale.forEach(function (chatId) {
+      var pe = pendingEscalations[chatId];
+      pe.slaReminded = true;
+      var mins = Math.round((now - pe.time) / 60000);
+      var text = '⏰ 미응답 상담 알림: 사람 연결 후 ' + mins + '분째 담당자 답변이 없습니다.\n상담 바로가기: https://desk.channel.io/#/channels/138710/user_chats/' + chatId;
+      if (slackUrl) {
+        require('axios').post(slackUrl, { text: text }, { timeout: 10000 })
+          .then(function () { console.log('[SLA] Slack reminder sent:', chatId); })
+          .catch(function (e) { console.error('[SLA] Slack error:', e.message); });
+      } else {
+        channeltalk.sendGroupMessage(groupId, { blocks: [{ type: 'text', value: text }] }, 'VEASLY AI Bot')
+          .then(function () { console.log('[SLA] Teamchat reminder sent:', chatId); })
+          .catch(function (e) { console.error('[SLA] Teamchat error:', e.message); });
+      }
+    });
+  } catch (e) { console.error('[SLA] sweep error:', e.message); }
+}
 
 function extractText(message) {
   if (!message) return '';
@@ -862,7 +901,9 @@ router.post('/channeltalk', async function(req, res) {
     }
     var detectedLang = lang.detectLanguage(userText);
     // Override with ChannelTalk user language if text is ambiguous (numbers, order numbers, etc.)
-    if (userLang && /^[a-zA-Z0-9\s\-\.\,\/\@\#]+$/.test(userText)) {
+    // [2026-08-14] URL만 보내거나 짧은 영문(Not yet order 등)도 프로필 언어 우선 — 기존 정규식이 ':'/'?'를
+    //   미허용해 상품링크만 보내면 'en'으로 판정 → 중문 고객이 영어 답변을 받던 버그. ASCII 전체로 확장.
+    if (userLang && /^[\x20-\x7E\s]+$/.test(userText)) {
       var langMap = {"ko": "zh-TW", "ja": "ja", "en": "en", "zh": "zh-TW", "zh-TW": "zh-TW", "zh-CN": "zh-TW"};
       if (langMap[userLang]) detectedLang = langMap[userLang];
     }
@@ -1827,6 +1868,24 @@ router.post('/channeltalk', async function(req, res) {
     var softCaveatOnly = false; // confidence<0.70: AI 참고용 딱지만 붙이고 매니저 자동호출은 안 함 (Option A)
     if (aiEngine.isReady()) {
       try {
+      // [2026-08-14 핑퐁 차단] 같은 상담에서 AI가 이미 4회+ 답했는데 고객이 계속 물으면(2h 창) 재답변 대신 사람 연결.
+      //   실측: 5회+ 왕복 상담 34개(최다 14회)가 불만의 주원인. 주문조회·메뉴·감사는 위에서 이미 처리되므로 여기 도달한 건 미해결 자유질문뿐.
+      var _streak = _aiAnswerStreak[chatId];
+      if (_streak && (Date.now() - _streak.last) > 2 * 60 * 60 * 1000) { delete _aiAnswerStreak[chatId]; _streak = null; }
+      if (_streak && _streak.count >= 4) {
+        var _ppBiz = isBusinessHours();
+        var pingpongMsgs = {
+          "zh-TW": _ppBiz ? "為了更快為您解決問題，這部分我們請客服人員直接為您處理，正在為您轉接，請稍候。" : "為了更快為您解決問題，已將您的對話轉交客服人員，上班後會優先為您回覆，請稍候。",
+          "ko": _ppBiz ? "더 빠른 해결을 위해 상담사가 직접 도와드리겠습니다. 연결 중이니 잠시만 기다려주세요." : "더 빠른 해결을 위해 상담사에게 전달해 두었습니다. 업무 시작 후 우선 답변드리겠습니다.",
+          "en": _ppBiz ? "To resolve this faster, we're connecting you to a live agent now. Please hold on." : "To resolve this faster, your conversation has been handed to our team — they'll reply first thing in business hours.",
+          "ja": _ppBiz ? "より早く解決できるよう、担当者に直接おつなぎします。少々お待ちください。" : "より早く解決できるよう、担当者に引き継ぎました。営業開始後に優先してご返信いたします。"
+        };
+        delete _aiAnswerStreak[chatId];
+        await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: pingpongMsgs[detectedLang] || pingpongMsgs["zh-TW"] }] });
+        try { await connectManager(chatId, detectedLang); } catch (ppErr) { console.error("[PingPong] connectManager error:", ppErr.message); }
+        aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "escalation", userMessage: userText.substring(0, 200), aiResponse: "핑퐁 차단: AI 4회+ 답변에도 미해결 → 사람 연결", escalated: true, escalationReason: "pingpong_limit", confidence: 0, category: "other" });
+        return res.status(200).send("OK");
+      }
       var memberContext = veaslyUser ? "[회원: " + veaslyUser.name + ", 주문 " + (veaslyUser.requestCount || 0) + "건, 포인트 " + (veaslyUser.credit || 0) + "]" : "";
         // Fetch recent chat history for context
         var chatHistory = [];
@@ -1950,6 +2009,7 @@ router.post('/channeltalk', async function(req, res) {
                 // 오프시간은 에스컬레이션 스킵 - 아래 connectManager를 건너뜀
                 await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: aiAnswer }] });
                 aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "ai_answer", userMessage: userText.substring(0, 200), aiResponse: aiAnswer.substring(0, 300), escalated: false, escalationReason: "off_hour_medium_confidence", confidence: confidence, category: (aiResult && aiResult.category) || "other" });
+                _aiAnswerStreak[chatId] = { count: ((_aiAnswerStreak[chatId] && _aiAnswerStreak[chatId].count) || 0) + 1, last: Date.now() }; // [핑퐁 차단] 카운트
                 return res.status(200).send("OK");
               }
               // 영업시간 (Option A): 약한 참고용 딱지만, 매니저 자동호출 안 함.
@@ -1991,11 +2051,16 @@ router.post('/channeltalk', async function(req, res) {
       if (!res.headersSent) {
         await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: aiAnswer }] });
       }
+      _aiAnswerStreak[chatId] = { count: ((_aiAnswerStreak[chatId] && _aiAnswerStreak[chatId].count) || 0) + 1, last: Date.now() }; // [핑퐁 차단] 카운트
 
       // Log AI conversation
       var aiEscalated = false;
       // [2026-07-06] "為您確認"·"幫您確認"·"확인이 필요" 제거 — 봇이 "주문번호 주시면 제가 확인해드릴게요" 같은 self-service 제안을 사람연결 약속으로 오인해 과도 에스컬레이션하던 버그. 진짜 핸드오프는 아래 상담사/담당자/轉接/客服人員/connect 로 여전히 감지됨.
-      var escalateKeywords = ["轉接客服", "轉接", "客服確認", "客服人員", "需要客服", "建議聯繫", "請聯繫客服", "無法為您", "담당자를 연결", "담당자에게", "상담사", "상담원", "connect you with", "support team", "contact support", "unable to help", "担当者におつなぎ", "担当者に", "お問い合わせ"];
+      // [2026-08-14] "빈 약속" 차단: 봇이 판매자/물류/브랜드에 확인 후 회신을 약속하면 반드시 사람을 붙인다.
+      //   실사례: "協助向賣家確認後回覆您"라고 약속만 하고 아무도 몰라서 고객이 3시간 방치("有消息了嗎").
+      //   (2026-07-06에 제거한 "幫您確認一下" 류 self-service 제안과 달리, 제3자 확인 약속은 사람 없이는 이행 불가)
+      var escalateKeywords = ["轉接客服", "轉接", "客服確認", "客服人員", "需要客服", "建議聯繫", "請聯繫客服", "無法為您", "담당자를 연결", "담당자에게", "상담사", "상담원", "connect you with", "support team", "contact support", "unable to help", "担当者におつなぎ", "担当者に", "お問い合わせ",
+        "向賣家確認", "向賣家詢問", "向物流端確認", "向品牌方確認", "轉交專人", "相關團隊", "確認後回覆您", "確認後會盡快", "一有結果"];
       var needEscalate = false;
       // 봇이 확실히 아는 정보는 에스컬레이션 키워드 무시
       var _botConfidentTopics = ["假日", "공휴일", "holiday", "祝日", "營業時間", "上班時間", "영업시간",
