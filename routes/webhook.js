@@ -1422,16 +1422,24 @@ router.post('/channeltalk', async function(req, res) {
     var filePatterns = ['사진을 전송했습니다', '파일을 전송했습니다', '이미지를 전송했습니다', '동영상을 전송했습니다'];
     var isFileMsg = filePatterns.some(function(p) { return userText.indexOf(p) > -1; });
     if (isFileMsg) {
-      // [2026-08-14] 상품 사진으로 가격/구매 문의하는 경우가 많은데 기존엔 "AI가 못 읽으니 다시 설명하라"만 안내했다.
-      //   → 견적 신청 방법을 먼저 안내하고, 그 외 문제(파손·오배송 등)는 텍스트 설명을 요청하는 구조로 변경.
+      // [2026-08-14] 이미지 문의는 성격이 갈린다: ①상품 하자·파손·오배송 신고 ②시세/구매 문의.
+      //   기존엔 "AI가 못 읽으니 다시 설명하라"만 안내해 둘 다 놓쳤다.
+      //   하자 신고는 7일 기한·개봉 영상 요건이 걸려 시급하므로 **먼저** 안내하고 상담원에게 넘긴다(아래 escalate).
+      //   견적은 그 다음 안내. 수치(7일)는 정책 공식값.
       var fileMsgs = {
-        "zh-TW": "收到您傳送的檔案了！\n\n如果您是想購買這個商品，請到 veasly.com/tw 貼上商品連結或上傳截圖，點擊「申請報價」，我們會盡快為您報價喔！\n\n如果是其他問題（商品破損、寄錯、付款異常等），因為AI目前還無法讀取圖片，麻煩您用文字簡單描述，我會盡力協助您！",
-        "ko": "파일을 확인했습니다!\n\n상품 구매를 원하시면 veasly.com/tw 에서 상품 링크 또는 스크린샷을 올리고 「견적 요청」을 눌러주세요. 빠르게 견적 드리겠습니다!\n\n다른 문제(파손·오배송·결제 오류 등)라면 AI가 이미지를 읽지 못하니 텍스트로 간단히 설명해 주세요!",
-        "en": "Got your file!\n\nIf you'd like to buy this item, please go to veasly.com/tw, paste the product link or upload the screenshot, and click \"Request Quote\" — we'll get you a quote shortly!\n\nFor other issues (damage, wrong item, payment errors), our AI can't read images yet, so please describe it in text and I'll help!",
-        "ja": "ファイルを確認しました！\n\nご購入をご希望の場合は veasly.com/tw で商品リンクまたはスクリーンショットを添付し「見積もり申請」をクリックしてください。すぐにお見積りいたします！\n\nその他の問題（破損・誤配送・決済エラーなど）は、AIが画像を読み取れないためテキストでご説明ください！"
+        "zh-TW": "收到您傳送的照片了！\n\n如果是商品瑕疵、寄錯、配送破損或數量短少：請在收到商品後 7 天內告知，並保留「拆封前就開始」的全程連續開箱影片與原包裝，這是判斷責任的必要依據。" + (isBusinessHours() ? "我已經為您通知客服人員，會盡快為您處理。" : "您的訊息已收到，客服人員上班後會優先為您確認。") + "\n\n如果您是想購買這個商品：請到 veasly.com/tw 貼上商品連結或上傳截圖，點擊「申請報價」，我們會盡快為您報價喔！\n\n（AI目前還無法讀取圖片內容，麻煩您用一句話說明狀況，客服人員確認照片後會回覆您）",
+        "ko": "사진을 확인했습니다!\n\n상품 하자·오배송·배송 중 파손·수량 부족이라면: 수령 후 7일 이내에 알려주시고, 「개봉 전부터 시작된」 전체 연속 개봉 영상과 원포장을 보관해 주세요(책임 판단에 필요한 자료입니다). " + (isBusinessHours() ? "상담사에게 전달해 두었으니 곧 처리해 드립니다." : "메시지는 접수되었으며 업무 시작 후 우선 확인해 드리겠습니다.") + "\n\n상품 구매를 원하시면: veasly.com/tw 에서 상품 링크 또는 스크린샷을 올리고 「견적 요청」을 눌러주세요!\n\n(AI는 이미지를 읽지 못해, 상황을 한 줄로 적어주시면 상담사가 사진 확인 후 답변드립니다)",
+        "en": "Got your photo!\n\nIf this is a defect, wrong item, shipping damage, or missing quantity: please report within 7 days of receipt and keep the full unboxing video starting before opening, plus the original packaging (required to determine responsibility). " + (isBusinessHours() ? "I've notified our team and they'll assist you shortly." : "Your message has been received and our team will review it first thing.") + "\n\nIf you'd like to buy this item: go to veasly.com/tw, paste the product link or upload the screenshot, and click \"Request Quote\"!\n\n(Our AI can't read images yet — please add one line about the issue and our team will review the photo.)",
+        "ja": "お写真を確認しました！\n\n商品の不良・誤配送・配送中の破損・数量不足の場合：受取後7日以内にお知らせいただき、「開封前から始まる」全過程の開封動画と元の梱包を保管してください（責任判断に必要です）。" + (isBusinessHours() ? "担当者に共有しましたので、追ってご連絡いたします。" : "メッセージは受け付けました。営業開始後に優先して確認いたします。") + "\n\nご購入をご希望の場合：veasly.com/tw で商品リンクまたはスクリーンショットを添付し「見積もり申請」をクリックしてください！\n\n（AIは画像を読み取れないため、状況を一言お書きいただければ担当者が写真を確認しご返信します）"
       };
       await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: fileMsgs[detectedLang] || fileMsgs["zh-TW"] }] });
-      aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", lang: detectedLang, type: "file_message", userMessage: userText, aiResponse: "파일/이미지 수신 안내", escalated: false, confidence: 0.5, category: "other" });
+      // 사진은 AI가 판독할 수 없고 하자 신고일 가능성이 있으므로 사람이 반드시 확인해야 한다.
+      // 안내문에서 "客服人員에게 알렸다"고 약속했으므로 실제로 넘긴다(영업시간 내에만 배정 — 오프타임은 상담이 열린 채 남아 복귀 후 처리).
+      var _fileEscalated = false;
+      if (isBusinessHours()) {
+        try { await connectManager(chatId, detectedLang); _fileEscalated = true; } catch (feErr) { console.error("[File] connectManager error:", feErr.message); }
+      }
+      aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", lang: detectedLang, type: "file_message", userMessage: userText, aiResponse: "사진 수신 → 하자신고(7일·개봉영상) + 견적 안내" + (_fileEscalated ? " + 상담원 연결" : " (오프타임: 복귀 후 확인)"), escalated: _fileEscalated, escalationReason: "image_received", confidence: 0.5, category: "other" });
       return res.status(200).send("OK");
     }
     var isSticker = skipPatterns.some(function(p) { return userText.indexOf(p) > -1; });
