@@ -96,6 +96,29 @@ function getHolidayNotice(lang) {
   return m[lang] || m["zh-TW"];
 }
 
+// [2026-08-14] 오프타임 안내문 맵에 공휴일 사유를 덧붙여 돌려준다(공휴일 아니면 원본 그대로).
+//   평일 공휴일에 "지금은 비영업시간(평일 09~18)"만 보내면 고객 시계로는 평일 낮 2시라
+//   자기모순으로 읽힌다 — 왜 쉬는지(韓國光復節 등)를 같이 알려야 한다.
+function withHolidayReason(noteMap) {
+  var info = bizHoursUtil.getHolidayInfo();
+  if (!info || !info.isHoliday) return noteMap;
+  var kr = info.krName || "공휴일";
+  var tw = info.twName || kr;
+  var pre = {
+    "zh-TW": "🏖️ 今日為韓國國定假日（" + tw + "），客服人員休假中。",
+    "ko": "🏖️ 오늘은 한국 공휴일(" + kr + ")이라 상담원이 휴무입니다.",
+    "en": "🏖️ Today is a Korean national holiday (" + tw + "); our agents are off.",
+    "ja": "🏖️ 本日は韓国の祝日（" + tw + "）のため、オペレーターは休業です。"
+  };
+  var out = {};
+  Object.keys(noteMap).forEach(function(k) {
+    var s = String(noteMap[k]);
+    var lead = (s.match(/^\n*/) || [""])[0]; // 푸터는 "\n\n"으로 시작, 단독 메시지는 없음 → 원본 유지
+    out[k] = lead + (pre[k] || pre["zh-TW"]) + "\n" + s.replace(/^\n+/, "");
+  });
+  return out;
+}
+
 // [2026-07-17] 영업시간 외 통합 안내문. 모든 오프타임 문의에 사용(주문번호 즉시조회는 별도 유지).
 // 공휴일이면 사유 프리픽스 추가. 이모지는 sendMessage의 stripEmoji가 제거하므로 넣지 않음.
 function offHoursReply(lang) {
@@ -164,6 +187,12 @@ var satisfactionPending = {};
 var _csatSendLock = {};
 var chatLanguage = {};
 var managerActive = {};
+// [2026-08-14] 매니저가 "확인 후 회신" 류 약속을 남긴 상담(chatId → 시각).
+//   판매자·물류 확인은 2시간을 넘기는 게 일상인데, managerActive 2시간 타임아웃이 풀리면
+//   봇이 맥락 없는 AI 답변으로 끼어들어 나중에 매니저 회신과 상충하는 답이 2개 남았다.
+var managerPromise = {};
+var managerPromiseNudged = {}; // 약속 지연 내부 알림 1회 가드
+var _MGR_PROMISE_RE = /確認後|確認一下|確認完|向賣家|跟賣家|向物流|跟物流|向品牌|查詢後|查一下|回覆您|回复您|稍後回覆|확인 후|확인해서|확인하고|알아보고|알아볼게|다시 연락|check with|get back to you/i;
 var pendingEscalations = {};
 var teamFollowedChats = {}; // [SOP v2] 채팅별 팀 팔로워(MIA·우선·강준) 추가 여부
 var chatContext = {};
@@ -206,6 +235,10 @@ setInterval(function() {
   // 메모리 누수 방지: 24시간 이상 된 항목 정리
   Object.keys(managerActive).forEach(function(k) {
     if (now - managerActive[k] > 86400000) delete managerActive[k];
+  });
+  // [2026-08-14] 확인 약속 추적도 같이 정리 (24시간)
+  Object.keys(managerPromise).forEach(function(k) {
+    if (now - managerPromise[k] > 86400000) { delete managerPromise[k]; delete managerPromiseNudged[k]; }
   });
   Object.keys(chatLanguage).forEach(function(k) {
     if (typeof chatLanguage[k] === 'string') {
@@ -311,15 +344,33 @@ var NUMBER_TO_QUERY = {
 function buildOrderContext(orderItems, orderNum, lang) {
   if (!orderItems || orderItems.length === 0) return '';
   var mainStatus = (orderItems[0] && orderItems[0].status) || '';
+  // [2026-08-18 재작성] 이 텍스트는 ai-engine buildOrderCtx 가 「重要-訂單狀態參考」로 AI에 주입하고
+  //   "이 상태에 근거해 답하라"고 지시하는 값이라, 틀리면 AI가 확신을 갖고 오답한다. 문제였던 점:
+  //   ① 구 상태코드(SHIPPING_TO_BDJ/SHIPPING_TO_HOME)만 있고 2026-06 신 9단계 enum이 통째로 빠져
+  //      대부분의 진행 단계에서 빈 컨텍스트로 답함
+  //   ② ORDER_PROCESSING 을 "한국 내 배송 중 + 此階段無法取消"로 단정 — 같은 대화의 tipMap·STATUS_MAP과
+  //      정반대이고, 실제로는 아직 구매 진행 단계라 취소 가부를 봇이 단정하면 안 됨
+  //   ③ CANCEL_COMPLETED 가 환불 3-5일만 말해 실입금 7-14영업일 누락(프롬프트의 '退款時效不可混用' 위반)
+  //   → STATUS_MAP·tipMap과 같은 신 체계로 통일하고, 단정 대신 사실만 제공한다.
+  var _guideCenter = { 'zh-TW': '商品已抵達VEASLY物流中心，正在檢查與打包，準備國際配送', 'ko': '물류센터 도착, 검사·포장 후 국제배송 준비 중' };
+  var _guideProcessing = { 'zh-TW': '商品在物流中心處理中（檢查／EZWAY／打包／航班安排）', 'ko': '물류센터 처리 중(검사/EZWAY/포장/항공편 준비)' };
+  var _guideCustoms = { 'zh-TW': '商品已抵台，通關進行中（正常約3~4個工作天）。需要客戶在EZ WAY APP按「申報相符」才能通關', 'ko': '대만 도착, 통관 진행 중(약 3~4영업일). EZ WAY 「申報相符」 필요' };
   var statusGuide = {
     'PAYMENT_WAITING': { 'zh-TW': '此訂單尚未付款。請提醒客戶盡快完成付款，否則訂單可能被取消', 'ko': '미결제 상태. 빠른 결제 안내 필요' },
-    'PAYMENT_COMPLETED': { 'zh-TW': '已收到付款，正在準備處理訂單。通常1-2個工作天開始處理', 'ko': '결제 완료, 처리 시작 예정' },
-    'ORDER_PROCESSING': { 'zh-TW': '商品正在韓國境內配送到VEASLY倉庫。通常需要1-3個工作天。此階段無法取消訂單', 'ko': '한국 내 배송 중 (1-3 영업일)' },
-    'SHIPPING_TO_BDJ': { 'zh-TW': '商品已到達VEASLY倉庫，正在準備國際包裹。即將寄出', 'ko': 'VEASLY 창고 도착, 국제배송 준비 중' },
-    'SHIPPING_TO_HOME': { 'zh-TW': '包裹已從韓國寄出！國際配送約7-14天。客戶需要在EZ WAY APP上按「申報相符」才能通關。如果EZ WAY已申報但很久沒收到，可能是海關或國內物流延遲，建議等待或聯繫客服確認', 'ko': '한국 출발 완료. 7-14일 소요. EZ WAY 신고 필요' },
-    'COMPLETED': { 'zh-TW': '訂單已完成配送', 'ko': '배송 완료' },
-    'CANCEL_COMPLETED': { 'zh-TW': '訂單已取消。退款通常3-5個工作天內處理', 'ko': '취소 완료. 환불 3-5 영업일' },
-    'CANCEL_REQUESTED': { 'zh-TW': '客戶已申請取消，正在處理中', 'ko': '취소 요청 처리 중' }
+    'PAYMENT_COMPLETED': { 'zh-TW': '已收到付款，尚未向賣家下單。此階段通常仍可取消', 'ko': '결제 완료, 아직 발주 전. 이 단계는 보통 취소 가능' },
+    'ORDER_PROCESSING': { 'zh-TW': '正在韓國端進行購買（尚未確認賣家已出貨）。取消是否來得及需由客服確認，不可自行斷定可否取消', 'ko': '한국에서 구매 진행 중(판매자 출고 확정 아님). 취소 가능 여부는 상담사 확인 필요 — 단정 금지' },
+    'ARRIVAL_DELAYED': { 'zh-TW': '賣家出貨較慢，商品仍在準備中，我們持續追蹤中', 'ko': '판매자 출고 지연, 상품 준비 중 — 계속 추적 중' },
+    'ARRIVED_AT_SD_BDJ': _guideCenter, 'ARRIVED_AT_BDJ': _guideCenter,
+    'EZWAY_CHECKING': _guideProcessing, 'EZWAY_MISMATCH': _guideProcessing, 'EZWAY_RESOLVED': _guideProcessing,
+    'PACKING_COMPLETED': _guideProcessing, 'DEPARTED_TO_BDJ': _guideProcessing, 'FLIGHT_SCHEDULED': _guideProcessing,
+    'FLIGHT_DEPARTED': { 'zh-TW': '航班已出發，正飛往台灣（韓國出發後約7~14天）。收到EZ WAY通知需按「申報相符」。此階段已開立國際運單，無法取消或變更地址', 'ko': '항공편 출발, 대만으로 이동 중(7~14일). EZ WAY 「申報相符」 필요. 국제운송장 개설되어 취소·주소변경 불가' },
+    'ARRIVED_AT_LOCAL': _guideCustoms, 'CUSTOMS_HOLD': _guideCustoms,
+    'DELIVERING': { 'zh-TW': '商品正在台灣境內配送中，即將送達', 'ko': '대만 현지 배송 중, 곧 도착' },
+    'DELIVERED': { 'zh-TW': '商品已送達。如有商品問題，可於收到後7天內申請退換貨', 'ko': '배송 완료. 상품 문제 시 수령 후 7일 이내 교환/반품 신청 가능' },
+    'COMPLETED': { 'zh-TW': '訂單已完成（購買確定）', 'ko': '주문 완료(구매 확정)' },
+    'CANCEL_COMPLETED': { 'zh-TW': '訂單已取消。退款VEASLY於3-5個工作天內處理，實際退刷入帳依銀行/金流作業另需約7-14個工作天（兩段時效不可混用）', 'ko': '취소 완료. 환불 처리 3-5영업일 + 실제 입금 7-14영업일(두 시효를 섞어 말하지 말 것)' },
+    'CANCEL_REQUESTED': { 'zh-TW': '客戶已申請取消，正在處理中', 'ko': '취소 요청 처리 중' },
+    'CANCEL_REJECTED': { 'zh-TW': '取消申請未通過（通常因賣家已出貨或已開立國際運單）。具體原因由客服確認', 'ko': '취소 미승인(보통 출고·국제운송장 개설 후). 구체 사유는 상담사 확인' }
   };
   var guide = (statusGuide[mainStatus] && statusGuide[mainStatus][lang]) || (statusGuide[mainStatus] && statusGuide[mainStatus]['zh-TW']) || '';
   var itemNames = orderItems.map(function(item) {
@@ -430,7 +481,11 @@ async function connectManager(chatId, lang) {
     }
     if (assigneeId) {
       try { await channeltalk.inviteManager(chatId, assigneeId); } catch(ie) { /* 이미 초대된 매니저 등 - 무시 */ }
-      managerActive[chatId] = Date.now();
+      // [2026-08-14 FIX] 오프타임에는 managerActive 를 세우지 않는다.
+      //   세우면 이후 고객 메시지가 전부 무응답 처리(2시간)되는데 정작 답할 사람은 다음 영업일에야
+      //   출근한다 = 밤새 봇도 사람도 침묵. 초대·팔로워·태그·추적은 그대로 하고,
+      //   실제 사람이 말하는 순간 매니저 메시지 핸들러가 managerActive 를 세운다.
+      if (isBusinessHours()) managerActive[chatId] = Date.now();
       pendingEscalations[chatId] = { time: Date.now(), managerId: assigneeId, lang: lang || "zh-TW" };
       console.log('[ESCALATION] Assignee invited:', assigneeId, 'for chat:', chatId);
     }
@@ -502,7 +557,10 @@ function isActionRequest(text) {
     // [2026-05-27] refund_delay를 shipping_delay 위에 배치. "還沒收到 運費退款" 같은 환불 문의가
     // shipping_delay의 너무 넓은 "還沒收到"에 먼저 매치되어 출고 답변이 나가던 버그 수정.
     { type: "refund_delay", keywords: ["運費退款", "還沒退款", "退款還沒", "沒收到退款", "退款多久", "退款進度", "退費還沒", "退費沒收到", "退費多久", "退款怎麼還沒", "退款一直", "환불 안 됐", "환불 안 받", "환불 지연", "환불 언제", "환불 늦", "환불 안 와", "환불 안 오", "still no refund", "refund still", "refund pending", "where is my refund"] },
-    { type: "shipping_delay", keywords: ["等很久", "等太久", "還沒到", "還沒收到", "一直沒收到", "遲遲沒有", "什麼時候出貨", "什麼時候寄", "何時出貨", "何時寄出", "배송 지연", "아직 안 왔", "when will ship"] },
+    // [2026-08-18] 독촉 키워드 추가 — 봇이 followUpMap·복수조회 안내에서 스스로 「幫我催一下」/「독촉해줘」를
+    //   입력하라고 유도해놓고 정작 처리 핸들러가 없어 일반 AI 답변으로 흘렀다(= 아무도 판매자에게 연락 안 함).
+    //   shipping_delay 로 태워 실제 사람 연결까지 이행시킨다.
+    { type: "shipping_delay", keywords: ["幫我催", "催一下", "催促", "催賣家", "독촉", "재촉", "follow up", "等很久", "等太久", "還沒到", "還沒收到", "一直沒收到", "遲遲沒有", "什麼時候出貨", "什麼時候寄", "何時出貨", "何時寄出", "배송 지연", "아직 안 왔", "when will ship"] },
     { type: "email_change", keywords: ["信箱填錯", "email修改", "修改信箱", "修改email", "更改信箱", "更改email", "이메일 변경", "이메일 수정", "change email"] },
     { type: "product_search", keywords: ["想找這款", "幫我找", "想找這個", "有沒有賣", "有賣嗎", "能不能幫我找", "상품 찾아", "이거 있어", "find this product"] },
     { type: "price_inquiry", keywords: ["報價", "詢問價格", "多少錢", "가격 문의", "얼마"] },
@@ -535,6 +593,20 @@ function isThankYou(text) {
   for (var i = 0; i < exactThanks.length; i++) {
     if (lower === exactThanks[i] || lower === exactThanks[i] + '!' || lower === exactThanks[i] + '~' || lower === exactThanks[i] + '！' || lower === exactThanks[i] + '～') return true;
   }
+  // [2026-08-14 FIX] 부분 매칭으로 넘어가기 전, "감사 + 불만"이 한 메시지에 섞인 경우를 먼저 걸러낸다.
+  //   「謝謝，但是退款還沒收到」처럼 감사 인사로 시작하는 불만이 questionKeywords 에 안 걸려
+  //   '不客氣!(천만에요)' 한마디로 종료되고 FCR '해결'로까지 집계되던 문제.
+  //   정확 일치(위 exactThanks)는 문장 전체가 감사 표현이므로 영향 없음.
+  //   주의: '退款'·'환불' 같은 주제어는 넣지 않는다 — 「謝謝，退款已收到」(잘 받았다는 인사)까지
+  //   불만으로 뒤집혀 불필요한 사람 연결이 늘어난다. 부정·미완료를 뜻하는 신호만 넣는다.
+  var complaintSignals = ['但是', '可是', '不過', '但', '還沒', '还没', '未收到', '沒收到', '没收到', '沒有收到',
+    '沒退', '没退', '怎麼辦', '為什麼', '为什么', '不對', '錯了', '還是不',
+    '아직', '안 왔', '안왔', '근데', '그런데'];
+  for (var cs = 0; cs < complaintSignals.length; cs++) {
+    if (lower.indexOf(complaintSignals[cs]) > -1) return false;
+  }
+  if (/\b(but|still not|haven't|have not|not yet)\b/i.test(lower)) return false;
+
   // 부분 매칭: 감사 키워드 포함 + 질문 키워드 미포함
   var thankKeywords = ['謝謝', '感謝', '谢谢', '感谢', 'thanks', 'thank you', 'thx', 'ありがとう', '감사'];
   var questionKeywords = ['請問', '想問', '想請問', '可以', '怎麼', '什麼', '嗎', '？', '?', '如何', '요?', '까요', '나요'];
@@ -553,7 +625,9 @@ function isThankYou(text) {
     if (lower.indexOf(twPatterns[p]) >= 0) { hasTwPrefix = true; break; }
   }
   if (hasThank && !hasQuestion) return true;
-  if (hasTwPrefix && hasThank) return true;
+  // [2026-08-14 FIX] 여기에 !hasQuestion 이 빠져 있어 「好的謝謝，退款什麼時候到？」처럼
+  //   확인어+감사로 시작하는 '질문'까지 감사 인사로 삼켜 '천만에요'로 끝내고 있었다.
+  if (hasTwPrefix && hasThank && !hasQuestion) return true;
   // "好的", "了解", "收到" 단독도 감사로 처리 (대만에서 대화 종료 신호)
   var closingWords = ['好的', '了解', '收到', '知道了', '明白了', 'ok', '好喔', '好哦'];
   for (var c = 0; c < closingWords.length; c++) {
@@ -787,6 +861,15 @@ router.post('/channeltalk', async function(req, res) {
           mgrStats.recordReply(mgrPersonId, chatId, mgrText.length);
           if (pendingEscalations[chatId]) { cleanWaitingMsg(chatId);
       delete pendingEscalations[chatId]; }
+          // [2026-08-14] 매니저가 "확인 후 회신" 약속을 남겼으면 기록 → 아래 2시간 타임아웃 연장.
+          if (_MGR_PROMISE_RE.test(mgrText)) {
+            managerPromise[chatId] = Date.now();
+            delete managerPromiseNudged[chatId];
+            console.log('[ManagerPromise] 확인 약속 감지 - chat:', chatId);
+          } else {
+            delete managerPromise[chatId];
+            delete managerPromiseNudged[chatId];
+          }
         }
         // [② 2026-05-22 비활성화] 매니저 메시지 KB 자동적재 중단.
         // 검증 없는 일회성/고객특정 발언이 RAG '참고자료'를 오염시킴(원인 D).
@@ -814,12 +897,29 @@ router.post('/channeltalk', async function(req, res) {
     if (managerActive[chatId]) {
       var _mgrElapsed = Date.now() - managerActive[chatId];
       var _mgrTimeoutMs = 2 * 60 * 60 * 1000; // 2시간
+      // [2026-08-14 FIX] 매니저가 "판매자/물류에 확인 후 회신" 약속을 남긴 상담은 2시간에 풀지 않는다.
+      //   확인 작업은 2시간 초과가 일상이라, 풀리는 즉시 봇이 그 맥락을 모르는 일반 답변으로
+      //   끼어들고("訂單處理中請耐心等待") 나중에 매니저 회신과 상충하는 답이 2개 남았다.
+      if (managerPromise[chatId]) _mgrTimeoutMs = 8 * 60 * 60 * 1000; // 8시간(1영업일 내)
       if (_mgrElapsed > _mgrTimeoutMs) {
-        // 마지막 매니저 활동 후 2시간 경과 → AI 다시 활성화
+        // 마지막 매니저 활동 후 타임아웃 경과 → AI 다시 활성화
         delete managerActive[chatId];
+        delete managerPromise[chatId];
+        delete managerPromiseNudged[chatId];
         if (pendingEscalations[chatId]) delete pendingEscalations[chatId];
-        console.log("[ManagerActive] Auto-released after 2h for chat:", chatId);
+        console.log("[ManagerActive] Auto-released after " + Math.round(_mgrTimeoutMs / 3600000) + "h for chat:", chatId);
       } else {
+        // 약속 대기 중 고객이 재촉하면 봇은 계속 조용히 있되(사람이 응대 중인 상담),
+        // 2시간 넘게 매니저 응답이 없으면 내부에만 1회 알린다(고객 방치 방지).
+        if (managerPromise[chatId] && _mgrElapsed > 2 * 60 * 60 * 1000 && !managerPromiseNudged[chatId]) {
+          managerPromiseNudged[chatId] = true;
+          try {
+            require('../lib/scheduler').notifyInternal(
+              '[확인 약속 지연] 담당자가 "확인 후 회신" 약속 뒤 ' + Math.round(_mgrElapsed / 60000) + '분째 무응답인데 고객이 재문의했습니다.\n'
+              + '상담 바로가기: https://desk.channel.io/#/channels/138710/user_chats/' + chatId
+            );
+          } catch (pnErr) { console.log('[ManagerPromise] nudge error:', pnErr.message); }
+        }
         return res.status(200).send('OK');
       }
     }
@@ -868,10 +968,20 @@ router.post('/channeltalk', async function(req, res) {
                     }
                   }
                 }
-                if (activeItems.indexOf("SHIPPING_TO_HOME") > -1) shippingTag = "국제배송중";
-                else if (activeItems.indexOf("SHIPPING_TO_BDJ") > -1) shippingTag = "물류센터이동";
-                else if (activeItems.indexOf("ORDER_PROCESSING") > -1) shippingTag = "주문처리중";
-                else if (activeItems.indexOf("PAYMENT_COMPLETED") > -1) shippingTag = "결제완료";
+                // [2026-08-18 FIX] 구 상태코드 4개만 봐서 신 9단계 진행 상태(국제배송·통관·현지배송 등)가
+                //   전부 누락 → CS 프로필에 배송 태그가 빈 값으로 남고 "이 고객이 뭘 기다리는지"를 알 수 없었다.
+                //   가장 진행된 단계가 보이도록 뒤 단계부터 검사한다.
+                var _has = function (s) { return activeItems.indexOf(s) > -1; };
+                if (_has("DELIVERING")) shippingTag = "현지배송중";
+                else if (_has("ARRIVED_AT_LOCAL") || _has("CUSTOMS_HOLD")) shippingTag = "통관중";
+                else if (_has("FLIGHT_DEPARTED") || _has("SHIPPING_TO_HOME")) shippingTag = "국제배송중";
+                else if (_has("EZWAY_CHECKING") || _has("EZWAY_MISMATCH") || _has("EZWAY_RESOLVED")
+                      || _has("PACKING_COMPLETED") || _has("DEPARTED_TO_BDJ") || _has("FLIGHT_SCHEDULED")) shippingTag = "물류센터처리중";
+                else if (_has("ARRIVED_AT_SD_BDJ") || _has("ARRIVED_AT_BDJ") || _has("SHIPPING_TO_BDJ")) shippingTag = "물류센터도착";
+                else if (_has("ARRIVAL_DELAYED")) shippingTag = "출고지연";
+                else if (_has("ORDER_PROCESSING")) shippingTag = "주문처리중";
+                else if (_has("PAYMENT_COMPLETED")) shippingTag = "결제완료";
+                else if (_has("PAYMENT_WAITING")) shippingTag = "결제대기";
               }
             } catch(tagErr) {}
 
@@ -900,17 +1010,47 @@ router.post('/channeltalk', async function(req, res) {
       } catch(mErr) { console.error("[Member] Lookup error:", mErr.message); }
     }
     var detectedLang = lang.detectLanguage(userText);
+    // [2026-08-18 FIX] 이전 대화 언어를 '덮어쓰기 전에' 먼저 읽어둔다.
+    //   기존엔 아래에서 chatLanguage/파일을 새 값으로 먼저 덮은 뒤에 복원 블록(1119~)이 같은 값을
+    //   다시 읽어 항상 no-op 이었다(= 언어 복원 기능이 죽어 있었음).
+    var _prevChatLang = chatLanguage[chatId] || "";
+    if (!_prevChatLang) {
+      try {
+        var _plf = require("path").join(__dirname, "..", "data", "chat-languages.json");
+        _prevChatLang = (JSON.parse(fs.readFileSync(_plf, "utf8")) || {})[chatId] || "";
+      } catch (e) {}
+    }
     // Override with ChannelTalk user language if text is ambiguous (numbers, order numbers, etc.)
     // [2026-08-14] URL만 보내거나 짧은 영문(Not yet order 등)도 프로필 언어 우선 — 기존 정규식이 ':'/'?'를
     //   미허용해 상품링크만 보내면 'en'으로 판정 → 중문 고객이 영어 답변을 받던 버그. ASCII 전체로 확장.
-    if (userLang && /^[\x20-\x7E\s]+$/.test(userText)) {
-      var langMap = {"ko": "zh-TW", "ja": "ja", "en": "en", "zh": "zh-TW", "zh-TW": "zh-TW", "zh-CN": "zh-TW"};
-      if (langMap[userLang]) detectedLang = langMap[userLang];
+    var _asciiOnly = /^[\x20-\x7E\s]+$/.test(userText);
+    var _numericOnly = /^[0-9]+$/.test(userText.trim());
+    var langMap = {"ko": "zh-TW", "ja": "ja", "en": "en", "zh": "zh-TW", "zh-TW": "zh-TW", "zh-CN": "zh-TW"};
+    if (_asciiOnly && userLang && langMap[userLang]) {
+      detectedLang = langMap[userLang];
+    } else if (_asciiOnly) {
+      // [2026-08-18 FIX] 프로필 언어가 없는 게스트/LINE 고객(또는 getUser 실패)은 위 보정을 못 받아
+      //   「Hi」「OK」「EZWAY?」 같은 짧은 알파벳 한 마디로 'en' 판정 → 대만 고객이 영어 답변·영어 메뉴·
+      //   영어 CSAT까지 받았다. 짧은 ASCII/URL만으로는 영어라고 단정하지 않는다(고객 99%가 대만).
+      //   긴 영어 문장은 그대로 'en' 유지 — 실제 영어 고객이 피해보지 않게.
+      var _t = userText.trim();
+      var _shortAscii = _t.length <= 15;
+      var _urlOnly = /^https?:\/\/\S+$/i.test(_t);
+      if (_shortAscii || _urlOnly) detectedLang = _prevChatLang || "zh-TW";
     }
-    chatLanguage[chatId] = detectedLang;
+    // [2026-08-18 FIX] 숫자만 입력(메뉴 선택·CSAT)은 언어 판정 근거가 없다. 이전 언어를 유지하고
+    //   저장값도 덮어쓰지 않는다 — 영어 메뉴를 보고 '6'을 누른 고객이 중문 답변을 받던 문제.
+    if (_numericOnly && _prevChatLang) {
+      detectedLang = _prevChatLang;
+    }
+    if (!_numericOnly) {
+      chatLanguage[chatId] = detectedLang;
+    }
     var chatSource = "web";
     try { var srcData = JSON.parse(req.body.entity || "{}"); if (srcData.source && srcData.source.medium && srcData.source.medium.mediumType === "app") chatSource = "LINE"; } catch(se) {}
-    try { var lf = require("path").join(__dirname, "..", "data", "chat-languages.json"); var ld = {}; try { ld = JSON.parse(fs.readFileSync(lf, "utf8")); } catch(e) {} ld[chatId] = detectedLang; fs.writeFileSync(lf, JSON.stringify(ld), "utf8"); } catch(e) {}
+    if (!_numericOnly) {
+      try { var lf = require("path").join(__dirname, "..", "data", "chat-languages.json"); var ld = {}; try { ld = JSON.parse(fs.readFileSync(lf, "utf8")); } catch(e) {} ld[chatId] = detectedLang; fs.writeFileSync(lf, JSON.stringify(ld), "utf8"); } catch(e) {}
+    }
 
     // Track FCR for returning users (placed after member lookup so memberId is populated)
     trackFCR(memberId || personId || "", chatId, "");
@@ -1216,7 +1356,9 @@ router.post('/channeltalk', async function(req, res) {
     //   「沒用過」(써본 적 없다)도 '沒用' 에 걸렸다. 같은 저장소 analytics.js 불용어 목록엔
     //   이미 '不好意思' 가 무의미 인사말로 등록돼 있어 레이어 간 판정이 어긋나 있었다.
     //   키워드 목록 자체는 건드리지 않는다(다른 부정표현 판정은 그대로 유지).
-    var _negScanText = userText.replace(/不好意思|唔好意思|沒用過|没用过/g, '');
+    //   [2026-08-14 추가] 「好不好」(…해줄래요?) 는 대만에서 부탁을 부드럽게 만드는 문미 관용구인데
+    //   '不好' 에 걸려 분노로 오판됐다("可以快一點出貨好不好？" → 즉시 사람 연결 + 봇 침묵).
+    var _negScanText = userText.replace(/不好意思|唔好意思|沒用過|没用过|好不好/g, '');
     var isNegative = false;
     for (var ni = 0; ni < negativeKeywords.length; ni++) {
       if (_negScanText.indexOf(negativeKeywords[ni]) !== -1) { isNegative = true; break; }
@@ -1230,7 +1372,16 @@ router.post('/channeltalk', async function(req, res) {
         'en': '👨‍💼 Connecting you to a live agent, please wait! We will help you right away.',
         'ja': '👨‍💼 オペレーターにお繋ぎします。少々お待ちください！'
       };
-      await channeltalk.sendMessage(chatId, { blocks: [{ type: 'text', value: negAck[detectedLang] || negAck['zh-TW'] }] });
+      // [2026-08-14 FIX] 심야에도 "지금 연결 중, 곧 도와드린다"가 나가 고객이 밤새 기다렸다.
+      //   오프타임엔 '출근 후 우선 처리 + 그동안 AI 이용 가능'으로 안내한다(지킬 수 있는 약속).
+      var negAckOff = {
+        'zh-TW': '很抱歉造成您的困擾！目前非客服時間（台灣 09:00~18:00），我已為您登記，客服人員上班後會「優先」處理。\n在此之前AI小幫手仍可為您查詢訂單或回答問題，請隨時輸入 🙏',
+        'ko': '불편을 드려 죄송합니다! 현재는 상담 시간이 아니어서(평일 10:00~19:00 KST) 우선 처리 건으로 등록해 두었습니다. 업무 시작 후 가장 먼저 확인해 드릴게요.\n그동안 AI가 주문 조회나 문의 응대를 도와드릴 수 있습니다 🙏',
+        'en': "We're sorry for the trouble! We're outside business hours (Mon-Fri 10:00-19:00 KST), so I've flagged this as priority — an agent will handle it first thing.\nMeanwhile our AI can still look up orders or answer questions 🙏",
+        'ja': 'ご不便をおかけして申し訳ございません！現在営業時間外（月〜金 10:00〜19:00 KST）のため、優先対応として登録しました。営業開始後すぐに確認いたします。\nそれまではAIが注文照会やご質問に対応できます 🙏'
+      };
+      var _negMap = isBusinessHours() ? negAck : withHolidayReason(negAckOff);
+      await channeltalk.sendMessage(chatId, { blocks: [{ type: 'text', value: _negMap[detectedLang] || _negMap['zh-TW'] }] });
       // [SOP v2] 팔로워 정책: MIA·우선 초대 + 강준 팔로워 (전체 매니저 X)
       await connectManager(chatId, detectedLang);
       aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || '', userName: veaslyUser ? veaslyUser.name : '', lang: detectedLang, type: 'escalation', userMessage: userText, aiResponse: '부정감정 자동 에스컬레이션 - 매니저 연결', escalated: true, escalationReason: 'negative_sentiment', confidence: 0, category: 'agent_request' });
@@ -1260,12 +1411,26 @@ router.post('/channeltalk', async function(req, res) {
     });
     var _hasOrderNo = /\d{8}(TW|KR|JP|US)\d+/i.test(userText);
 
+    // [2026-08-18 FIX] payment_mismatch 는 "APP 결제화면 금액이 이상하다 → 웹에서 다시 결제하세요"
+    //   전용 안내인데, 게이트가 너무 넓어 「退款金額不對，少退了」·「運費被多扣了」 같은
+    //   환불·운임 분쟁까지 가로채 '재결제'를 안내하고 FCR '해결'로 기록했다(정책상 운임 溢收는 전액환불 대상).
+    //   → 이미 끝난 거래에 대한 불만(退款/退費/運費/多扣/溢收)이면 이 게이트를 양보하고
+    //     refund_delay·AI 경로로 내려보낸다.
+    var _isPostTxnMoneyIssue = ["退款","退費","退刷","運費","運送費","被多扣","多扣","溢收","多收了","환불","운임","배송비"]
+      .some(function (k) { return _lower.indexOf(k.toLowerCase()) > -1; });
+    // [2026-08-18 FIX] 「我不想買了，想取消訂單」의 '想買'(不想買의 부분문자열)가 견적 키워드에 걸려
+    //   취소하려는 고객에게 '구매(견적) 신청 방법'을 안내하던 문제. 취소·불원 의사가 있으면 견적 아님.
+    var _hasCancelIntent = ["不想買","不買了","不想要","取消","退訂","不需要了","안 살","취소","cancel"]
+      .some(function (k) { return _lower.indexOf(k.toLowerCase()) > -1; });
+    var _quoteOk = _hasQuoteKw && !_hasCancelIntent;
+
     // 인텐트 판정: 부정/불만 키워드가 있으면 → 금액불일치 우선
     var _intent = null;
-    if (_hasPayKw && _hasNegative) { _intent = "payment_mismatch"; }
-    else if (_hasQuoteKw && _hasNegative) { _intent = "payment_mismatch"; }
-    else if (_hasQuoteKw && !_hasNegative) { _intent = "quote_request"; }
-    else if (_hasPayKw && !_hasQuoteKw && _hasNegative) { _intent = "payment_mismatch"; }
+    if (_isPostTxnMoneyIssue && _hasNegative) { _intent = null; } // 환불·운임 분쟁은 전용 핸들러/AI가 처리
+    else if (_hasPayKw && _hasNegative) { _intent = "payment_mismatch"; }
+    else if (_quoteOk && _hasNegative) { _intent = "payment_mismatch"; }
+    else if (_quoteOk && !_hasNegative) { _intent = "quote_request"; }
+    else if (_hasPayKw && !_quoteOk && _hasNegative) { _intent = "payment_mismatch"; }
     else if (_hasExternalProductUrl && !_hasOrderNo && !_hasNegative) { _intent = "quote_request"; }
 
     if (_intent === "payment_mismatch") {
@@ -1388,7 +1553,7 @@ router.post('/channeltalk', async function(req, res) {
         // Step 1: Ask what they need help with
         var _holS0 = getHolidayNotice(detectedLang);
         var step1Msgs = {
-          'zh-TW': !isBusinessHours() ? '💡 ' + (_holS0 || '\ud83d\udca1 目前非客服時間（台灣 09:00~18:00）') + '，但我可以馬上幫您！\n\n請直接告訴我：\n1️⃣ 輸入「訂單號碼」→ 馬上查進度\n2️⃣ 輸入您的問題 → AI即時回答\n\n例如：\n・貼上訂單號碼（如 20260415TW...）\n・「我的包裹到哪了」\n・「運費怎麼算」\n\n⏰ 客服人員上班後會優先處理需要人工協助的問題！\n🔸 還是需要真人？請再輸入「客服」，我會記錄下來' : '💡 轉接客服前，請先簡單告訴我您遇到什麼問題，這樣可以更快幫您解決喔！\n\n例如：\n・貼上訂單號碼 → 馬上查進度\n・「包裹到哪了」「運費多少」→ AI即時回答\n・「想修改地址」→ 馬上為您處理\n\n📝 請用一句話描述您的問題：\n\n🔸 還是需要真人？請再輸入「客服」',
+          'zh-TW': !isBusinessHours() ? '💡 ' + (_holS0 || '\ud83d\udca1 目前非客服時間（台灣 09:00~18:00）') + '，但我可以馬上幫您！\n\n請直接告訴我：\n・輸入「訂單號碼」→ 馬上查進度\n・輸入您的問題 → AI即時回答\n\n例如：\n・貼上訂單號碼（如 20260415TW...）\n・「我的包裹到哪了」\n・「運費怎麼算」\n\n⏰ 客服人員上班後會優先處理需要人工協助的問題！\n🔸 還是需要真人？請再輸入「客服」，我會記錄下來' : '💡 轉接客服前，請先簡單告訴我您遇到什麼問題，這樣可以更快幫您解決喔！\n\n例如：\n・貼上訂單號碼 → 馬上查進度\n・「包裹到哪了」「運費多少」→ AI即時回答\n・「想修改地址」→ 馬上為您處理\n\n📝 請用一句話描述您的問題：\n\n🔸 還是需要真人？請再輸入「客服」',
           'ko': '💡 상담사 연결 전에 제가 도움드릴 수 있을지 확인해볼게요!\n\n질문을 간단히 설명해주세요:\n・「주문 진행 상태 확인」\n・「운임 계산 방법」\n・「환불 신청 방법」\n\n또는 번호를 입력하세요:\n' + getMenuText('ko') + '\n\n🔸 그래도 상담사가 필요하시면 「상담사」를 한 번 더 입력해주세요',
           'en': '💡 Before connecting to an agent, maybe I can help!\n\nDescribe your issue briefly, or enter a number:\n' + getMenuText('en') + '\n\n🔸 Still need a human? Type "agent" again',
           'ja': '💡 オペレーターに接続する前に、お手伝いできるかもしれません！\n\n質問を簡単に説明するか、番号を入力してください：\n' + getMenuText('ja') + '\n\n🔸 それでも必要な場合は「オペレーター」をもう一度入力'
@@ -1699,7 +1864,10 @@ router.post('/channeltalk', async function(req, res) {
           var tipMap = {
             "PAYMENT_WAITING": { "zh-TW": "請盡快完成付款，以免訂單被取消喔！", "ko": "빠른 결제 부탁드립니다!", "en": "Please complete payment soon!", "ja": "お早めにお支払いをお願いします！" },
             "PAYMENT_COMPLETED": { "zh-TW": "已收到付款，我們會盡快向賣家下單！", "ko": "결제 확인! 곧 판매자에게 발주합니다!", "en": "Payment received! We will order from the seller soon!", "ja": "お支払い確認済み！まもなくセラーへ発注します！" },
-            "ORDER_PROCESSING": { "zh-TW": "賣家正在準備出貨，商品會寄往物流中心，請稍候喔！", "ko": "판매자가 출고를 준비 중입니다. 상품이 물류센터로 이동할 예정이에요!", "en": "The seller is preparing to ship; your item will head to our logistics center soon!", "ja": "セラーが発送準備中です。商品は物流センターへ向かいます！" },
+            // [2026-08-18 수정] 「賣家正在準備出貨」= 판매자가 주문을 수락했다는 단정이라 사실과 다르다.
+            //   이 단계는 아직 '한국에서 구매를 진행 중'이며, 閃電拍賣(중고)은 이미 팔려 취소될 수 있다.
+            //   단정 표현을 빼고 진행 중임만 알린다(같은 이유로 능동 푸시는 shipping-tracker에서 제거됨).
+            "ORDER_PROCESSING": { "zh-TW": "訂單處理中！我們正在為您完成韓國端的購買，完成後商品會寄往物流中心，請稍候喔！", "ko": "주문 처리 중입니다! 한국에서 구매를 진행하고 있고, 완료되면 상품이 물류센터로 이동해요!", "en": "Your order is being processed! We're completing the purchase in Korea; once done, your item heads to our logistics center.", "ja": "ご注文を処理中です！韓国での購入を進めており、完了後に商品は物流センターへ向かいます。" },
             "ARRIVAL_DELAYED": { "zh-TW": "賣家出貨較慢，商品仍在準備中，我們會持續追蹤喔！", "ko": "판매자 출고가 지연되어 상품이 준비 중입니다. 계속 확인하고 있어요!", "en": "Seller shipping is a bit delayed; the item is still being prepared. We're monitoring it!", "ja": "セラーの発送が遅れており、商品は準備中です。追跡を続けています！" },
             "ARRIVED_AT_SD_BDJ": _tipCenter, "ARRIVED_AT_BDJ": _tipCenter,
             "EZWAY_CHECKING": _tipProcessing, "EZWAY_MISMATCH": _tipProcessing, "EZWAY_RESOLVED": _tipProcessing, "PACKING_COMPLETED": _tipProcessing, "DEPARTED_TO_BDJ": _tipProcessing, "FLIGHT_SCHEDULED": _tipProcessing,
@@ -1719,8 +1887,8 @@ router.post('/channeltalk', async function(req, res) {
           var _fuCustoms = { "zh-TW": "🛃 通關期間收到 EZ WAY 通知請盡快確認「申報相符」；通常約 3~4 個工作天，若仍無進展再告訴我喔！", "ko": "🛃 통관 중 EZ WAY 알림이 오면 「申報相符」를 빨리 확인해주세요. 보통 3~4 영업일이며, 진전이 없으면 알려주세요!", "en": "🛃 During customs, tap 'declaration matched' on the EZ WAY notice quickly. Usually ~3-4 business days — tell me if it stalls!", "ja": "🛃 通関中にEZ WAY通知が届いたら早めに「申報相符」を確認してください。通常3~4営業日です！" };
           var followUpMap = {
             "PAYMENT_WAITING": { "zh-TW": "⏰ 如果付款遇到問題，可以直接告訴我喔！支援信用卡、ATM轉帳、PayPal付款方式。", "ko": "⏰ 결제 문제가 있으시면 알려주세요! 신용카드, ATM이체, PayPal을 지원합니다.", "en": "⏰ Need help with payment? We support credit card, ATM, and PayPal!", "ja": "⏰ お支払いでお困りですか？クレジットカード、ATM、PayPalに対応しています！" },
-            "PAYMENT_COMPLETED": { "zh-TW": "🔄 商品正在等待賣家出貨，我們會持續追蹤喔！如果超過3天沒更新，請直接告訴我，我來幫您催促賣家！", "ko": "🔄 판매자 출고 대기 중입니다. 3일 이상 변동 없으면 말씀해주세요, 판매자에게 독촉하겠습니다!", "en": "🔄 Waiting for seller to ship. If no update in 3 days, let me know and I will follow up!", "ja": "🔄 セラーの発送待ちです。3日以上更新がなければお知らせください！" },
-            "ORDER_PROCESSING": { "zh-TW": "🚚 如果超過 3 個工作天賣家還沒出貨，請告訴我，我會幫您跟賣家確認喔！您也可以問我：「幫我催一下」", "ko": "🚚 3영업일 이상 판매자 출고가 없으면 알려주세요! 판매자에게 확인할게요. 「독촉해줘」라고 입력하셔도 돼요!", "en": "🚚 If the seller hasn't shipped in 3 business days, let me know and I'll check with them!", "ja": "🚚 3営業日以上セラーが発送しなければお知らせください！確認いたします！" },
+            "PAYMENT_COMPLETED": { "zh-TW": "🔄 商品正在等待賣家出貨，我們會持續追蹤喔！如果長時間沒有更新，請告訴我「幫我催一下」，我會為您轉由客服向賣家確認！", "ko": "🔄 판매자 출고 대기 중입니다. 오래 변동이 없으면 「독촉해줘」라고 알려주세요, 상담사가 판매자에게 확인해 드립니다!", "en": "🔄 Waiting for seller to ship. If there's no update for a while, type 'follow up' and our team will check with the seller!", "ja": "🔄 セラーの発送待ちです。長く更新がない場合はお知らせください。担当者がセラーに確認します！" },
+            "ORDER_PROCESSING": { "zh-TW": "🚚 如果長時間都沒有進度，請告訴我「幫我催一下」，我會為您轉由客服向賣家確認喔！", "ko": "🚚 오래 진도가 없으면 「독촉해줘」라고 입력해주세요! 상담사가 판매자에게 확인해 드립니다.", "en": "🚚 If there's no progress for a while, type 'follow up' and our team will check with the seller!", "ja": "🚚 長く進捗がない場合は「確認して」と入力してください。担当者がセラーに確認します！" },
             "ARRIVED_AT_SD_BDJ": _fuCenter, "ARRIVED_AT_BDJ": _fuCenter,
             "EZWAY_CHECKING": _fuProcessing, "EZWAY_MISMATCH": _fuProcessing, "EZWAY_RESOLVED": _fuProcessing, "PACKING_COMPLETED": _fuProcessing, "DEPARTED_TO_BDJ": _fuProcessing, "FLIGHT_SCHEDULED": _fuProcessing,
             "FLIGHT_DEPARTED": { "zh-TW": "✈️ 抵台後會進入通關，屆時請留意 EZ WAY 通知並按「申報相符」喔！如久未更新再告訴我！", "ko": "✈️ 대만 도착 후 통관에 들어가요. EZ WAY 알림 오면 「申報相符」 눌러주세요! 오래 업데이트 없으면 알려주세요!", "en": "✈️ After arriving in Taiwan it enters customs — watch for the EZ WAY notice and tap 'declaration matched'! Tell me if it stalls.", "ja": "✈️ 台湾到着後は通関に入ります。EZ WAY通知で「申報相符」を押してください！" },
@@ -1739,6 +1907,34 @@ router.post('/channeltalk', async function(req, res) {
           chatContext[chatId].lastOrderContext = buildOrderContext(orderItems, orderNum, detectedLang);
           chatContext[chatId].lastOrderTime = Date.now();
           console.log("[Order] Replied with", orderItems.length, "items for", orderNum);
+
+          // [2026-08-18 FIX] 주문번호와 요청이 한 메시지에 있으면(「我要取消 20260810TW…」·「地址寫錯了 2026…」)
+          //   상태 안내만 보내고 return 해서 정작 '요청'이 통째로 삼켜졌다(고객은 답을 못 받고 재문의).
+          //   상태 안내 뒤에 요청을 인지하고 실제 사람 연결로 넘긴다. 취소·주소변경 가부는 정책상
+          //   봇이 단정하면 안 되므로 여기서 답을 만들지 않고 담당자에게 넘기기만 한다.
+          var _reqWithOrder = isActionRequest(userText)
+            || ["取消", "退訂", "退款", "退費", "改地址", "修改地址", "換地址", "취소", "환불", "주소", "cancel", "refund", "change address"]
+                 .some(function (k) { return userText.toLowerCase().indexOf(k.toLowerCase()) > -1; });
+          if (_reqWithOrder && !managerActive[chatId]) {
+            var _rwoBiz = isBusinessHours();
+            var _rwoMsgs = _rwoBiz ? {
+              "zh-TW": "另外，關於您訊息中提到的需求，我已為您轉接客服人員協助處理，請稍候！",
+              "ko": "그리고 메시지에 말씀하신 요청 건은 담당자에게 연결해 드렸습니다. 잠시만 기다려주세요!",
+              "en": "Also, I've connected you with an agent regarding the request in your message. Please hold on!",
+              "ja": "また、メッセージ内のご要望については担当者におつなぎしました。少々お待ちください！"
+            } : withHolidayReason({
+              "zh-TW": "另外，關於您訊息中提到的需求，目前非客服時間，我已登記為優先處理，客服人員上班後會立即為您確認！",
+              "ko": "그리고 메시지에 말씀하신 요청 건은 지금이 상담 시간이 아니라 우선 처리로 등록해 두었습니다. 업무 시작 후 바로 확인해 드릴게요!",
+              "en": "Also, we're outside business hours, so I've flagged the request in your message as priority — an agent will confirm first thing!",
+              "ja": "また、現在営業時間外のため、メッセージ内のご要望を優先対応として登録しました。営業開始後すぐに確認いたします！"
+            });
+            await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: _rwoMsgs[detectedLang] || _rwoMsgs["zh-TW"] }] });
+            try { await connectManager(chatId, detectedLang); } catch (rwoErr) { console.error("[Order] request-with-order escalate error:", rwoErr.message); }
+            console.log("[Order] Request bundled with order number → escalated:", orderNum);
+            aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "escalation", userMessage: userText.substring(0, 200), aiResponse: "주문번호+요청 동반 → 담당자 연결 (" + orderNum + ")", escalated: true, escalationReason: "request_with_order_number", confidence: 0, category: "order" });
+            return res.status(200).send("OK");
+          }
+
           recordFCRResolved(memberId || personId || "", chatId, "order_lookup");
           aiLog.saveConversation({
             timestamp: new Date().toISOString(),
@@ -1771,11 +1967,18 @@ router.post('/channeltalk', async function(req, res) {
     var orderKeywords = ["訂單", "주문", "order", "注文", "배송", "配送", "出貨"];
     var isOrderQuery = orderKeywords.some(function(kw) { return userText.toLowerCase().indexOf(kw) !== -1; });
     // 질문형 패턴 감지: 정책 FAQ 질문이면 주문목록 대신 AI로 라우팅
-    var policyQuestionPatterns = ["嗎", "？", "怎麼", "為什麼", "為何", "一定", "可以嗎", "多少", "如何", "是否", "能不能", "會不會", "什麼時候", "할까", "인가요", "인가", "일까", "나요", "ですか", "でしょうか"];
-    var hasQuestionPattern = policyQuestionPatterns.some(function(p) { return userText.indexOf(p) !== -1; });
+    // [2026-08-18 FIX] 전각 '？'만 있고 ASCII '?'·'請問'·'想問'·'多久'·'how'가 빠져 있어
+    //   「我還沒下訂單，想問運費」·"I have not ordered yet, how to order?" 같은 사전 문의가
+    //   '訂單'/'order' 부분매칭에 걸려 과거 주문목록(또는 "주문 없음")으로 오라우팅됐다.
+    var policyQuestionPatterns = ["嗎", "？", "?", "怎麼", "為什麼", "為何", "一定", "可以嗎", "多少", "多久", "請問", "想問", "想請問", "如何", "是否", "能不能", "會不會", "什麼時候", "할까", "인가요", "인가", "일까", "나요", "궁금", "ですか", "でしょうか", "how ", "what ", "when ", "can i"];
+    var _lowerQ = userText.toLowerCase();
+    var hasQuestionPattern = policyQuestionPatterns.some(function(p) { return _lowerQ.indexOf(p.toLowerCase()) !== -1; });
     var hasOrderNumber = /\d{8}[A-Z]{2}\d+/i.test(userText); // [2026-07-27 FIX3] TW|KR|JP|US 열거 → 일반화(HK 누락 해소)
-    if (isOrderQuery && hasQuestionPattern && !hasOrderNumber) {
-      console.log("[Route] Question pattern detected - skip order list, route to AI:", userText.substring(0, 50));
+    // [2026-08-18] "아직 주문 안 했다"는 선행 부정이면 주문목록을 띄우지 않는다(질문패턴이 없어도).
+    var _notOrderedYet = ["還沒下訂單", "還沒下單", "沒有下單", "還沒買", "尚未下單", "아직 주문", "주문 안", "not ordered", "haven't ordered", "have not ordered", "not yet order"]
+      .some(function (p) { return _lowerQ.indexOf(p.toLowerCase()) !== -1; });
+    if (isOrderQuery && (hasQuestionPattern || _notOrderedYet) && !hasOrderNumber) {
+      console.log("[Route] Question/pre-order pattern detected - skip order list, route to AI:", userText.substring(0, 50));
       isOrderQuery = false;
     }
     if (isOrderQuery && veaslyUser && veaslyUser.email) {
@@ -1845,12 +2048,34 @@ router.post('/channeltalk', async function(req, res) {
     if (_isShipQuery && veaslyUser && veaslyUser.email && !orderMatches.length) {
       try {
         var _shipOrders = await veaslyApi.getUserOrders(veaslyUser.email, 500, memberId);
-        var _activeOrders = _shipOrders.filter(function(o) { return ["ORDER_PROCESSING","SHIPPING_TO_BDJ","SHIPPING_TO_HOME"].indexOf(o.status) > -1; });
+        // [2026-08-18 FIX] 구 상태코드 3종만 걸러서, 정작 "包裹到哪了"를 묻는 국제배송 중(FLIGHT_DEPARTED)·
+        //   통관 중·현지배송 중 주문이 목록에서 통째로 빠졌다(→ 주문 없다며 일반론 답변). 신 9단계 진행 상태 전체로 확장.
+        var _ACTIVE_STATUSES = ["ORDER_PROCESSING","ARRIVAL_DELAYED","ARRIVED_AT_SD_BDJ","ARRIVED_AT_BDJ",
+          "EZWAY_CHECKING","EZWAY_MISMATCH","EZWAY_RESOLVED","PACKING_COMPLETED","DEPARTED_TO_BDJ","FLIGHT_SCHEDULED",
+          "FLIGHT_DEPARTED","ARRIVED_AT_LOCAL","CUSTOMS_HOLD","DELIVERING",
+          "SHIPPING_TO_BDJ","SHIPPING_TO_HOME"]; // 뒤 2개는 구 코드 잔존분 호환
+        var _activeOrders = _shipOrders.filter(function(o) { return _ACTIVE_STATUSES.indexOf(o.status) > -1; });
         if (_activeOrders.length > 0) {
           var _shipHeaders = {"zh-TW": "📦 您目前配送中的訂單：", "ko": "📦 배송 중인 주문:", "en": "📦 Orders in transit:", "ja": "📦 配送中のご注文："};
           var _shipLines = _activeOrders.slice(0, 5).map(function(o, i) {
             var st = veaslyApi.getStatusText(o.status, detectedLang);
-            var tips = {"ORDER_PROCESSING": (detectedLang === "ko" ? "한국 내 배송 중 (1-3일)" : "韓國境內配送中（約1-3工作天）"), "SHIPPING_TO_BDJ": (detectedLang === "ko" ? "VEASLY 창고 도착, 국제발송 준비 중" : "已到VEASLY倉庫，準備國際寄送"), "SHIPPING_TO_HOME": (detectedLang === "ko" ? "국제배송 중 (7-14일)" : "國際配送中（約7-14天），請在EZ WAY APP按「申報相符」")};
+            // [2026-08-18 FIX] 기존엔 ORDER_PROCESSING 팁이 "韓國境內配送中"이라 같은 줄의 상태 라벨
+            //   '商品準備中'(STATUS_MAP)과 정면으로 어긋났다. 신 9단계 기준으로 재작성 + 누락 상태 보강.
+            var _ko = (detectedLang === "ko");
+            var _tCenter = _ko ? "물류센터 도착, 검사·포장 중" : "已抵達物流中心，檢查與打包中";
+            var _tProc = _ko ? "물류센터 처리 중(검사/EZWAY/포장/항공편)" : "物流中心處理中（檢查／EZWAY／打包／航班）";
+            var _tCustoms = _ko ? "대만 도착, 통관 중(약 3~4영업일)" : "已抵台，通關進行中（約3~4個工作天）";
+            var tips = {
+              "ORDER_PROCESSING": _ko ? "한국에서 구매 진행 중" : "韓國端購買進行中",
+              "ARRIVAL_DELAYED": _ko ? "판매자 출고 지연, 준비 중" : "賣家出貨較慢，仍在準備中",
+              "ARRIVED_AT_SD_BDJ": _tCenter, "ARRIVED_AT_BDJ": _tCenter, "SHIPPING_TO_BDJ": _tCenter,
+              "EZWAY_CHECKING": _tProc, "EZWAY_MISMATCH": _tProc, "EZWAY_RESOLVED": _tProc,
+              "PACKING_COMPLETED": _tProc, "DEPARTED_TO_BDJ": _tProc, "FLIGHT_SCHEDULED": _tProc,
+              "FLIGHT_DEPARTED": _ko ? "국제배송 중(7~14일). EZ WAY 「申報相符」 눌러주세요" : "國際配送中（約7~14天），請在EZ WAY APP按「申報相符」",
+              "SHIPPING_TO_HOME": _ko ? "국제배송 중(7~14일). EZ WAY 「申報相符」 눌러주세요" : "國際配送中（約7~14天），請在EZ WAY APP按「申報相符」",
+              "ARRIVED_AT_LOCAL": _tCustoms, "CUSTOMS_HOLD": _tCustoms,
+              "DELIVERING": _ko ? "대만 현지 배송 중, 곧 도착" : "台灣境內配送中，即將送達"
+            };
             return (i+1) + ". " + o.orderNumber + "\n   " + st + " — " + (tips[o.status] || "");
           });
           var _shipReply = (_shipHeaders[detectedLang] || _shipHeaders["zh-TW"]) + "\n\n" + _shipLines.join("\n\n");
@@ -1948,9 +2173,10 @@ router.post('/channeltalk', async function(req, res) {
                   "en": "\n\n⏰ We're outside business hours (Mon-Fri 10:00-19:00 KST). The above is an AI reply; if you need an agent to confirm, we'll prioritize it first thing 🙏",
                   "ja": "\n\n⏰ 現在営業時間外です（月〜金 10:00〜19:00 KST）。上記はAI回答です。担当者の確認が必要な場合は営業開始後に優先対応いたします 🙏"
                 };
+                var _ohNote = withHolidayReason(offHourAnswerNote); // 공휴일이면 사유 포함
                 var _ohSent = groundingFailed
                   ? (offHourLowMsgs[detectedLang] || offHourLowMsgs["zh-TW"])
-                  : (aiAnswer + (offHourAnswerNote[detectedLang] || offHourAnswerNote["zh-TW"]));
+                  : (aiAnswer + (_ohNote[detectedLang] || _ohNote["zh-TW"]));
                 await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: _ohSent }] });
                 aiAnswer = null; // 아래 if(aiAnswer) 블록의 중복 발송 방지
                 aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", lang: detectedLang, type: "ai_answer", userMessage: userText.substring(0, 200), aiResponse: _ohSent.substring(0, 500), escalated: false, escalationReason: groundingFailed ? "off_hour_grounding_failed" : "off_hour_low_confidence", confidence: confidence, category: (aiResult && aiResult.category) || "other" });
@@ -2005,7 +2231,8 @@ router.post('/channeltalk', async function(req, res) {
                   "en": "\n\n💡 This is an AI response for your reference. For further assistance, our team will confirm during business hours (Mon-Fri 10:00-19:00 KST) 😊",
                   "ja": "\n\n💡 上記はAI回答です。追加確認が必要な場合、営業時間内（月〜金 10:00〜19:00 KST）に担当者が確認いたします 😊"
                 };
-                aiAnswer += offHourMedNote[detectedLang] || offHourMedNote["zh-TW"];
+                var _ohMed = withHolidayReason(offHourMedNote); // 공휴일이면 사유 포함
+                aiAnswer += _ohMed[detectedLang] || _ohMed["zh-TW"];
                 // 오프시간은 에스컬레이션 스킵 - 아래 connectManager를 건너뜀
                 await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: aiAnswer }] });
                 aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "ai_answer", userMessage: userText.substring(0, 200), aiResponse: aiAnswer.substring(0, 300), escalated: false, escalationReason: "off_hour_medium_confidence", confidence: confidence, category: (aiResult && aiResult.category) || "other" });
@@ -2046,7 +2273,7 @@ router.post('/channeltalk', async function(req, res) {
         "en": "\n\n⏰ Outside business hours (Mon-Fri 10:00-19:00 KST); the above is an AI reply. Feel free to keep asking — if an agent is needed we'll prioritize it first thing!",
         "ja": "\n\n⏰ 現在営業時間外です（月〜金 10:00〜19:00 KST）。上記はAI回答です。ご質問は続けてどうぞ。担当者が必要な場合は営業開始後に優先対応いたします！"
       };
-      aiAnswer = appendFooter(chatId, aiAnswer, isBusinessHours() ? footers : offHourFooters, detectedLang); // [2026-06-30] 반복 푸터 억제
+      aiAnswer = appendFooter(chatId, aiAnswer, isBusinessHours() ? footers : withHolidayReason(offHourFooters), detectedLang); // [2026-06-30] 반복 푸터 억제 / [2026-08-14] 공휴일 사유 포함
       // Prevent duplicate - only send if not already responded
       if (!res.headersSent) {
         await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: aiAnswer }] });
@@ -2137,7 +2364,12 @@ router.post('/channeltalk', async function(req, res) {
       if (_chatHistoryCache[chatId].length > 20) _chatHistoryCache[chatId] = _chatHistoryCache[chatId].slice(-20);
       return res.status(200).send("OK");
     }
-    var matched = matcher.findBestMatch(userText);
+    // [2026-08-18 FIX] faq.js 답변은 전부 繁體中文인데 keywords 에는 'cancel','refund','배송' 같은
+    //   영·한 토큰이 섞여 있어, AI 장애 시 영어/한국어/일본어 고객이 "읽지 못하는 중문 벽문 + 자기 언어 푸터"
+    //   조합을 받았다(기계 오작동으로 읽힘). zh-TW 고객에게만 FAQ 폴백을 쓰고, 나머지는 아래
+    //   상담사 연결 폴백으로 직행시킨다.
+    var matched = (detectedLang === "zh-TW") ? matcher.findBestMatch(userText) : null;
+    if (detectedLang !== "zh-TW") console.log("[Fallback] non-zh-TW(" + detectedLang + ") - skip zh-only FAQ fallback");
     if (matched) {
       var answerText = aiEngine.toTaiwanMandarin(matched.answer, detectedLang); // [2026-07-10] 폴백 캔드응답도 대만 화어 정규화(zh-TW 한정)
       var footers2 = {
@@ -2262,12 +2494,35 @@ setInterval(async function() {
       console.log('[ESCALATION-WARN] 10min no reply - chatId:', cid);
       esc.warned10 = true;
     }
-    if (elapsedMin >= 15 && !esc.waitingSent) {
+    // [2026-08-14 FIX] 아래 고객 발송 메시지(15/30/60분)는 모두 "지금 상담사가 확인 중"이라는
+    //   전제인데 영업시간 체크가 없어 심야에도 나갔다(= 지키지 못할 약속). 영업시간에만 발송한다.
+    //   단, 심야 넘김 건은 아침에 세 단계가 한꺼번에 due 상태가 되므로(=3연속 발송) 그대로 두면
+    //   스팸이 된다. → 한 스윕에서는 '가장 진행된 단계' 하나만 보내고 나머지는 보낸 것으로 처리한다.
+    var _dueStage = null;
+    if (elapsedMin >= 15 && !esc.waitingSent) _dueStage = 'wait';
+    if (elapsedMin >= 30 && !esc.followup30) _dueStage = 'f30';
+    if (elapsedMin >= 60 && !esc.followup60) _dueStage = 'f60';
+    if (_dueStage && !isBusinessHours()) _dueStage = null; // 영업시간 아니면 플래그도 세우지 않고 보류
+    // [2026-08-14 FIX] 15분 시점에 '대기 안내'와 아래 '재배정 안내'가 같은 틱에 연달아 나가
+    //   고객 화면에 거의 같은 말이 2통 찍혔다. 재배정 안내가 나갈 틱에는 대기 안내를 생략한다
+    //   (재배정 문구가 "기다려주셔서 감사합니다 + 다른 상담사에게 알렸습니다"로 둘을 포함).
+    var _reassignWillNotify = !esc.reassigned && elapsedMin >= 15 && isBusinessHours();
+    if (_dueStage === 'wait' && _reassignWillNotify) {
+      esc.waitingSent = true;
+      _dueStage = null;
+    }
+    if (_dueStage) {
+      // 건너뛴 이전 단계는 '발송 완료'로 표시해 나중에 뒤늦게 나가지 않게 한다.
+      if (_dueStage !== 'wait') esc.waitingSent = true;
+      if (_dueStage === 'f60') esc.followup30 = true;
+    }
+
+    if (_dueStage === 'wait') {
       sendWaitingMessage(cid, esc.lang || 'zh-TW');
       esc.waitingSent = true;
     }
     // 30분 후속 안내: 구체적 예상 시간 제공
-    if (elapsedMin >= 30 && !esc.followup30) {
+    if (_dueStage === 'f30') {
       var followup30Msgs = {
         'zh-TW': '⏳ 已等待約30分鐘，非常抱歉！客服人員正在處理其他客戶的問題，預計15~30分鐘內回覆您。\n\n💡 小提醒：如果是訂單問題，您可以直接輸入訂單號碼，AI助手也許能幫您查詢喔！',
         'ko': '⏳ 약 30분 대기 중이시네요, 정말 죄송합니다! 상담사가 다른 고객 응대 중이며 15~30분 내 답변드리겠습니다.\n\n💡 팁: 주문 관련이라면 주문번호를 입력해보세요, AI가 도와드릴 수 있어요!',
@@ -2281,7 +2536,7 @@ setInterval(async function() {
       esc.followup30 = true;
     }
     // 60분 최종 안내: 사과 + 우선 처리 약속
-    if (elapsedMin >= 60 && !esc.followup60) {
+    if (_dueStage === 'f60') {
       var followup60Msgs = {
         'zh-TW': '😔 非常抱歉讓您等這麼久！您的問題已被標記為「優先處理」，客服人員會儘快回覆。\n\n如果您需要離開，請放心留言，我們一定會回覆您！也可以留下Email，處理完畢後通知您。',
         'ko': '😔 오래 기다리게 해서 정말 죄송합니다! 우선 처리로 표시되었으며, 상담사가 최대한 빨리 답변드리겠습니다.\n\n자리를 비우셔야 한다면 메시지를 남겨주세요. 반드시 답변드립니다!',
@@ -2294,15 +2549,22 @@ setInterval(async function() {
       } catch(e) { console.log('[FOLLOWUP] 60min error:', e.message); }
       esc.followup60 = true;
       // 매니저 그룹에 긴급 알림
+      // [2026-08-14 FIX] sendGroupMessage(groupId, message) 인데 인자를 1개만 넘겨 항상 실패했다
+      //   (지금까지 이 경로 자체가 죽어 있어 드러나지 않음). 슬랙/팀챗 공통 알림 함수로 교체.
       try {
-        var urgentMsg = '🚨 긴급: 고객 60분 대기 중! chatId: ' + cid + ' - 즉시 응대 필요';
-        var channeltalk2 = require('../lib/channeltalk');
-        await channeltalk2.sendGroupMessage(urgentMsg);
+        var urgentMsg = '[긴급] 고객 60분 대기 중 — 즉시 응대 필요\n'
+          + '상담 바로가기: https://desk.channel.io/#/channels/138710/user_chats/' + cid;
+        await require('../lib/scheduler').notifyInternal(urgentMsg);
       } catch(ue) { console.log('[FOLLOWUP] urgent alert error:', ue.message); }
     }
 
     // 15min auto-reassign
-    if (now - (esc.time || esc.timestamp || 0) >= REASSIGN_TIMEOUT) {
+    // [2026-08-14 FIX] 여기서 pendingEscalations 엔트리를 무조건 삭제하는 바람에 엔트리 수명이
+    //   최대 ~18분이었고, 그 결과 slaSweep(30분 슬랙 알림)·followup30·followup60 이 전부
+    //   도달 불가능한 죽은 코드였다. → 삭제 대신 reassigned 플래그만 세우고 엔트리는 유지한다.
+    //   엔트리는 (a) 매니저가 답하면 삭제(위 mgrReplied / 매니저 메시지 핸들러),
+    //   (b) 아무 일도 없으면 1분 클린업 인터벌의 24시간 규칙으로 정리된다.
+    if (!esc.reassigned && now - (esc.time || esc.timestamp || 0) >= REASSIGN_TIMEOUT) {
       try {
         var msgData = await channeltalk.getChatMessages(cid, 5);
         var msgs = msgData.messages || [];
@@ -2313,9 +2575,13 @@ setInterval(async function() {
           delete pendingEscalations[cid];
           continue;
         }
-        var reassignMsg = { "zh-TW": "感謝您的耐心等待！客服人員目前較忙碌，我們已通知其他客服人員，請再稍候一下", "ko": "기다려주셔서 감사합니다! 다른 상담사에게 알림을 보냈습니다. 조금만 더 기다려주세요", "en": "Thanks for your patience! We have notified additional agents. Please hold on", "ja": "お待たせして申し訳ございません！他のスタッフに通知しました" };
-        var lang = esc.lang || "zh-TW";
-        await channeltalk.sendMessage(cid, { blocks: [{ type: "text", value: reassignMsg[lang] || reassignMsg["zh-TW"] }] });
+        // 고객 발송은 영업시간에만(심야에 "다른 상담사에게 알렸다"는 지키지 못할 안내 방지).
+        // 매니저 초대·팔로워 추가는 시간과 무관하게 수행해 출근 즉시 인계되게 한다.
+        if (isBusinessHours()) {
+          var reassignMsg = { "zh-TW": "感謝您的耐心等待！客服人員目前較忙碌，我們已通知其他客服人員，請再稍候一下", "ko": "기다려주셔서 감사합니다! 다른 상담사에게 알림을 보냈습니다. 조금만 더 기다려주세요", "en": "Thanks for your patience! We have notified additional agents. Please hold on", "ja": "お待たせして申し訳ございません！他のスタッフに通知しました" };
+          var lang = esc.lang || "zh-TW";
+          await channeltalk.sendMessage(cid, { blocks: [{ type: "text", value: reassignMsg[lang] || reassignMsg["zh-TW"] }] });
+        }
         // [SOP v2, 2026-07-03 개정] 팔로워는 항상 MIA·우선 2명만 유지. 강준(담당자)은 재초대로 다시 알림.
         var allMgrIds = await managersLib.getFollowerIds();
         if (allMgrIds.length > 0) {
@@ -2326,10 +2592,10 @@ setInterval(async function() {
           if (_adminIds.length > 0) await channeltalk.inviteManager(cid, _adminIds[0]);
         } catch(_raErr) {}
         console.log("[AutoReassign] Chat " + cid + " reassigned after 15min. Notified " + allMgrIds.length + " managers.");
-        delete pendingEscalations[cid];
+        esc.reassigned = true;
       } catch(e) {
         console.error("[AutoReassign] Error for " + cid + ":", e.message);
-        delete pendingEscalations[cid];
+        esc.reassigned = true; // 재시도 루프 방지 (SLA 추적은 계속 유지)
       }
     }
   }
