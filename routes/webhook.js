@@ -187,6 +187,8 @@ var satisfactionPending = {};
 var _csatSendLock = {};
 var chatLanguage = {};
 var managerActive = {};
+// [2026-08-18] 미식별 고객에게 주문번호·이메일을 물은 상담(chatId → 시각). 상담당 1회만 묻기 위한 가드.
+var intakeAsked = {};
 // [2026-08-14] 매니저가 "확인 후 회신" 류 약속을 남긴 상담(chatId → 시각).
 //   판매자·물류 확인은 2시간을 넘기는 게 일상인데, managerActive 2시간 타임아웃이 풀리면
 //   봇이 맥락 없는 AI 답변으로 끼어들어 나중에 매니저 회신과 상충하는 답이 2개 남았다.
@@ -239,6 +241,9 @@ setInterval(function() {
   // [2026-08-14] 확인 약속 추적도 같이 정리 (24시간)
   Object.keys(managerPromise).forEach(function(k) {
     if (now - managerPromise[k] > 86400000) { delete managerPromise[k]; delete managerPromiseNudged[k]; }
+  });
+  Object.keys(intakeAsked).forEach(function(k) {
+    if (now - intakeAsked[k] > 86400000) delete intakeAsked[k];
   });
   Object.keys(chatLanguage).forEach(function(k) {
     if (typeof chatLanguage[k] === 'string') {
@@ -496,6 +501,45 @@ async function connectManager(chatId, lang) {
     try { await channeltalk.addChatTags(chatId, [HANDOFF_TAG]); } catch(te) { /* 태그 API 미지원 시 무시 */ }
     return assigneeId;
   } catch(e) { console.error("[ConnectManager] Error:", e.message); return null; }
+}
+
+// [2026-08-18] 미식별 고객이 스스로 알려준 주문번호·이메일 처리.
+//   ⚠ 자가신고 값은 본인 확인이 아니다(남의 주문번호도 칠 수 있음). 그래서
+//   ① 이 값으로 주문 내역을 보여주지 않고 ② 채널톡 표준 email 필드에도 넣지 않는다
+//      (넣으면 다음 상담부터 봇이 자동 매칭해 조회를 허용 → 시간차 사칭 구멍).
+//   veasly_claimed_* 라는 CS 참고용 필드에만 기록하고, 확인은 사람이 한다.
+async function recordClaimedIdentity(personId, chatId, opts) {
+  if (!personId) return;
+  var data = {};
+  if (opts.orderNo) data.veasly_claimed_order = String(opts.orderNo);
+  if (opts.email) data.veasly_claimed_email = String(opts.email);
+  if (!Object.keys(data).length) return;
+  data.veasly_claimed_at = new Date().toISOString().substring(0, 16).replace("T", " ");
+  try {
+    await channeltalk.updateUser(personId, data);
+    console.log("[Intake] Claimed identity recorded for", chatId, JSON.stringify(data));
+  } catch (e) { console.error("[Intake] profile write error:", e.message); }
+}
+
+// 미식별 상태에서 주문번호를 받았을 때의 공통 응답: 접수 안내 + 담당자 연결(오프타임은 우선처리 등록)
+async function handleUnverifiedOrder(chatId, personId, detectedLang, orderNum, userText, memberId) {
+  await recordClaimedIdentity(personId, chatId, { orderNo: orderNum });
+  var biz = isBusinessHours();
+  var msgs = biz ? {
+    "zh-TW": "收到訂單號碼，謝謝！\n為了保護帳戶安全，訂單詳情需要由客服人員為您確認。已為您轉接，請稍候",
+    "ko": "주문번호 확인했습니다, 감사합니다!\n계정 보호를 위해 주문 상세는 담당자가 확인해 드립니다. 연결해 드렸으니 잠시만 기다려주세요",
+    "en": "Got your order number, thank you!\nTo protect your account, order details are confirmed by our team. I've connected you with an agent",
+    "ja": "注文番号を確認しました、ありがとうございます！\nアカウント保護のため、注文詳細は担当者が確認いたします。おつなぎしました"
+  } : withHolidayReason({
+    "zh-TW": "收到訂單號碼，謝謝！\n目前非客服時間，已為您登記為優先處理，客服人員上班後會立即為您確認",
+    "ko": "주문번호 확인했습니다, 감사합니다!\n지금은 상담 시간이 아니어서 우선 처리로 등록해 두었습니다. 업무 시작 후 바로 확인해 드릴게요",
+    "en": "Got your order number, thank you!\nWe're outside business hours, so I've flagged this as priority — our team will confirm first thing",
+    "ja": "注文番号を確認しました、ありがとうございます！\n現在営業時間外のため優先対応として登録しました。営業開始後すぐに確認いたします"
+  });
+  await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: msgs[detectedLang] || msgs["zh-TW"] }] });
+  try { await connectManager(chatId, detectedLang); } catch (e) { console.error("[Intake] escalate error:", e.message); }
+  console.log("[Intake] Unverified order handed off:", orderNum, chatId);
+  aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: "", lang: detectedLang, type: "escalation", userMessage: String(userText).substring(0, 200), aiResponse: "미식별 고객 주문번호(" + orderNum + ") → 담당자 연결", escalated: true, escalationReason: "unverified_order", confidence: 0, category: "order" });
 }
 
 // [노션 CS 넘김 적재] 대화 수집 → AI 사유분류+요약 → 노션 행 생성. best-effort(실패해도 CS 흐름 무영향).
@@ -1686,8 +1730,9 @@ router.post('/channeltalk', async function(req, res) {
         } catch(retryErr3) {}
       }
       if (!veaslyUser) {
-        await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: orderSecurityMsgs.noAuth[detectedLang] || orderSecurityMsgs.noAuth["zh-TW"] }] });
-        console.log("[Security] Multi-order blocked - no auth");
+        // [2026-08-18] 데드엔드 대신 자가신고 주문번호(첫 건) 기록 + 담당자 연결
+        await handleUnverifiedOrder(chatId, personId, detectedLang, orderMatches.join(", "), userText, memberId);
+        console.log("[Security] Multi-order unverified - handed off");
         return res.status(200).send("OK");
       }
       try {
@@ -1772,9 +1817,8 @@ router.post('/channeltalk', async function(req, res) {
             } catch(retryErr) {}
           }
           if (!veaslyUser) {
-            await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: orderSecurityMsgs.noAuth[detectedLang] || orderSecurityMsgs.noAuth["zh-TW"] }] });
-            console.log("[Security] Order blocked - no auth:", orderNum);
-            aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: "", userName: "", lang: detectedLang, type: "order_lookup", userMessage: userText.substring(0, 200), aiResponse: "주문조회 차단: 미인증", escalated: false, category: "order", confidence: 1.0 });
+            // [2026-08-18] 데드엔드 대신 자가신고 주문번호 기록 + 담당자 연결(주문 내역은 미노출)
+            await handleUnverifiedOrder(chatId, personId, detectedLang, orderNum, userText, memberId);
             return res.status(200).send("OK");
           }
           var cOwnerId = (combinedOrder.user && combinedOrder.user.id) || null;
@@ -1833,9 +1877,9 @@ router.post('/channeltalk', async function(req, res) {
               } catch(retryErr2) {}
             }
             if (!veaslyUser) {
-              await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: orderSecurityMsgs.noAuth[detectedLang] || orderSecurityMsgs.noAuth["zh-TW"] }] });
-              console.log("[Security] Order blocked - no auth:", orderNum);
-              aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: "", userName: "", lang: detectedLang, type: "order_lookup", userMessage: userText.substring(0, 200), aiResponse: "주문조회 차단: 미인증", escalated: false, category: "order", confidence: 1.0 });
+              // [2026-08-18] 데드엔드("로그인하세요" 후 끝) 대신, 자가신고 주문번호를 CS 참고용으로
+              //   기록하고 담당자에게 넘긴다. 주문 내역은 여전히 보여주지 않는다(사칭 방지).
+              await handleUnverifiedOrder(chatId, personId, detectedLang, orderNum, userText, memberId);
               return res.status(200).send("OK");
             }
           }
@@ -1981,6 +2025,24 @@ router.post('/channeltalk', async function(req, res) {
       console.log("[Route] Question/pre-order pattern detected - skip order list, route to AI:", userText.substring(0, 50));
       isOrderQuery = false;
     }
+    // [2026-08-18] 미식별 고객 인테이크 — CS가 지금 수동으로 하는 "주문번호 또는 계정 확인"을 봇이 대신한다.
+    //   실측(2026-08-18): 상담의 25%가 미식별이고 그 과반이 LINE 유입(웹 로그인 유도가 통하지 않음).
+    //   원칙: 식별된 고객(75%)에게는 절대 묻지 않는다. 개별 주문 확인이 필요한 질문일 때만, 상담당 1회.
+    //   일반 문의(운임·정책·배송기간)는 여기 걸리지 않고 평소대로 AI가 답한다.
+    if (isOrderQuery && !veaslyUser && !intakeAsked[chatId]) {
+      intakeAsked[chatId] = Date.now();
+      var intakeMsgs = {
+        "zh-TW": "為了幫您查詢，麻煩您提供以下任一項：\n\n・訂單號碼（格式 20260415TW...）\n・您註冊 VEASLY 的電子郵件\n\n提供後我會請客服人員為您確認",
+        "ko": "확인을 도와드리기 위해 아래 중 하나를 알려주세요:\n\n・주문번호 (형식 20260415TW...)\n・VEASLY 가입 이메일\n\n알려주시면 담당자가 확인해 드리겠습니다",
+        "en": "To look this up for you, please provide either:\n\n・Your order number (format 20260415TW...)\n・The email you registered with VEASLY\n\nOnce provided, our team will confirm it for you",
+        "ja": "お調べするために、以下のいずれかをお知らせください：\n\n・注文番号（形式 20260415TW...）\n・VEASLY にご登録のメールアドレス\n\nご提供後、担当者が確認いたします"
+      };
+      await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: intakeMsgs[detectedLang] || intakeMsgs["zh-TW"] }] });
+      console.log("[Intake] Unidentified customer - asked for order number/email:", chatId);
+      aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: personId || "", userName: "", lang: detectedLang, type: "intake", userMessage: userText.substring(0, 200), aiResponse: "미식별 고객 → 주문번호/이메일 요청", escalated: false, confidence: 1.0, category: "order" });
+      return res.status(200).send("OK");
+    }
+
     if (isOrderQuery && veaslyUser && veaslyUser.email) {
       try {
         var userOrders = await veaslyApi.getUserOrders(veaslyUser.email, 500, memberId);
