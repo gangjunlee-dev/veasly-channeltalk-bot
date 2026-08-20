@@ -521,6 +521,49 @@ async function recordClaimedIdentity(personId, chatId, opts) {
   } catch (e) { console.error("[Intake] profile write error:", e.message); }
 }
 
+// [2026-08-18] 주문번호와 요청이 한 메시지에 있으면 상태만 답하고 요청이 삼켜지던 문제 대응.
+//   [2026-08-20 보강] 실측에서 두 가지 구멍 확인 → 수정.
+//   ① 키워드에 「退還」이 없어 「請客服人員協助退還訂單…的韓國國內運費」가 4번 연속 삼켜짐
+//      (고객은 같은 요청을 4번 반복했고 매번 주문 상태만 받았다)
+//   ② 합배송 주문 경로에는 이 검사가 아예 없었다 → 헬퍼로 추출해 양쪽에서 호출
+//   반환값 true = 에스컬레이션 처리함(호출부는 즉시 return 해야 함)
+async function maybeEscalateRequestWithOrder(chatId, personId, detectedLang, orderNum, userText, memberId, veaslyUser) {
+  // ⚠ isActionRequest 를 그대로 쓰면 안 된다. 2026-07-27 FIX6b 가 "주문번호가 있고 조회로 답할 수
+  //   있는 유형(shipping_delay/refund_delay: 「什麼時候出貨」「還沒收到」)"은 일부러 게이트를 건너뛰어
+  //   주문조회로 보내는데, 여기서 다시 잡으면 그 설계를 되돌려 과잉 넘김이 된다.
+  //   → 조회로 답이 안 나오는 '행위 요청'만 명시적으로 나열한다.
+  var kws = [
+    // 취소
+    "取消", "退訂", "不想要了", "취소", "cancel",
+    // 환불·과금 (조회로 답 안 나옴 — 정산 확인 필요)
+    "退款", "退費", "退還", "退回", "退錢", "溢收", "多收", "重複扣款", "重複收取", "환불", "refund",
+    // 주소·수취인 변경
+    "改地址", "修改地址", "換地址", "變更地址", "地址寫錯", "地址填錯", "寫錯地址", "地址錯",
+    "주소", "change address",
+    // 판매자 독촉 (상태만 보여주면 해결 안 됨 — 실제로 셀러에게 연락해야 함)
+    "幫我催", "催一下", "催促", "催賣家", "催發貨", "독촉", "재촉"
+  ];
+  var hit = kws.some(function (k) { return userText.toLowerCase().indexOf(k.toLowerCase()) > -1; });
+  if (!hit || managerActive[chatId]) return false;
+  var biz = isBusinessHours();
+  var msgs = biz ? {
+    "zh-TW": "另外，關於您訊息中提到的需求，我已為您轉接客服人員協助處理，請稍候！",
+    "ko": "그리고 메시지에 말씀하신 요청 건은 담당자에게 연결해 드렸습니다. 잠시만 기다려주세요!",
+    "en": "Also, I've connected you with an agent regarding the request in your message. Please hold on!",
+    "ja": "また、メッセージ内のご要望については担当者におつなぎしました。少々お待ちください！"
+  } : withHolidayReason({
+    "zh-TW": "另外，關於您訊息中提到的需求，目前非客服時間，我已登記為優先處理，客服人員上班後會立即為您確認！",
+    "ko": "그리고 메시지에 말씀하신 요청 건은 지금이 상담 시간이 아니라 우선 처리로 등록해 두었습니다. 업무 시작 후 바로 확인해 드릴게요!",
+    "en": "Also, we're outside business hours, so I've flagged the request in your message as priority — an agent will confirm first thing!",
+    "ja": "また、現在営業時間外のため、メッセージ内のご要望を優先対応として登録しました。営業開始後すぐに確認いたします！"
+  });
+  await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: msgs[detectedLang] || msgs["zh-TW"] }] });
+  try { await connectManager(chatId, detectedLang); } catch (e) { console.error("[Order] request-with-order escalate error:", e.message); }
+  console.log("[Order] Request bundled with order number -> escalated:", orderNum);
+  aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "escalation", userMessage: String(userText).substring(0, 200), aiResponse: "주문번호+요청 동반 → 담당자 연결 (" + orderNum + ")", escalated: true, escalationReason: "request_with_order_number", confidence: 0, category: "order" });
+  return true;
+}
+
 // 미식별 상태에서 주문번호를 받았을 때의 공통 응답: 접수 안내 + 담당자 연결(오프타임은 우선처리 등록)
 async function handleUnverifiedOrder(chatId, personId, detectedLang, orderNum, userText, memberId) {
   await recordClaimedIdentity(personId, chatId, { orderNo: orderNum });
@@ -1857,6 +1900,12 @@ router.post('/channeltalk', async function(req, res) {
           cReply += "\n\n💡 " + (detectedLang === "ko" ? "더 궁금한 점이 있으면 입력해주세요!" : detectedLang === "en" ? "Any more questions? Just type!" : detectedLang === "ja" ? "他にご質問があればどうぞ！" : "還有其他問題嗎？直接輸入問題，AI會為您解答喔！");
           await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: cReply }] });
           console.log("[Order] Combined shipping replied:", orderNum, cItems.length, "items", isCombined ? "(merged " + cChildren.length + " orders)" : "");
+
+          // [2026-08-20] 합배송 경로에도 '요청 동반' 검사 추가 — 여기엔 없어서 요청이 계속 삼켜지고 있었다.
+          if (await maybeEscalateRequestWithOrder(chatId, personId, detectedLang, orderNum, userText, memberId, veaslyUser)) {
+            return res.status(200).send("OK");
+          }
+
           recordFCRResolved(memberId || personId || "", chatId, "order_lookup_combined");
           aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "order_lookup", userMessage: userText.substring(0, 200), aiResponse: "합배송 주문조회: " + orderNum + " (" + cItems.length + "개 아이템, " + (isCombined ? cChildren.length + "건 합배송" : "일반") + ")", escalated: false, category: "order", confidence: 0.9 });
           return res.status(200).send("OK");
@@ -1956,26 +2005,8 @@ router.post('/channeltalk', async function(req, res) {
           //   상태 안내만 보내고 return 해서 정작 '요청'이 통째로 삼켜졌다(고객은 답을 못 받고 재문의).
           //   상태 안내 뒤에 요청을 인지하고 실제 사람 연결로 넘긴다. 취소·주소변경 가부는 정책상
           //   봇이 단정하면 안 되므로 여기서 답을 만들지 않고 담당자에게 넘기기만 한다.
-          var _reqWithOrder = isActionRequest(userText)
-            || ["取消", "退訂", "退款", "退費", "改地址", "修改地址", "換地址", "취소", "환불", "주소", "cancel", "refund", "change address"]
-                 .some(function (k) { return userText.toLowerCase().indexOf(k.toLowerCase()) > -1; });
-          if (_reqWithOrder && !managerActive[chatId]) {
-            var _rwoBiz = isBusinessHours();
-            var _rwoMsgs = _rwoBiz ? {
-              "zh-TW": "另外，關於您訊息中提到的需求，我已為您轉接客服人員協助處理，請稍候！",
-              "ko": "그리고 메시지에 말씀하신 요청 건은 담당자에게 연결해 드렸습니다. 잠시만 기다려주세요!",
-              "en": "Also, I've connected you with an agent regarding the request in your message. Please hold on!",
-              "ja": "また、メッセージ内のご要望については担当者におつなぎしました。少々お待ちください！"
-            } : withHolidayReason({
-              "zh-TW": "另外，關於您訊息中提到的需求，目前非客服時間，我已登記為優先處理，客服人員上班後會立即為您確認！",
-              "ko": "그리고 메시지에 말씀하신 요청 건은 지금이 상담 시간이 아니라 우선 처리로 등록해 두었습니다. 업무 시작 후 바로 확인해 드릴게요!",
-              "en": "Also, we're outside business hours, so I've flagged the request in your message as priority — an agent will confirm first thing!",
-              "ja": "また、現在営業時間外のため、メッセージ内のご要望を優先対応として登録しました。営業開始後すぐに確認いたします！"
-            });
-            await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: _rwoMsgs[detectedLang] || _rwoMsgs["zh-TW"] }] });
-            try { await connectManager(chatId, detectedLang); } catch (rwoErr) { console.error("[Order] request-with-order escalate error:", rwoErr.message); }
-            console.log("[Order] Request bundled with order number → escalated:", orderNum);
-            aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "escalation", userMessage: userText.substring(0, 200), aiResponse: "주문번호+요청 동반 → 담당자 연결 (" + orderNum + ")", escalated: true, escalationReason: "request_with_order_number", confidence: 0, category: "order" });
+          // [2026-08-20] 아래 로직을 헬퍼로 추출 — 합배송 주문 경로에서도 같은 검사가 필요해서다.
+          if (await maybeEscalateRequestWithOrder(chatId, personId, detectedLang, orderNum, userText, memberId, veaslyUser)) {
             return res.status(200).send("OK");
           }
 
