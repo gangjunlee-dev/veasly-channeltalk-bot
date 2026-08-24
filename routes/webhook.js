@@ -971,6 +971,15 @@ router.post('/channeltalk', async function(req, res) {
         })().catch(function(){});
         return res.status(200).send("OK");
       }
+      // [2026-08-24 약속 추적] 팀챗 /완료 → 이 상담의 열린 약속을 노션에서 완료 처리
+      var _doneMatch = _mgrRawText ? _mgrRawText.match(/^\/(완료|完成|done)\s*$/i) : null;
+      if (_doneMatch) {
+        var _dnChatId = message.chatId || message.userChatId || chatId || '';
+        notion.completePromise(_dnChatId)
+          .then(function (ok) { console.log('[Promise-cmd] /완료', _dnChatId, ok ? '→ 완료 처리됨' : '(열린 약속 없음)'); })
+          .catch(function () {});
+        return res.status(200).send("OK");
+      }
       if (chatId) {
         managerActive[chatId] = Date.now();
         var mgrPersonId = message.personId || "unknown";
@@ -985,6 +994,19 @@ router.post('/channeltalk', async function(req, res) {
             managerPromise[chatId] = Date.now();
             delete managerPromiseNudged[chatId];
             console.log('[ManagerPromise] 확인 약속 감지 - chat:', chatId);
+            // [2026-08-24 약속 추적] 매니저 약속을 노션 DB에 등록(내부메모 포함 — "화물사 확인" 내부 TODO가
+            //   기록 없이 증발해 20일 방치됐던 Kim James 케이스의 핵심 구멍). 열린 약속 있으면 기한만 갱신.
+            (async function () {
+              try {
+                var _pmEmail = '';
+                try {
+                  var _pmMgrs = await managersLib.getManagers();
+                  var _pm = (_pmMgrs || []).filter(function (m) { return String(m.id) === String(mgrPersonId); })[0];
+                  _pmEmail = (_pm && _pm.email) || '';
+                } catch (e) {}
+                await notion.createPromise({ chatId: chatId, channelId: message.channelId || '', text: mgrText.replace(/\s+/g, ' ').slice(0, 150), source: '매니저 약속', managerEmail: _pmEmail });
+              } catch (e) {}
+            })().catch(function () {});
           } else {
             delete managerPromise[chatId];
             delete managerPromiseNudged[chatId];
@@ -2234,6 +2256,10 @@ router.post('/channeltalk', async function(req, res) {
         };
         await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: progressMsgs[detectedLang] || progressMsgs["zh-TW"] }] });
         try { await connectManager(chatId, detectedLang); } catch (pgErr) { console.error("[Progress] connectManager error:", pgErr.message); }
+        // [2026-08-24 약속 추적] 재문의 → 열린 약속 재문의+1·기한 즉시 도래, 없으면 새 약속 생성
+        notion.bumpPromiseReinquiry(chatId).then(function (p) {
+          if (!p) return notion.createPromise({ chatId: chatId, channelId: message.channelId || '', customer: veaslyUser ? veaslyUser.name : '', text: '고객 재문의: ' + userText.replace(/\s+/g, ' ').slice(0, 100), source: '재문의' });
+        }).catch(function () {});
         // 재문의는 이미 한 번 방치된 신호 — 30분 기다리지 않고 즉시 슬랙 알림
         if (process.env.SLACK_WEBHOOK_URL) {
           require('axios').post(process.env.SLACK_WEBHOOK_URL, { text: '⚠️ 진행상황 재문의: 고객이 처리 결과를 다시 묻고 있습니다(미회신 반복 신호). 우선 확인 필요!\n고객 메시지: ' + userText.substring(0, 80) + '\n상담 바로가기: https://desk.channel.io/#/channels/138710/user_chats/' + chatId }, { timeout: 10000 })
@@ -2460,8 +2486,9 @@ router.post('/channeltalk', async function(req, res) {
       var mediumConfidenceEsc = (confidence > 0 && confidence < 0.6);
       // [2026-05-27] confidence와 무관하게 AI 답변이 "상담사/轉接/connect" 약속하면 실제 escalation 수행.
       // 이전: confidence >= 0.65 → 키워드 체크 스킵 → 봇이 "연결합니다" 약속만 하고 실제로는 안 함 (UX 버그).
+      var _matchedEscKw = null;
       for (var ek = 0; !_botConfidentAnswer && ek < escalateKeywords.length; ek++) {
-        if (aiAnswer.indexOf(escalateKeywords[ek]) !== -1) { needEscalate = true; break; }
+        if (aiAnswer.indexOf(escalateKeywords[ek]) !== -1) { needEscalate = true; _matchedEscKw = escalateKeywords[ek]; break; }
       }
       if (softCaveatOnly) { needEscalate = false; mediumConfidenceEsc = false; } // 참고용 딱지 구간은 매니저 자동호출 안 함
       aiEscalated = needEscalate || mediumConfidenceEsc;
@@ -2506,6 +2533,11 @@ router.post('/channeltalk', async function(req, res) {
           await connectManager(chatId, detectedLang);
           console.log("[Escalate] AI auto-escalated chat:", chatId);
         } catch(escErr) { console.error("[Escalate] Error:", escErr.message); }
+        // [2026-08-24 약속 추적] 봇이 "제3자 확인 후 회신" 약속으로 넘긴 경우 → 노션 약속 등록(best-effort)
+        var _PROMISE_ESC_KWS = ["向賣家確認", "向賣家詢問", "向物流端確認", "向品牌方確認", "確認後回覆您", "確認後會盡快", "一有結果", "相關團隊", "轉交專人"];
+        if (_matchedEscKw && _PROMISE_ESC_KWS.indexOf(_matchedEscKw) !== -1) {
+          notion.createPromise({ chatId: chatId, channelId: message.channelId || '', customer: veaslyUser ? veaslyUser.name : '', text: aiAnswer.replace(/\s+/g, ' ').slice(0, 150), source: '봇 약속' }).catch(function () {});
+        }
       }
       // Cache this exchange
       if (!_chatHistoryCache[chatId]) _chatHistoryCache[chatId] = [];
