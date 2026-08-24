@@ -75,6 +75,8 @@ app.use('/api/analytics', analyticsRouter);
 app.use('/api/marketing', marketingRouter);
 var surveyRouter = require('./routes/survey');
 app.use('/api/csat', surveyRouter);
+// [2026-08-24] CS 피드 — 통합 업무 플랫폼용 읽기 API (토큰 인증, 스냅샷 파일 서빙)
+app.use('/api/cs-feed', require('./routes/cs-feed'));
 
 app.get('/health', function(req, res) {
   res.json({ status: 'ok', ai: aiEngine.isReady() ? 'active' : 'fallback', timestamp: new Date().toISOString(), env: process.env.NODE_ENV || 'development' });
