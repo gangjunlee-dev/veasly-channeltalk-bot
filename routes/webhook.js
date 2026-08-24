@@ -290,7 +290,9 @@ setInterval(function() {
   Object.keys(pendingEscalations).forEach(function(k) {
     if (pendingEscalations[k] && pendingEscalations[k].time && (now - pendingEscalations[k].time > 86400000)) delete pendingEscalations[k];
   });
-  slaSweep(); // [2026-08-14 ③ SLA] 넘김 후 매니저 무응답 리마인더 (아래 정의)
+  // [2026-08-24] slaSweep 중지 — lib/reply-sla.js 의 상태기반 래더로 대체.
+  //   기존 방식은 pendingEscalations(인메모리)에 의존해 배포마다 초기화되고 봇 넘김 건만 커버했다.
+  //   (함수는 남겨두되 호출하지 않는다. 중복 알림 방지.)
   Object.keys(_csatSendLock).forEach(function(k) {
     if (now - _csatSendLock[k] > 600000) delete _csatSendLock[k];
   });
@@ -878,7 +880,12 @@ router.post('/channeltalk', async function(req, res) {
 
 
         // AI quality review for manager conversations
-        if (closedChat) {
+        // [2026-08-24] 연식 가드: 마지막 활동이 7일 넘은 상담은 리뷰 스킵.
+        //   묵은 상담을 일괄 종료할 때(유령 정리) 8개월 전 대화에 LLM 리뷰가 수백 건 도는 것을 막는다.
+        var _lastAct = Math.max((closedChat && closedChat.frontUpdatedAt) || 0, (closedChat && closedChat.deskUpdatedAt) || 0) || (closedChat && closedChat.openedAt) || 0;
+        var _tooOldForReview = _lastAct && (Date.now() - _lastAct) > 7 * 86400000;
+        if (_tooOldForReview) { console.log('[AIReview] skip (7일+ 경과 상담):', chatId0); }
+        if (closedChat && !_tooOldForReview) {
           // Fallback: extract managerId from chat messages if stats missing
           if (!stats_managerId) {
             try {
