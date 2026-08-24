@@ -196,6 +196,37 @@ var managerPromise = {};
 var managerPromiseNudged = {}; // 약속 지연 내부 알림 1회 가드
 var _MGR_PROMISE_RE = /確認後|確認一下|確認完|向賣家|跟賣家|向物流|跟物流|向品牌|查詢後|查一下|回覆您|回复您|稍後回覆|확인 후|확인해서|확인하고|알아보고|알아볼게|다시 연락|check with|get back to you/i;
 var pendingEscalations = {};
+
+// [2026-08-24] 에스컬레이션 이력 (파일 영속 — 재시작에도 유지). 용도:
+//   ① 진행상황 재문의 감지("確認了嗎?" → AI가 진행상황을 지어내지 않고 사람 연결)
+//   ② 불만·대기 중 고객에게 포인트 프로모 억제. Kim James 사례(8/10~20)에서 둘 다 실증.
+var escHistFile = require('path').join(__dirname, '..', 'data', 'escalation-history.json');
+var _escHist = {}; try { _escHist = JSON.parse(fs.readFileSync(escHistFile, 'utf8')); } catch (e) {}
+function recordEscalation(chatId) {
+  try {
+    _escHist[chatId] = Date.now();
+    var ks = Object.keys(_escHist);
+    if (ks.length > 3000) { ks.sort(function (a, b) { return _escHist[a] - _escHist[b]; }).slice(0, ks.length - 3000).forEach(function (k) { delete _escHist[k]; }); }
+    fs.writeFileSync(escHistFile, JSON.stringify(_escHist), 'utf8');
+  } catch (e) {}
+}
+function hasEscalationHistory(chatId, days) {
+  var ts = _escHist[chatId];
+  return !!ts && (Date.now() - ts) < (days || 14) * 86400000;
+}
+
+// [2026-08-24] 포인트 프로모 발송 기록 (파일 영속). 기존 global._pointNotified는 인메모리라
+//   pm2 재시작(=배포)마다 리셋 → 같은 고객이 반복 수신(8/10~18 4회 실사례).
+var promoSentFile = require('path').join(__dirname, '..', 'data', 'point-promo-sent.json');
+var _promoSent = {}; try { _promoSent = JSON.parse(fs.readFileSync(promoSentFile, 'utf8')); } catch (e) {}
+function markPromoSent(key) {
+  try {
+    _promoSent[key] = Date.now();
+    var pks = Object.keys(_promoSent);
+    if (pks.length > 5000) { pks.sort(function (a, b) { return _promoSent[a] - _promoSent[b]; }).slice(0, pks.length - 5000).forEach(function (k) { delete _promoSent[k]; }); }
+    fs.writeFileSync(promoSentFile, JSON.stringify(_promoSent), 'utf8');
+  } catch (e) {}
+}
 var teamFollowedChats = {}; // [SOP v2] 채팅별 팀 팔로워(MIA·우선·강준) 추가 여부
 var chatContext = {};
 var _chatHistoryCache = {};
@@ -473,6 +504,7 @@ function isEscalationPhrase(lower) {
 
 async function connectManager(chatId, lang) {
   try {
+    recordEscalation(chatId); // [2026-08-24] 이력 영속 기록(재문의 감지·프로모 억제용)
     // [SOP v2 핸드오프 정책, 2026-07-03 개정] 담당자 = 강준(관리자) 초대, 팔로워 = MIA·우선, 「직원 처리 불가」 태그.
     var adminIds = await managersLib.getAdminIds();
     var assigneeId = adminIds.length > 0 ? adminIds[0] : null;
@@ -1403,8 +1435,8 @@ router.post('/channeltalk', async function(req, res) {
         'ja': 'こんにちは！VEASLYへようこそ 🇰🇷\nどうぞお気軽にご質問ください。\n\n' + getMenuText('ja')
       };
       var greetText = greetReply[detectedLang] || greetReply['zh-TW'];
-      // Add point reminder to greeting
-      if (veaslyUser && veaslyUser.credit >= 500) {
+      // Add point reminder to greeting — [2026-08-24] 에스컬레이션 이력 상담(불만·대기)엔 붙이지 않음
+      if (veaslyUser && veaslyUser.credit >= 500 && !hasEscalationHistory(chatId, 14)) {
         var pointHints = {
           "zh-TW": "\n\n🎁 您目前有 " + veaslyUser.credit + " 點數可以使用喔！下單時可折抵消費～",
           "ko": "\n\n🎁 현재 " + veaslyUser.credit + " 포인트 보유 중! 주문 시 할인에 사용하세요~",
@@ -1687,11 +1719,13 @@ router.post('/channeltalk', async function(req, res) {
     if (!isEscalationRequest(userText)) { setEscalationStep(chatId, 0); }
 
     // Point promotion - notify users with available points
-    if (veaslyUser && veaslyUser.credit >= 500) {
-      var chatPointKey = "pointNotified_" + chatId;
-      if (!global._pointNotified) global._pointNotified = {};
-      if (!global._pointNotified[chatPointKey]) {
-        global._pointNotified[chatPointKey] = true;
+    // [2026-08-24 FIX] ① 인메모리 dedup → 파일 영속(재시작마다 리셋돼 같은 고객 반복 수신)
+    //   ② 문맥 억제: 에스컬레이션 이력·대기 중 상담에선 발송 안 함(20일 대기 고객에게 "포인트 쓰세요~" 4회 실사례)
+    //   ③ 사람 기준 30일 1회(personId 우선)
+    if (veaslyUser && veaslyUser.credit >= 500 && !hasEscalationHistory(chatId, 14) && !pendingEscalations[chatId] && !managerActive[chatId]) {
+      var promoKey = personId || chatId;
+      if (!_promoSent[promoKey] || (Date.now() - _promoSent[promoKey]) > 30 * 86400000) {
+        markPromoSent(promoKey);
         var pts = veaslyUser.credit;
         var pointMsgs = {
           "zh-TW": "🎁 " + veaslyUser.name + " 您好！您目前有 " + pts + " 點數可以使用喔！下單時可折抵消費，別忘了使用～",
@@ -2186,6 +2220,29 @@ router.post('/channeltalk', async function(req, res) {
     var softCaveatOnly = false; // confidence<0.70: AI 참고용 딱지만 붙이고 매니저 자동호출은 안 함 (Option A)
     if (aiEngine.isReady()) {
       try {
+      // [2026-08-24 진행상황 재문의 게이트] 과거 에스컬레이션된 상담에서 고객이 처리 진행을 다시 물으면
+      //   AI가 "已轉達/持續追蹤中" 같은 진행상황을 지어내 반복하는 대신(8/13~18 6회 실사례),
+      //   정직한 안내 + 사람 연결 + 슬랙 즉시 알림. 주문번호 동반 시엔 주문조회가 우선(위에서 처리됨).
+      var _progressRe = /(確認了嗎|有消息|有後續|後續了嗎|回覆了嗎|還是沒回|沒有回覆|沒人回|有人嗎|處理了嗎|成功了嗎|更改成功|修改成功|進度|처리됐나|확인됐나|진행상황|답변이 없|any update|still waiting|no reply)/i;
+      if (_progressRe.test(userText) && hasEscalationHistory(chatId, 14)) {
+        var _pgBiz = isBusinessHours();
+        var progressMsgs = {
+          "zh-TW": _pgBiz ? "非常抱歉讓您久等了。您詢問的處理進度需要由客服人員直接確認，我們已通知客服人員優先處理您的案件，會盡快回覆您，感謝您的耐心。" : "非常抱歉讓您久等了。您詢問的處理進度需要由客服人員確認，您的訊息已記錄為優先案件，客服人員上班後會第一時間確認並回覆您，感謝您的耐心。",
+          "ko": _pgBiz ? "오래 기다리게 해서 정말 죄송합니다. 문의하신 처리 진행상황은 상담사가 직접 확인해야 합니다. 우선 처리하도록 상담사에게 알렸으니 곧 답변드리겠습니다." : "오래 기다리게 해서 정말 죄송합니다. 처리 진행상황은 상담사 확인이 필요하며, 우선 안건으로 기록해 두었습니다. 업무 시작 후 가장 먼저 확인해 답변드리겠습니다.",
+          "en": _pgBiz ? "We're very sorry for the wait. Your case status needs to be checked by our staff directly — we've flagged it as priority and will get back to you shortly." : "We're very sorry for the wait. Your case status needs staff confirmation; it's been flagged as priority and our team will check it first thing in business hours.",
+          "ja": _pgBiz ? "大変お待たせして申し訳ございません。処理状況は担当者が直接確認する必要があります。優先対応として担当者に通知しましたので、まもなくご返信いたします。" : "大変お待たせして申し訳ございません。処理状況は担当者の確認が必要です。優先案件として記録しましたので、営業開始後に最優先で確認しご返信いたします。"
+        };
+        await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: progressMsgs[detectedLang] || progressMsgs["zh-TW"] }] });
+        try { await connectManager(chatId, detectedLang); } catch (pgErr) { console.error("[Progress] connectManager error:", pgErr.message); }
+        // 재문의는 이미 한 번 방치된 신호 — 30분 기다리지 않고 즉시 슬랙 알림
+        if (process.env.SLACK_WEBHOOK_URL) {
+          require('axios').post(process.env.SLACK_WEBHOOK_URL, { text: '⚠️ 진행상황 재문의: 고객이 처리 결과를 다시 묻고 있습니다(미회신 반복 신호). 우선 확인 필요!\n고객 메시지: ' + userText.substring(0, 80) + '\n상담 바로가기: https://desk.channel.io/#/channels/138710/user_chats/' + chatId }, { timeout: 10000 })
+            .then(function () { console.log('[Progress] Slack re-inquiry alert sent:', chatId); })
+            .catch(function (e) { console.error('[Progress] Slack error:', e.message); });
+        }
+        aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "escalation", userMessage: userText.substring(0, 200), aiResponse: "진행상황 재문의 → AI 재답변 차단, 사람 연결+슬랙 알림", escalated: true, escalationReason: "progress_reinquiry", confidence: 0, category: "other" });
+        return res.status(200).send("OK");
+      }
       // [2026-08-14 핑퐁 차단] 같은 상담에서 AI가 이미 4회+ 답했는데 고객이 계속 물으면(2h 창) 재답변 대신 사람 연결.
       //   실측: 5회+ 왕복 상담 34개(최다 14회)가 불만의 주원인. 주문조회·메뉴·감사는 위에서 이미 처리되므로 여기 도달한 건 미해결 자유질문뿐.
       var _streak = _aiAnswerStreak[chatId];
@@ -2542,6 +2599,7 @@ router.post('/channeltalk', async function(req, res) {
       }
       if (!fbInvited) { pendingEscalations[chatId] = { time: Date.now(), lang: detectedLang }; } // operator 없어도 추적되게 (15분 reassign 타이머가 커버)
     } catch(fbe) { console.error("[Fallback escalation] Error:", fbe.message); pendingEscalations[chatId] = { time: Date.now(), lang: detectedLang }; }
+    recordEscalation(chatId); // [2026-08-24] 폴백 에스컬레이션도 이력 기록
     try { var schedulerFb = require('../lib/scheduler'); schedulerFb.savePendingEscalation(chatId, memberId || personId || '', userText); } catch(pfe) {}
     aiLog.saveConversation({
       timestamp: new Date().toISOString(),
