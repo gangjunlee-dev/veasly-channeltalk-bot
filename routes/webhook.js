@@ -465,16 +465,27 @@ function appendFooter(chatId, text, footerMap, lang) {
 //     - SOP v2 고정문구(DISPUTE_REPLY / DECLARED_AMOUNT_REPLY): 분쟁·신고금액 경로이고 수정 금지 문구
 //   반복 노출 방지: 같은 대화에서 6시간에 1회만(appendFooter 의 억제 패턴과 동일).
 var _courtesyShown = {};
-function courtesyNote(chatId, lang) {
-  var now = Date.now();
-  if (Object.keys(_courtesyShown).length > 3000) _courtesyShown = {}; // 메모리 가드
-  if (_courtesyShown[chatId] && (now - _courtesyShown[chatId]) < 6 * 60 * 60 * 1000) return '';
-  _courtesyShown[chatId] = now;
+// [2026-08-24] 「예의 지켜주세요」 안내 = 상담 시작 시 1회 고지용인데, 기존에는 courtesyNote 로
+//   '사람 연결 시점' 6곳에 붙어 대화 중간에 떴다. 실측: 76회/60상담(28%)에 발사됐고 그중
+//   고객이 실제로 무례했던 경우는 0회 — 정중히 물은 고객에게 훈계가 되어 역효과였다.
+//   → 상담당 첫 봇 응답에 1회만 붙인다(파일 영속: 재시작·재배포에도 중복 안 됨).
+var firstContactFile = require('path').join(__dirname, '..', 'data', 'first-contact-note.json');
+var _firstContact = {}; try { _firstContact = JSON.parse(fs.readFileSync(firstContactFile, 'utf8')); } catch (e) {}
+function firstContactNote(chatId, lang) {
+  if (!chatId) return '';
+  if (_firstContact[chatId]) return '';
+  try {
+    _firstContact[chatId] = Date.now();
+    var ks = Object.keys(_firstContact);
+    if (ks.length > 5000) ks.sort(function (a, b) { return _firstContact[a] - _firstContact[b]; }).slice(0, ks.length - 5000).forEach(function (k) { delete _firstContact[k]; });
+    fs.writeFileSync(firstContactFile, JSON.stringify(_firstContact), 'utf8');
+  } catch (e) {}
+  var BR = String.fromCharCode(10) + String.fromCharCode(10);
   var m = {
-    'zh-TW': '\n\n🙏 也請您與客服人員保持禮貌、友善溝通，這能幫助我們更快為您解決問題，謝謝您！',
-    'ko': '\n\n🙏 상담사와 소통하실 때 예의를 지켜 주시면 더 빠르게 도와드릴 수 있습니다. 감사합니다!',
-    'en': '\n\n🙏 Please stay courteous when speaking with our agents — it helps us resolve your issue faster. Thank you!',
-    'ja': '\n\n🙏 担当者とのやり取りでは、礼儀あるご対応にご協力ください。より早く解決できます。ありがとうございます！'
+    'zh-TW': BR + '🙏 為了讓我們更快幫您解決問題，溝通時請多多包容與友善，謝謝您！',
+    'ko': BR + '🙏 더 빠르게 도와드릴 수 있도록 소통에 협조해 주시면 감사합니다!',
+    'en': BR + '🙏 Thanks for keeping our chat friendly — it helps us help you faster!',
+    'ja': BR + '🙏 よりスムーズにご対応できるよう、ご協力をお願いいたします！'
   };
   return m[lang] || m['zh-TW'];
 }
@@ -688,11 +699,14 @@ var orderSecurityMsgs = {
     "en": "🔒 Please log in via veasly.com first to check your order.\nNeed help? Contact our support team!",
     "ja": "🔒 注文確認にはveasly.comでのログインが必要です。\nお困りの場合はサポートチームへどうぞ！"
   },
+  // [2026-08-24] 「당신 계정 아님」 단정 → 원인 후보 제시로 변경. 실측 40회/22상담(10.2%) 발사됐고
+  //   40회 전부 원인(다른 로그인 수단)을 한 번도 안 알려줘, 고객이 「這個訂單編號是我的」로 반박하다 이탈했다.
+  //   실제 원인은 LINE/이메일 등 계정 분리인 경우가 많다(직원이 사후에 확인해 준 사례 다수).
   denied: {
-    "zh-TW": "🔒 此訂單不屬於您的帳戶，無法查詢。\n如有疑問，請聯繫客服人員！",
-    "ko": "🔒 본인의 주문만 조회 가능합니다.\n도움이 필요하시면 고객센터에 문의해주세요!",
-    "en": "🔒 You can only view your own orders.\nNeed help? Contact our support team!",
-    "ja": "🔒 ご自身の注文のみ確認可能です。\nお困りの場合はサポートチームへどうぞ！"
+    "zh-TW": "這筆訂單目前不在您登入的帳戶下，所以系統無法直接顯示明細。常見原因是當初用了不同的登入方式（例如 LINE、Google 或其他 Email）下單。已為您轉接客服人員協助核對，請稍候",
+    "ko": "이 주문이 현재 로그인된 계정에 없어 상세를 바로 보여드릴 수 없습니다. 주문 시 다른 로그인 수단(LINE·Google·다른 이메일 등)을 사용한 경우가 많습니다. 담당자에게 연결해 확인해 드리겠습니다",
+    "en": "This order isn't under the account you're signed in with, so I can't show its details directly. Most often the order was placed with a different login (LINE, Google, or another email). I've connected you with an agent to check",
+    "ja": "このご注文は現在ログイン中のアカウントに紐づいていないため、明細を直接表示できません。ご注文時に別のログイン方法（LINE・Google・別のメール等）を使われた場合が多いです。担当者におつなぎしますので少々お待ちください"
   }
 };
 
@@ -1501,7 +1515,7 @@ router.post('/channeltalk', async function(req, res) {
         };
         greetText += pointHints[detectedLang] || pointHints["zh-TW"];
       }
-      await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: greetText }] });
+      await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: greetText + firstContactNote(chatId, detectedLang) }] });
       aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "greeting", userMessage: userText, category: "greeting", aiResponse: "인사 응답 + 메뉴 제공" + (veaslyUser && veaslyUser.credit >= 500 ? " (포인트:" + veaslyUser.credit + ")" : ""), escalated: false, confidence: 1.0 });
       recordFCRResolved(memberId || personId || "", chatId, "greeting");
       return res.status(200).send('OK');
@@ -1709,11 +1723,11 @@ router.post('/channeltalk', async function(req, res) {
                 "en": "\ud83d\udca1 Currently outside business hours (Mon-Fri 10:00-19:00 KST). This request needs agent assistance.\n\n\ud83d\udcdd Please leave the details (e.g. order number) and our team will prioritize it first thing!",
                 "ja": "\ud83d\udca1 現在営業時間外です（月〜金 10:00〜19:00 KST）。このお問い合わせはスタッフの対応が必要です。\n\n\ud83d\udcdd 関連情報（注文番号など）を残してください。営業開始後すぐに対応いたします！"
               };
-              await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: (offHourActionMsgs[detectedLang] || offHourActionMsgs["zh-TW"]) + courtesyNote(chatId, detectedLang) }] });
+              await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: (offHourActionMsgs[detectedLang] || offHourActionMsgs["zh-TW"]) }] });
               await connectManager(chatId, detectedLang);
             } else {
               var actionMsg = (actionMsgs[actionType] && actionMsgs[actionType][detectedLang]) || (actionMsgs[actionType] && actionMsgs[actionType]["zh-TW"]) || "正在為您轉接客服人員 \ud83d\ude4b\u200d\u2640\ufe0f";
-              actionMsg += courtesyNote(chatId, detectedLang);
+              // [2026-08-24] 예의 안내는 상담 첫 응답으로 이동 — 사람 연결 시점에는 붙이지 않는다
               await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: actionMsg }] });
               await connectManager(chatId, detectedLang);
             }
@@ -1757,7 +1771,7 @@ router.post('/channeltalk', async function(req, res) {
             'ja': '👨‍💼 現在営業時間外です（平日 10:00~19:00 韓国時間）\n\n📝 メッセージを残してください。営業開始後すぐにご返信します！'
           };
         }
-        var _escVal = (escMsgs[detectedLang] || escMsgs['zh-TW']) + courtesyNote(chatId, detectedLang);
+        var _escVal = (escMsgs[detectedLang] || escMsgs['zh-TW']);
         if (!bizOpen) _escVal += nextOpenText(detectedLang); // [2026-06-30] 영업외엔 다음 오픈 시각 안내
         await channeltalk.sendMessage(chatId, { blocks: [{ type: 'text', value: _escVal }] });
         // [SOP v2] 팔로워 정책: MIA·우선 초대 + 강준 팔로워
@@ -1957,7 +1971,10 @@ router.post('/channeltalk', async function(req, res) {
           var cOwnerId = (combinedOrder.user && combinedOrder.user.id) || null;
           if (cOwnerId && String(cOwnerId) !== String(veaslyUser.id)) {
             await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: orderSecurityMsgs.denied[detectedLang] || orderSecurityMsgs.denied["zh-TW"] }] });
-            console.log("[Security] Combined order ownership mismatch:", orderNum, "owner:", cOwnerId, "requester:", veaslyUser.id);
+            // [2026-08-24] 데드엔드 제거 — 주문 내역은 계속 미노출(사칭 방지)하되 사람에게 넘겨 실제로 해결되게 한다.
+            try { await recordClaimedIdentity(personId, chatId, { orderNo: orderNum }); } catch (e) {}
+            try { await connectManager(chatId, detectedLang); } catch (e) { console.error("[Security] escalate error:", e.message); }
+            console.log("[Security] Combined order ownership mismatch → escalated:", orderNum, "owner:", cOwnerId, "requester:", veaslyUser.id);
             aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: String(veaslyUser.id), userName: veaslyUser.name || "", lang: detectedLang, type: "order_lookup", userMessage: userText.substring(0, 200), aiResponse: "주문조회 차단: 소유권 불일치", escalated: false, category: "order", confidence: 1.0 });
             return res.status(200).send("OK");
           }
@@ -2025,7 +2042,10 @@ router.post('/channeltalk', async function(req, res) {
           var normalOwnerId = (orderItems[0] && orderItems[0].order && orderItems[0].order.userId) || null;
           if (normalOwnerId && String(normalOwnerId) !== String(veaslyUser.id)) {
             await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: orderSecurityMsgs.denied[detectedLang] || orderSecurityMsgs.denied["zh-TW"] }] });
-            console.log("[Security] Order ownership mismatch:", orderNum, "owner:", normalOwnerId, "requester:", veaslyUser.id);
+            // [2026-08-24] 데드엔드 제거 — 사유 안내 + 사람 연결(주문 내역은 미노출 유지)
+            try { await recordClaimedIdentity(personId, chatId, { orderNo: orderNum }); } catch (e) {}
+            try { await connectManager(chatId, detectedLang); } catch (e) { console.error("[Security] escalate error:", e.message); }
+            console.log("[Security] Order ownership mismatch → escalated:", orderNum, "owner:", normalOwnerId, "requester:", veaslyUser.id);
             aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: String(veaslyUser.id), userName: veaslyUser.name || "", lang: detectedLang, type: "order_lookup", userMessage: userText.substring(0, 200), aiResponse: "주문조회 차단: 소유권 불일치", escalated: false, category: "order", confidence: 1.0 });
             return res.status(200).send("OK");
           }
@@ -2263,7 +2283,7 @@ router.post('/channeltalk', async function(req, res) {
           });
           var _shipReply = (_shipHeaders[detectedLang] || _shipHeaders["zh-TW"]) + "\n\n" + _shipLines.join("\n\n");
           _shipReply += "\n\n💡 " + (detectedLang === "ko" ? "주문번호를 입력하면 더 자세한 상태를 확인할 수 있어요!" : detectedLang === "en" ? "Enter order number for more details!" : detectedLang === "ja" ? "注文番号を入力すると詳細確認できます！" : "輸入訂單編號可查看更詳細狀態喔！");
-          await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: _shipReply }] });
+          await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: _shipReply + firstContactNote(chatId, detectedLang) }] });
           aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "shipping_status", userMessage: userText.substring(0, 200), aiResponse: "실시간 배송추적 " + _activeOrders.length + "건", escalated: false, confidence: 0.9, category: "shipping" });
           recordFCRResolved(memberId || personId || "", chatId, "shipping_status");
           return res.status(200).send("OK");
@@ -2412,7 +2432,7 @@ router.post('/channeltalk', async function(req, res) {
                 var _lcSent = (groundingFailed
                   ? (lowConfMsgs[detectedLang] || lowConfMsgs["zh-TW"])
                   : (aiAnswer + (connectNote[detectedLang] || connectNote["zh-TW"]))
-                ) + courtesyNote(chatId, detectedLang);
+                );
                 await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: _lcSent }] });
                 aiAnswer = null; // 아래 if(aiAnswer) 블록의 중복 발송 방지
                 // [SOP v2] 팔로워 정책: MIA·우선 초대 + 강준 팔로워
@@ -2444,7 +2464,7 @@ router.post('/channeltalk', async function(req, res) {
                 var _ohMed = withHolidayReason(offHourMedNote); // 공휴일이면 사유 포함
                 aiAnswer += _ohMed[detectedLang] || _ohMed["zh-TW"];
                 // 오프시간은 에스컬레이션 스킵 - 아래 connectManager를 건너뜀
-                await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: aiAnswer }] });
+                await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: aiAnswer + firstContactNote(chatId, detectedLang) }] });
                 aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", userName: veaslyUser ? veaslyUser.name : "", lang: detectedLang, type: "ai_answer", userMessage: userText.substring(0, 200), aiResponse: aiAnswer.substring(0, 300), escalated: false, escalationReason: "off_hour_medium_confidence", confidence: confidence, category: (aiResult && aiResult.category) || "other" });
                 _aiAnswerStreak[chatId] = { count: ((_aiAnswerStreak[chatId] && _aiAnswerStreak[chatId].count) || 0) + 1, last: Date.now() }; // [핑퐁 차단] 카운트
                 return res.status(200).send("OK");
@@ -2486,7 +2506,7 @@ router.post('/channeltalk', async function(req, res) {
       aiAnswer = appendFooter(chatId, aiAnswer, isBusinessHours() ? footers : withHolidayReason(offHourFooters), detectedLang); // [2026-06-30] 반복 푸터 억제 / [2026-08-14] 공휴일 사유 포함
       // Prevent duplicate - only send if not already responded
       if (!res.headersSent) {
-        await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: aiAnswer }] });
+        await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: aiAnswer + firstContactNote(chatId, detectedLang) }] });
       }
       _aiAnswerStreak[chatId] = { count: ((_aiAnswerStreak[chatId] && _aiAnswerStreak[chatId].count) || 0) + 1, last: Date.now() }; // [핑퐁 차단] 카운트
 
@@ -2595,8 +2615,8 @@ router.post('/channeltalk', async function(req, res) {
         "ja": "\n\n💡 他にご質問がございましたら、そのままご入力ください！"
       };
       answerText = appendFooter(chatId, answerText, footers2, detectedLang); // [2026-06-30] 반복 푸터 억제
-      if (matched.escalate) answerText += courtesyNote(chatId, detectedLang); // [2026-07-27] 사람 연결되는 FAQ에만
-      await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: answerText }] });
+      // [2026-08-24] 예의 안내는 상담 첫 응답으로 이동(에스컬레이션 시 부착 폐지)
+      await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: answerText + firstContactNote(chatId, detectedLang) }] });
       // [2026-07-27 FIX4] 로깅을 실제 동작에 맞춘다.
       //   이전: saveConversation 이 이 if 블록 "바깥"에 있어, FAQ로 정상 답변한 건까지 전부
       //   escalated:true / ai_self_escalate / confidence:0 으로 기록됐다.
@@ -2648,7 +2668,7 @@ router.post('/channeltalk', async function(req, res) {
         'ja': '申し訳ございません、この質問は担当者の確認が必要です 🙏\n現在営業時間外です（平日 10:00~19:00 KST）。メッセージを残していただければ、営業開始後すぐにご返信します！'
       };
     }
-    await channeltalk.sendMessage(chatId, { blocks: [{ type: 'text', value: (fbEscMsgs[detectedLang] || fbEscMsgs['zh-TW']) + courtesyNote(chatId, detectedLang) }] });
+    await channeltalk.sendMessage(chatId, { blocks: [{ type: 'text', value: (fbEscMsgs[detectedLang] || fbEscMsgs['zh-TW']) }] });
     // 사람 연결: 첫 operator 매니저 초대 + pending 등록 (키워드 경로 1126-1140과 동일 패턴)
     var fbInvited = false;
     try {
