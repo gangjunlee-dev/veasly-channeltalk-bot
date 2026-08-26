@@ -61,6 +61,7 @@ function recordFCRResolved(userId, chatId, issueType) {
 var router = express.Router();
 var pendingCES = {};
 var pendingCSATReason = {};
+var _quoteGuideSent = {}; // [2026-08-26] 상담별 見積 안내문 발화 여부(반복 차단). 1분 클린업에서 24h 정리.
 var _aiAnswerStreak = {}; // [2026-08-14 핑퐁 차단] chatId → {count,last}: 연속 AI 답변 수(2h 창). 4회+인데 또 물으면 사람 연결.
 var csatFeedbackPath = require('path').join(__dirname, '..', 'data', 'csat-feedback.json');
 function loadCSATFeedback() { try { return JSON.parse(fs.readFileSync(csatFeedbackPath, 'utf8')); } catch(e) { return []; } }
@@ -320,6 +321,9 @@ setInterval(function() {
   // [2026-08-24] slaSweep 중지 — lib/reply-sla.js 의 상태기반 래더로 대체.
   //   기존 방식은 pendingEscalations(인메모리)에 의존해 배포마다 초기화되고 봇 넘김 건만 커버했다.
   //   (함수는 남겨두되 호출하지 않는다. 중복 알림 방지.)
+  Object.keys(_quoteGuideSent).forEach(function(k) {
+    if (now - _quoteGuideSent[k] > 86400000) delete _quoteGuideSent[k];
+  });
   Object.keys(_csatSendLock).forEach(function(k) {
     if (now - _csatSendLock[k] > 600000) delete _csatSendLock[k];
   });
@@ -612,6 +616,18 @@ async function maybeEscalateRequestWithOrder(chatId, personId, detectedLang, ord
     // 주소·수취인 변경
     "改地址", "修改地址", "換地址", "變更地址", "地址寫錯", "地址填錯", "寫錯地址", "地址錯",
     "주소", "change address",
+    // [2026-08-26] 실대화 216건 분석에서 누락 확인 — 아래 요청들이 상태덤프에 덮여 통째로 무시됐다.
+    //   6a84fb82…: 「請退還韓國國內運費」를 4번 다르게 재시도 → 같은 덤프 5회
+    //   6a89433a…: 「這兩單可以合併嗎?」 → 12개 상품 덤프 2회 / 6a88c1d8…: 「訂購證明」 → 덤프 2회
+    //   6a841f14…: 미수령 신고에 「已送達！期待您的下次購物」
+    // 합배송
+    "合併", "合并", "合併寄送", "併單", "合單", "합배송",
+    // 증빙 발급
+    "證明", "訂購證明", "購買證明", "發票", "收據", "증빙", "인보이스",
+    // 수취인 변경
+    "修改收件人", "收件人姓名", "改名字", "換收件人", "수취인",
+    // 국내/중복 운임 (조회로 답 안 나옴 — 정산 확인 필요)
+    "國內運費", "境內運費", "重複運費", "重複收",
     // 판매자 독촉 (상태만 보여주면 해결 안 됨 — 실제로 셀러에게 연락해야 함)
     "幫我催", "催一下", "催促", "催賣家", "催發貨", "독촉", "재촉"
   ];
@@ -1611,7 +1627,17 @@ router.post('/channeltalk', async function(req, res) {
     //   취소하려는 고객에게 '구매(견적) 신청 방법'을 안내하던 문제. 취소·불원 의사가 있으면 견적 아님.
     var _hasCancelIntent = ["不想買","不買了","不想要","取消","退訂","不需要了","안 살","취소","cancel"]
       .some(function (k) { return _lower.indexOf(k.toLowerCase()) > -1; });
-    var _quoteOk = _hasQuoteKw && !_hasCancelIntent;
+    // [2026-08-26] 見積 안내문 오발화 차단. 실측: 105회/68상담(31.5%) 발사, 명백 오발화 46회/30상담.
+    //   원인은 「購買/報價/買」 글자 단독 매칭 — 파손 신고(「打開就解體了…裝上電池也不會亮」)에도
+    //   구매 방법 안내가 나가 조롱처럼 읽혔고, 21개 상담에서 같은 안내문이 2회 이상(최다 5회) 반복됐다.
+    //   → 이미 주문·견적 단계를 지난 신호, 하자·이상 신호, 대행문의 요청이 있으면 이 템플릿을 금지한다.
+    var _quoteBlockers = ['破損','破损','解體','解体','壞掉','壞了','不會亮','打不開','卡住','沒有跳出','瑕疵','短少','少了','沒寄','漏寄',
+      '已下單','已付款','已購買','已報價','下單之後','下單後','付款後','訂單',
+      '幫我問','幫忙問','詢問賣家','私訊賣家','問賣家','跟賣家',
+      '關稅','運費','追加','太久','還沒','什麼時候','進度','奇怪','錯誤','退',
+      '파손','고장','이미 주문','문의해','관세','운임'];
+    var _hasQuoteBlocker = _quoteBlockers.some(function (k) { return userText.indexOf(k) > -1; }) || _hasOrderNo;
+    var _quoteOk = _hasQuoteKw && !_hasCancelIntent && !_hasQuoteBlocker;
 
     // 인텐트 판정: 부정/불만 키워드가 있으면 → 금액불일치 우선
     var _intent = null;
@@ -1637,7 +1663,21 @@ router.post('/channeltalk', async function(req, res) {
       return res.status(200).send('OK');
     }
 
+    // [2026-08-26] 같은 상담에서 같은 안내문 2회째는 발화하지 않고 사람에게 넘긴다.
+    if (_intent === "quote_request" && _quoteGuideSent[chatId]) {
+      var qDup = {
+        "zh-TW": "這部分我請客服人員直接協助您確認，已為您轉接，請稍候",
+        "ko": "이 부분은 담당자가 직접 확인해 드리겠습니다. 연결해 드렸으니 잠시만 기다려 주세요",
+        "en": "Let me have an agent help you with this directly — I have connected you, please hold on",
+        "ja": "この件は担当者が直接確認いたします。おつなぎしましたので少々お待ちください"
+      };
+      await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: qDup[detectedLang] || qDup["zh-TW"] }] });
+      try { await connectManager(chatId, detectedLang); } catch (e) {}
+      aiLog.saveConversation({ timestamp: new Date().toISOString(), chatId: chatId, userId: memberId || personId || "", lang: detectedLang, type: "escalation", userMessage: userText.substring(0, 200), aiResponse: "見積 안내문 반복 방지 → 사람 연결", escalated: true, escalationReason: "quote_guide_repeat", confidence: 0, category: "quote_request" });
+      return res.status(200).send("OK");
+    }
     if (_intent === "quote_request") {
+      _quoteGuideSent[chatId] = Date.now();
       var quoteMsg = {
         'zh-TW': '想購買商品的話，請到 veasly.com 找到您想要的商品，點擊「申請報價」按鈕就可以囉！\n\n📌 報價申請步驟：\n1️⃣ 到 veasly.com/tw\n2️⃣ 貼上商品 URL 或上傳截圖\n3️⃣ 選擇規格後點擊「申請報價」\n4️⃣ 我們收到後會盡快為您處理報價！\n\n💡 報價完成後會通知您，確認金額後即可付款下單喔！',
         'ko': '상품 구매를 원하시면 veasly.com에서 원하시는 상품을 찾아 「견적 요청」 버튼을 눌러주세요!\n\n📌 견적 신청 방법:\n1️⃣ veasly.com/tw 접속\n2️⃣ 상품 URL 또는 스크린샷 업로드\n3️⃣ 옵션 선택 후 「견적 요청」 클릭\n4️⃣ 견적 완료 후 알림 드립니다!',
@@ -1803,13 +1843,11 @@ router.post('/channeltalk', async function(req, res) {
           "en": "🎁 Hi " + veaslyUser.name + "! You have " + pts + " points available! Use them for discounts on your next order~",
           "ja": "🎁 " + veaslyUser.name + "さん！現在 " + pts + " ポイントをお持ちです！注文時にご利用いただけます～"
         };
-        // Send as a separate message after a short delay
-        setTimeout(async function() {
-          try {
-            await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: pointMsgs[detectedLang] || pointMsgs["zh-TW"] }] });
-            console.log("[Promo] Point reminder sent:", pts, "points for", veaslyUser.name);
-          } catch(e) { console.error("[Promo] Error:", e.message); }
-        }, 2000);
+        // [2026-08-26] 별도 메시지 발송 폐지. 실측: 122회/103상담(47.7%)에 나갔고 그중 82.8%가
+        //   실제 답변보다 **먼저** 도착했다(setTimeout 2초가 AI 본답변을 앞지름). 「1개월째 미출고」·
+        //   「소비자 신고하겠다」 직후에 「포인트 쓰세요」가 끼어들어 성의 없음이 확정되는 구조였다.
+        //   신규 상담의 포인트 안내는 인사 응답(greetText 의 pointHints)이 이미 담당하므로 중복이기도 하다.
+        console.log('[Promo] Point reminder suppressed (별도 발송 폐지, 인사 응답에서만 안내):', pts);
       }
     }
 
