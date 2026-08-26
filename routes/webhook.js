@@ -197,6 +197,33 @@ var managerPromiseNudged = {}; // 약속 지연 내부 알림 1회 가드
 var _MGR_PROMISE_RE = /確認後|確認一下|確認完|向賣家|跟賣家|向物流|跟物流|向品牌|查詢後|查一下|回覆您|回复您|稍後回覆|확인 후|확인해서|확인하고|알아보고|알아볼게|다시 연락|check with|get back to you/i;
 var pendingEscalations = {};
 
+// [2026-08-24] 대기 안내 발송 이력 — **파일 영속**. chatId당 창(72h) 내 1회만.
+//   왜: pendingEscalations 는 재에스컬레이션 때 객체째 새로 만들어지고(플래그 초기화) 24h 클린업·
+//   재시작에도 날아가서, 같은 상담에 15/30/60분 3연타가 며칠에 걸쳐 반복 재생됐다.
+//   실사례(6a7e95a4…): 8/19 3통 + 8/20 3통 = 거의 같은 "기다려달라" 6통, 사람 응답은 0.
+var ladderFile = require('path').join(__dirname, '..', 'data', 'ladder-sent.json');
+var _ladder = {}; try { _ladder = JSON.parse(fs.readFileSync(ladderFile, 'utf8')); } catch (e) {}
+var LADDER_WINDOW_MS = 72 * 3600 * 1000;
+function ladderAlreadySent(chatId, stage) {
+  var rec = _ladder[chatId];
+  if (!rec || !rec[stage]) return false;
+  return (Date.now() - rec[stage]) < LADDER_WINDOW_MS;
+}
+function ladderMarkSent(chatId, stage) {
+  try {
+    if (!_ladder[chatId]) _ladder[chatId] = {};
+    _ladder[chatId][stage] = Date.now();
+    var ks = Object.keys(_ladder);
+    if (ks.length > 3000) {
+      ks.sort(function (a, b) {
+        function newest(o) { return Math.max.apply(null, Object.keys(o || {}).map(function (k) { return o[k] || 0; }).concat([0])); }
+        return newest(_ladder[a]) - newest(_ladder[b]);
+      }).slice(0, ks.length - 3000).forEach(function (k) { delete _ladder[k]; });
+    }
+    fs.writeFileSync(ladderFile, JSON.stringify(_ladder), 'utf8');
+  } catch (e) {}
+}
+
 // [2026-08-24] 에스컬레이션 이력 (파일 영속 — 재시작에도 유지). 용도:
 //   ① 진행상황 재문의 감지("確認了嗎?" → AI가 진행상황을 지어내지 않고 사람 연결)
 //   ② 불만·대기 중 고객에게 포인트 프로모 억제. Kim James 사례(8/10~20)에서 둘 다 실증.
@@ -2688,10 +2715,12 @@ setInterval(async function() {
     //   전제인데 영업시간 체크가 없어 심야에도 나갔다(= 지키지 못할 약속). 영업시간에만 발송한다.
     //   단, 심야 넘김 건은 아침에 세 단계가 한꺼번에 due 상태가 되므로(=3연속 발송) 그대로 두면
     //   스팸이 된다. → 한 스윕에서는 '가장 진행된 단계' 하나만 보내고 나머지는 보낸 것으로 처리한다.
+    // [2026-08-24] 고객 대상 안내는 15분 1통으로 축소. 30/60분 반복 안내는 정보가 늘지 않고
+    //   "15~30분 내 회신" 같은 지킬 수 없는 약속만 남겨 신뢰를 깎았다(실사례 6통 연타).
+    //   이후 압력은 내부(슬랙)로만 올린다 — 60분 긴급 알림 + reply-sla 래더가 담당.
     var _dueStage = null;
-    if (elapsedMin >= 15 && !esc.waitingSent) _dueStage = 'wait';
-    if (elapsedMin >= 30 && !esc.followup30) _dueStage = 'f30';
-    if (elapsedMin >= 60 && !esc.followup60) _dueStage = 'f60';
+    if (elapsedMin >= 15 && !esc.waitingSent && !ladderAlreadySent(cid, 'customer')) _dueStage = 'wait';
+    if (elapsedMin >= 60 && !esc.followup60 && !ladderAlreadySent(cid, 'urgent')) _dueStage = 'f60';
     if (_dueStage && !isBusinessHours()) _dueStage = null; // 영업시간 아니면 플래그도 세우지 않고 보류
     // [2026-08-14 FIX] 15분 시점에 '대기 안내'와 아래 '재배정 안내'가 같은 틱에 연달아 나가
     //   고객 화면에 거의 같은 말이 2통 찍혔다. 재배정 안내가 나갈 틱에는 대기 안내를 생략한다
@@ -2701,50 +2730,26 @@ setInterval(async function() {
       esc.waitingSent = true;
       _dueStage = null;
     }
-    if (_dueStage) {
-      // 건너뛴 이전 단계는 '발송 완료'로 표시해 나중에 뒤늦게 나가지 않게 한다.
-      if (_dueStage !== 'wait') esc.waitingSent = true;
-      if (_dueStage === 'f60') esc.followup30 = true;
-    }
+    if (_dueStage === 'f60') esc.waitingSent = true; // 건너뛴 15분 안내는 뒤늦게 나가지 않게 처리
 
     if (_dueStage === 'wait') {
       sendWaitingMessage(cid, esc.lang || 'zh-TW');
       esc.waitingSent = true;
+      ladderMarkSent(cid, 'customer');
     }
-    // 30분 후속 안내: 구체적 예상 시간 제공
-    if (_dueStage === 'f30') {
-      var followup30Msgs = {
-        'zh-TW': '⏳ 已等待約30分鐘，非常抱歉！客服人員正在處理其他客戶的問題，預計15~30分鐘內回覆您。\n\n💡 小提醒：如果是訂單問題，您可以直接輸入訂單號碼，AI助手也許能幫您查詢喔！',
-        'ko': '⏳ 약 30분 대기 중이시네요, 정말 죄송합니다! 상담사가 다른 고객 응대 중이며 15~30분 내 답변드리겠습니다.\n\n💡 팁: 주문 관련이라면 주문번호를 입력해보세요, AI가 도와드릴 수 있어요!',
-        'en': '⏳ Sorry for the 30-minute wait! Our agent is helping other customers and will respond within 15~30 minutes.\n\n💡 Tip: For order inquiries, try entering your order number - our AI may be able to help!',
-        'ja': '⏳ 30分お待たせして申し訳ございません！スタッフは他のお客様対応中で、15～30分以内にご返信いたします。'
-      };
-      try {
-        await channeltalk.sendMessage(cid, { blocks: [{ type: 'text', value: followup30Msgs[esc.lang] || followup30Msgs['zh-TW'] }] });
-        console.log('[FOLLOWUP] 30min notice sent to:', cid);
-      } catch(e) { console.log('[FOLLOWUP] 30min error:', e.message); }
-      esc.followup30 = true;
-    }
-    // 60분 최종 안내: 사과 + 우선 처리 약속
+    // [2026-08-24] 30분 고객 안내 제거 — 정보 증가 없이 「15~30분 내 회신」이라는 지킬 수 없는
+    //   약속만 남겼다(실사례: 이틀 뒤에도 응답 없음). 내부 압력은 60분 긴급 알림·reply-sla가 담당.
+
     if (_dueStage === 'f60') {
-      var followup60Msgs = {
-        'zh-TW': '😔 非常抱歉讓您等這麼久！您的問題已被標記為「優先處理」，客服人員會儘快回覆。\n\n如果您需要離開，請放心留言，我們一定會回覆您！也可以留下Email，處理完畢後通知您。',
-        'ko': '😔 오래 기다리게 해서 정말 죄송합니다! 우선 처리로 표시되었으며, 상담사가 최대한 빨리 답변드리겠습니다.\n\n자리를 비우셔야 한다면 메시지를 남겨주세요. 반드시 답변드립니다!',
-        'en': '😔 So sorry for the long wait! Your inquiry has been marked as priority. Our agent will respond ASAP.\n\nIf you need to leave, please leave a message - we will definitely reply!',
-        'ja': '😔 長くお待たせして大変申し訳ございません！優先対応に変更しました。スタッフがすぐにご返信いたします。'
-      };
-      try {
-        await channeltalk.sendMessage(cid, { blocks: [{ type: 'text', value: followup60Msgs[esc.lang] || followup60Msgs['zh-TW'] }] });
-        console.log('[FOLLOWUP] 60min priority notice sent to:', cid);
-      } catch(e) { console.log('[FOLLOWUP] 60min error:', e.message); }
+      // [2026-08-24] 고객 발송 제거 — 「우선 처리로 표시됨」은 실제로 우선순위 플래그를 세우지 않는
+      //   빈 주장이었다(내부 알림만 보냄). 고객에게 반복 사과 대신 내부 압력만 올린다.
       esc.followup60 = true;
-      // 매니저 그룹에 긴급 알림
-      // [2026-08-14 FIX] sendGroupMessage(groupId, message) 인데 인자를 1개만 넘겨 항상 실패했다
-      //   (지금까지 이 경로 자체가 죽어 있어 드러나지 않음). 슬랙/팀챗 공통 알림 함수로 교체.
+      ladderMarkSent(cid, 'urgent');
       try {
-        var urgentMsg = '[긴급] 고객 60분 대기 중 — 즉시 응대 필요\n'
+        var urgentMsg = '[긴급] 고객 60분 대기 중 — 즉시 응대 필요' + String.fromCharCode(10)
           + '상담 바로가기: https://desk.channel.io/#/channels/138710/user_chats/' + cid;
         await require('../lib/scheduler').notifyInternal(urgentMsg);
+        console.log('[FOLLOWUP] 60min internal urgent alert sent:', cid);
       } catch(ue) { console.log('[FOLLOWUP] urgent alert error:', ue.message); }
     }
 
@@ -2767,10 +2772,14 @@ setInterval(async function() {
         }
         // 고객 발송은 영업시간에만(심야에 "다른 상담사에게 알렸다"는 지키지 못할 안내 방지).
         // 매니저 초대·팔로워 추가는 시간과 무관하게 수행해 출근 즉시 인계되게 한다.
-        if (isBusinessHours()) {
-          var reassignMsg = { "zh-TW": "感謝您的耐心等待！客服人員目前較忙碌，我們已通知其他客服人員，請再稍候一下", "ko": "기다려주셔서 감사합니다! 다른 상담사에게 알림을 보냈습니다. 조금만 더 기다려주세요", "en": "Thanks for your patience! We have notified additional agents. Please hold on", "ja": "お待たせして申し訳ございません！他のスタッフに通知しました" };
+        // [2026-08-24] 고객 발송은 chatId당 72h 1회로 제한(재에스컬레이션 반복 재생 차단).
+        //   문구도 정직하게: 시간 약속을 하지 않고, 실제로 한 일(담당자 재알림)만 말한다.
+        if (isBusinessHours() && !ladderAlreadySent(cid, 'customer')) {
+          var reassignMsg = { "zh-TW": "感謝您的耐心等待！已再次通知負責的客服人員，會依訊息順序盡快回覆您。若需要離開，留言或留下 Email 都可以，我們一定會回覆。", "ko": "기다려주셔서 감사합니다! 담당자에게 다시 알렸으며, 접수 순서대로 회신드립니다. 자리를 비우셔야 하면 메시지나 이메일을 남겨주세요.", "en": "Thanks for your patience! We've re-notified the assigned agent and will reply in order. Feel free to leave a message or your email.", "ja": "お待たせしております。担当者に再度通知しました。順番にご返信いたします。ご不在の場合はメッセージかメールをお残しください。" };
           var lang = esc.lang || "zh-TW";
           await channeltalk.sendMessage(cid, { blocks: [{ type: "text", value: reassignMsg[lang] || reassignMsg["zh-TW"] }] });
+          ladderMarkSent(cid, 'customer');
+          esc.waitingSent = true;
         }
         // [SOP v2, 2026-07-03 개정] 팔로워는 항상 MIA·우선 2명만 유지. 강준(담당자)은 재초대로 다시 알림.
         var allMgrIds = await managersLib.getFollowerIds();
