@@ -2532,6 +2532,17 @@ router.post('/channeltalk', async function(req, res) {
       }
     }
     if (aiAnswer) {
+      // [2026-08-28] 답변이 사람 연결·제3자 확인을 약속하면 「AI가 답해드려요」 푸터는 모순이다.
+      //   실사례: 「我們會請專人為您確認並儘快回覆」 바로 뒤에 「AI會為您解答喔！」가 붙어,
+      //   재촉하러 온 고객에게 "사람이 본다"와 "AI에게 물어라"를 동시에 말했다.
+      //   같은 이유로 예의 안내(firstContactNote)도 이번 턴은 보류한다(다음 응답에 나감).
+      var _answerPromisesAgent = /專人|客服人員|轉接|向賣家確認|向賣家詢問|向物流端確認|向品牌方確認|相關團隊|담당자|상담사|support team|担当者/.test(aiAnswer);
+      var handoffFooters = {
+        "zh-TW": "\n\n💡 專人確認後會直接在這裡回覆您，不需要重複詢問喔！",
+        "ko": "\n\n💡 담당자가 확인 후 이 대화창에 바로 답변드려요. 다시 문의하지 않으셔도 됩니다!",
+        "en": "\n\n💡 Our team will reply right here once confirmed — no need to ask again!",
+        "ja": "\n\n💡 担当者が確認後、こちらに直接ご返信します。再度お問い合わせいただく必要はありません！"
+      };
       var footers = {
         "zh-TW": "\n\n💡 還有其他問題嗎？直接輸入問題，AI會為您解答喔！",
         "ko": "\n\n💡 다른 질문이 있으신가요? 직접 질문을 입력하시면 AI가 답변해드려요!",
@@ -2545,10 +2556,11 @@ router.post('/channeltalk', async function(req, res) {
         "en": "\n\n⏰ Outside business hours (Mon-Fri 10:00-19:00 KST); the above is an AI reply. Feel free to keep asking — if an agent is needed we'll prioritize it first thing!",
         "ja": "\n\n⏰ 現在営業時間外です（月〜金 10:00〜19:00 KST）。上記はAI回答です。ご質問は続けてどうぞ。担当者が必要な場合は営業開始後に優先対応いたします！"
       };
-      aiAnswer = appendFooter(chatId, aiAnswer, isBusinessHours() ? footers : withHolidayReason(offHourFooters), detectedLang); // [2026-06-30] 반복 푸터 억제 / [2026-08-14] 공휴일 사유 포함
+      var _pickedFooters = !isBusinessHours() ? withHolidayReason(offHourFooters) : (_answerPromisesAgent ? handoffFooters : footers);
+      aiAnswer = appendFooter(chatId, aiAnswer, _pickedFooters, detectedLang); // [2026-06-30] 반복 푸터 억제 / [2026-08-14] 공휴일 사유 포함 / [2026-08-28] 넘김 약속 시 전용 푸터
       // Prevent duplicate - only send if not already responded
       if (!res.headersSent) {
-        await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: aiAnswer + firstContactNote(chatId, detectedLang) }] });
+        await channeltalk.sendMessage(chatId, { blocks: [{ type: "text", value: aiAnswer + (_answerPromisesAgent ? "" : firstContactNote(chatId, detectedLang)) }] });
       }
       _aiAnswerStreak[chatId] = { count: ((_aiAnswerStreak[chatId] && _aiAnswerStreak[chatId].count) || 0) + 1, last: Date.now() }; // [핑퐁 차단] 카운트
 
@@ -2559,7 +2571,7 @@ router.post('/channeltalk', async function(req, res) {
       //   실사례: "協助向賣家確認後回覆您"라고 약속만 하고 아무도 몰라서 고객이 3시간 방치("有消息了嗎").
       //   (2026-07-06에 제거한 "幫您確認一下" 류 self-service 제안과 달리, 제3자 확인 약속은 사람 없이는 이행 불가)
       var escalateKeywords = ["轉接客服", "轉接", "客服確認", "客服人員", "需要客服", "建議聯繫", "請聯繫客服", "無法為您", "담당자를 연결", "담당자에게", "상담사", "상담원", "connect you with", "support team", "contact support", "unable to help", "担当者におつなぎ", "担当者に", "お問い合わせ",
-        "向賣家確認", "向賣家詢問", "向物流端確認", "向品牌方確認", "轉交專人", "相關團隊", "確認後回覆您", "確認後會盡快", "一有結果"];
+        "向賣家確認", "向賣家詢問", "向物流端確認", "向品牌方確認", "專人", "相關團隊", "確認後回覆您", "確認後會盡快", "一有結果"];
       var needEscalate = false;
       // 봇이 확실히 아는 정보는 에스컬레이션 키워드 무시
       var _botConfidentTopics = ["假日", "공휴일", "holiday", "祝日", "營業時間", "上班時間", "영업시간",
@@ -2630,7 +2642,7 @@ router.post('/channeltalk', async function(req, res) {
           console.log("[Escalate] AI auto-escalated chat:", chatId);
         } catch(escErr) { console.error("[Escalate] Error:", escErr.message); }
         // [2026-08-24 약속 추적] 봇이 "제3자 확인 후 회신" 약속으로 넘긴 경우 → 노션 약속 등록(best-effort)
-        var _PROMISE_ESC_KWS = ["向賣家確認", "向賣家詢問", "向物流端確認", "向品牌方確認", "確認後回覆您", "確認後會盡快", "一有結果", "相關團隊", "轉交專人"];
+        var _PROMISE_ESC_KWS = ["向賣家確認", "向賣家詢問", "向物流端確認", "向品牌方確認", "確認後回覆您", "確認後會盡快", "一有結果", "相關團隊", "專人"];
         if (_matchedEscKw && _PROMISE_ESC_KWS.indexOf(_matchedEscKw) !== -1) {
           notion.createPromise({ chatId: chatId, channelId: message.channelId || '', customer: veaslyUser ? veaslyUser.name : '', text: aiAnswer.replace(/\s+/g, ' ').slice(0, 150), source: '봇 약속' }).catch(function () {});
         }
