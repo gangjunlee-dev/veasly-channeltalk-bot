@@ -2849,7 +2849,7 @@ setInterval(async function() {
         // [2026-08-24] 고객 발송은 chatId당 72h 1회로 제한(재에스컬레이션 반복 재생 차단).
         //   문구도 정직하게: 시간 약속을 하지 않고, 실제로 한 일(담당자 재알림)만 말한다.
         if (isBusinessHours() && !ladderAlreadySent(cid, 'customer')) {
-          var reassignMsg = { "zh-TW": "感謝您的耐心等待！已再次通知負責的客服人員，會依訊息順序盡快回覆您。若需要離開，留言或留下 Email 都可以，我們一定會回覆。", "ko": "기다려주셔서 감사합니다! 담당자에게 다시 알렸으며, 접수 순서대로 회신드립니다. 자리를 비우셔야 하면 메시지나 이메일을 남겨주세요.", "en": "Thanks for your patience! We've re-notified the assigned agent and will reply in order. Feel free to leave a message or your email.", "ja": "お待たせしております。担当者に再度通知しました。順番にご返信いたします。ご不在の場合はメッセージかメールをお残しください。" };
+          var reassignMsg = { "zh-TW": "感謝您的耐心等待！已再次通知負責的客服人員，會依訊息順序回覆您。回覆會直接留在這個對話中，您不需要一直守在畫面前，方便時再回來查看就可以，我們一定會回覆您。", "ko": "기다려주셔서 감사합니다! 담당자에게 다시 알렸으며, 접수 순서대로 회신드립니다. 답변은 이 대화창에 그대로 남으니 계속 기다리지 않으셔도 되고, 편하실 때 다시 확인해 주세요.", "en": "Thanks for your patience! We've re-notified the assigned agent and will reply in order. Our reply will stay right here in this chat, so there's no need to wait on this screen — just check back whenever it's convenient.", "ja": "お待たせしております。担当者に再度通知しました。順番にご返信いたします。ご返信はこのチャットに残りますので、画面の前でお待ちいただく必要はありません。ご都合のよいときにご確認ください。" };
           var lang = esc.lang || "zh-TW";
           await channeltalk.sendMessage(cid, { blocks: [{ type: "text", value: reassignMsg[lang] || reassignMsg["zh-TW"] }] });
           ladderMarkSent(cid, 'customer');
