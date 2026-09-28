@@ -2551,7 +2551,7 @@ router.post('/channeltalk', async function(req, res) {
       };
       // [2026-07-27 FIX2] 오프타임엔 AI도 답하되 "지금은 비영업시간"임을 푸터로 명시(기대치 관리).
       var offHourFooters = {
-        "zh-TW": "\n\n⏰ 目前非客服時間（台灣 09:00~18:00），以上為AI回覆。還有問題可繼續輸入，需要客服人員時上班後會優先為您處理！",
+        "zh-TW": "\n\n⏰ 目前非客服時間（台灣 09:00~18:00），以上為AI回覆。還有問題可繼續輸入，客服人員將在上班後依順序依序處理！",
         "ko": "\n\n⏰ 현재는 상담 시간이 아닙니다(평일 10:00~19:00 KST). 위 답변은 AI 응답이며, 추가 질문도 계속 입력하실 수 있어요. 상담사 확인이 필요하면 업무 시작 후 우선 처리해 드립니다!",
         "en": "\n\n⏰ Outside business hours (Mon-Fri 10:00-19:00 KST); the above is an AI reply. Feel free to keep asking — if an agent is needed we'll prioritize it first thing!",
         "ja": "\n\n⏰ 現在営業時間外です（月〜金 10:00〜19:00 KST）。上記はAI回答です。ご質問は続けてどうぞ。担当者が必要な場合は営業開始後に優先対応いたします！"
