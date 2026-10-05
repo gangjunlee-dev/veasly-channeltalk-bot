@@ -2658,7 +2658,8 @@ router.post('/channeltalk', async function(req, res) {
     //   영·한 토큰이 섞여 있어, AI 장애 시 영어/한국어/일본어 고객이 "읽지 못하는 중문 벽문 + 자기 언어 푸터"
     //   조합을 받았다(기계 오작동으로 읽힘). zh-TW 고객에게만 FAQ 폴백을 쓰고, 나머지는 아래
     //   상담사 연결 폴백으로 직행시킨다.
-    var matched = (detectedLang === "zh-TW") ? matcher.findBestMatch(userText) : null;
+    // [2026-10-05] faq.js 폴백 비활성: 정책 사본이 노션(정본)과 어긋나 옛 정책이 나갔다. AI 실패 시 아래 사람 연결 폴백으로 직행.
+    var matched = null;
     if (detectedLang !== "zh-TW") console.log("[Fallback] non-zh-TW(" + detectedLang + ") - skip zh-only FAQ fallback");
     if (matched) {
       var answerText = aiEngine.toTaiwanMandarin(matched.answer, detectedLang); // [2026-07-10] 폴백 캔드응답도 대만 화어 정규화(zh-TW 한정)
